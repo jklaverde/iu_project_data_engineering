@@ -22,7 +22,7 @@ def run_producer() -> None:
             print(f"Published event {i}")
 
 def handle_message(topic: str, value:dict) -> None:
-    print(f"[{topoic}] received: {value}")
+    print(f"[{topic}] received: {value}")
 
 
 

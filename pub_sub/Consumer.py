@@ -28,7 +28,7 @@ class KafkaSubscriber:
         cfg = dict(config or CONSUMER_CONFIG)
         if group_id:
             cfg["group.id"] = group_id
-        self.consumer = Consumer(cfg)
+        self._consumer = Consumer(cfg)
         self._running = False
 
     def subscribe(
