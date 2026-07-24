@@ -25,7 +25,6 @@ def handle_message(topic: str, value:dict) -> None:
     print(f"[{topic}] received: {value}")
 
 
-
 def run_consumer() -> None:
     sub = KafkaSubscriber(group_id="main-app")
     sub.subscribe([TOPIC], handler=handle_message)  # blocks until Ctrl+c
