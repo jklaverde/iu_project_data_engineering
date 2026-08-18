@@ -1,7 +1,8 @@
 # iu_project_data_engineering
 Project: Data Engineering for IU Akademie
 
-See `REQUIREMENTS.md` for the full project scope, architecture, and phase roadmap, and
+See `REQUIREMENTS.md` for the full project scope, architecture, and phase roadmap,
+`docs/PROGRESS.md` for current status and where to pick this project back up, and
 `docs/TROUBLESHOOTING.md` for non-obvious bugs and environment gotchas found while
 building and operating the stack.
 
