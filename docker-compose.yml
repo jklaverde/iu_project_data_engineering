@@ -1,0 +1,173 @@
+name: iu-sensor-pipeline
+
+services:
+  kafka-volume-init:
+    image: apache/kafka:3.7.0
+    user: root
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "mkdir -p /var/lib/kafka/kafka_data && chown -R 1000:1000 /var/lib/kafka/kafka_data"
+    volumes:
+      - kafka_data:/var/lib/kafka/kafka_data
+    restart: "no"
+    mem_limit: 128m
+
+  kafka:
+    image: apache/kafka:3.7.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,EXTERNAL://localhost:${KAFKA_EXTERNAL_PORT:-9092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
+      KAFKA_LOG_DIRS: /var/lib/kafka/kafka_data
+    depends_on:
+      kafka-volume-init:
+        condition: service_completed_successfully
+    ports:
+      - "${KAFKA_EXTERNAL_PORT:-9092}:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/kafka_data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    mem_limit: 1500m
+
+  kafka-topic-init:
+    image: apache/kafka:3.7.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP: kafka:19092
+      TOPIC_NAME: ${KAFKA_TOPIC_NAME:-sensor-readings}
+      TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
+      TOPIC_REPLICATION_FACTOR: ${KAFKA_TOPIC_REPLICATION_FACTOR:-1}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - "/opt/kafka/bin/kafka-topics.sh --bootstrap-server $$KAFKA_BOOTSTRAP --create --if-not-exists --topic $$TOPIC_NAME --partitions $$TOPIC_PARTITIONS --replication-factor $$TOPIC_REPLICATION_FACTOR && /opt/kafka/bin/kafka-topics.sh --bootstrap-server $$KAFKA_BOOTSTRAP --describe --topic $$TOPIC_NAME"
+    restart: "no"
+    mem_limit: 256m
+
+  cassandra:
+    image: cassandra:4.1.12
+    environment:
+      CASSANDRA_CLUSTER_NAME: iot-cluster-dev
+      CASSANDRA_DC: dc1
+      CASSANDRA_RACK: rack1
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      MAX_HEAP_SIZE: 1G
+      HEAP_NEWSIZE: 256M
+    ports:
+      - "${CASSANDRA_PORT:-9042}:9042"
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    mem_limit: 2g
+
+  cassandra-schema-init:
+    image: cassandra:4.1.12
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    volumes:
+      - ./infra/cassandra/schema:/schema:ro
+    environment:
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: 9042
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - "for i in $(seq 1 30); do cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/001_keyspace.cql && break; echo 'cassandra not ready yet, retrying...'; sleep 5; done && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/002_raw_events.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/003_agg_1m.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/004_agg_1h.cql"
+    restart: "no"
+    mem_limit: 256m
+
+  spark-master:
+    image: apache/spark:3.5.9
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    ports:
+      - "${SPARK_MASTER_PORT:-7077}:7077"
+      - "${SPARK_MASTER_UI_PORT:-8090}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8080' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 1g
+
+  spark-worker:
+    image: apache/spark:3.5.9
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    ports:
+      - "${SPARK_WORKER_UI_PORT:-8091}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8081' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 1500m
+
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+
+  grafana:
+    image: grafana/grafana:13.1.4
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env before starting}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      # - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro   # mounted starting P4 (FR-G1)
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 512m
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    ports:
+      - "${KAFKA_UI_PORT:-8080}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    mem_limit: 512m
+
+volumes:
+  kafka_data:
+  cassandra_data:
+  prometheus_data:
+  grafana_data:
