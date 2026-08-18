@@ -40,3 +40,16 @@ docker compose down -v
 
 No producer or Spark job runs yet — this is infrastructure only (P1). Ingestion (P2) and
 stream processing (P3) come next.
+
+## Dataset
+
+The Kaggle source dataset (§5.1 of `REQUIREMENTS.md`) is not committed to the repo — it's
+~62 MB and freely downloadable. Fetch it locally with:
+
+```
+python kaggle_repository/download_repository.py
+```
+
+This uses `kagglehub` and requires Kaggle API credentials on your machine (either
+`~/.kaggle/kaggle.json` or the `KAGGLE_USERNAME`/`KAGGLE_KEY` environment variables) —
+never commit those credentials to this repo.

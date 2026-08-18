@@ -1,2 +1,10 @@
 .venv/
 .env
+
+# Python build artifacts
+__pycache__/
+*.pyc
+
+# Kaggle dataset — downloadable via kaggle_repository/download_repository.py, not committed
+kaggle_repository/.complete/
+kaggle_repository/*.csv
