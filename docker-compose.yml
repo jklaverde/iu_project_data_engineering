@@ -57,6 +57,35 @@ services:
     restart: "no"
     mem_limit: 256m
 
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    depends_on:
+      kafka-topic-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      KAFKA_TOPIC_NAME: ${KAFKA_TOPIC_NAME:-sensor-readings}
+      PRODUCER_RATE_MSGS_PER_SEC: ${PRODUCER_RATE_MSGS_PER_SEC:-100}
+      PRODUCER_ANOMALY_PROBABILITY: ${PRODUCER_ANOMALY_PROBABILITY:-0.05}
+      PRODUCER_ANOMALY_SIGMA_MULTIPLIER: ${PRODUCER_ANOMALY_SIGMA_MULTIPLIER:-4.0}
+      PRODUCER_DATASET_CSV_PATH: ${PRODUCER_DATASET_CSV_PATH:-/data/iot_telemetry_data.csv}
+      PRODUCER_REPLAY_ROW_LIMIT: ${PRODUCER_REPLAY_ROW_LIMIT:-0}
+      PRODUCER_STATE_HTTP_PORT: 8000
+      PRODUCER_LOG_LEVEL: ${PRODUCER_LOG_LEVEL:-INFO}
+    volumes:
+      - ./kaggle_repository:/data:ro
+    ports:
+      - "${PRODUCER_STATE_PORT:-8001}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/healthz',timeout=2).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 384m
+
   cassandra:
     image: cassandra:4.1.12
     environment:
