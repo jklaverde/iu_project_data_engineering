@@ -196,7 +196,7 @@
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
           "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
-          "target": "SELECT device_id, temp_avg, temp_max, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+          "target": "SELECT device_id, temp_avg, temp_max, window_start FROM iot.${granularity} WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
         }
       ]
     },
@@ -208,7 +208,7 @@
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
           "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
-          "target": "SELECT device_id, humidity_avg, co_max, lpg_max, smoke_max, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+          "target": "SELECT device_id, humidity_avg, co_max, lpg_max, smoke_max, window_start FROM iot.${granularity} WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
         }
       ]
     },
@@ -221,7 +221,7 @@
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
           "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
-          "target": "SELECT device_id, motion_active_ratio, light_active_ratio, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+          "target": "SELECT device_id, motion_active_ratio, light_active_ratio, window_start FROM iot.${granularity} WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
         }
       ]
     },
@@ -235,7 +235,7 @@
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
           "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
-          "target": "SELECT device_id, pressure_avg, pressure_max, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+          "target": "SELECT device_id, pressure_avg, pressure_max, window_start FROM iot.${granularity} WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
         }
       ]
     }

@@ -270,6 +270,35 @@ genuine (if small) cluster.
   through the real API before trusting the dashboard provisions cleanly — a valid JSON
   file can still contain a query that only fails once a user actually views the panel.
 
+### 14. KPI-5 panels fail with a CQL parse error: bare `$granularity` isn't interpolated in a table-name position
+
+- **Symptom:** all four KPI-5 ("Business aggregates") panels error with something like
+  `p.ExecQuery: query processing: repo.Select: select query processing: line 1:61
+  mismatched character 'g' expecting '$'` — a CQL parser complaint, not a Grafana-level
+  error.
+- **Cause:** the panel queries used bare `$granularity` in the `FROM` clause
+  (`FROM iot.$granularity WHERE ...`), while the working `device_id` variable elsewhere
+  in the same queries used the curly-brace form (`${device_id:singlequote}`). The bare
+  form was never actually substituted before the query reached Cassandra — the literal
+  string `"...iot.$granularity WHERE..."` was sent as-is. Cassandra's CQL grammar
+  treats a bare `$` as the start of a dollar-quoted string literal (it expects a second
+  `$` immediately after), so it fails parsing at the character right after the `$`,
+  which is exactly what the error position points at.
+- **How it was found:** reproduced the *exact* error message directly against the real
+  Cassandra container via `cqlsh`, using the literal unsubstituted query text — then
+  confirmed the same query works and returns real rows once `$granularity` is replaced
+  with a real value (`agg_1m`). Same "test wall-first against the real Cassandra
+  service, don't stop at the dashboard JSON" approach as bug #13. Confirmed the fix
+  itself by editing the dashboard JSON, restarting Grafana, and loading the actual
+  panel in a browser to see real data render, not just re-reading the query string.
+- **Fix:** `FROM iot.${granularity} WHERE ...` in all four KPI-5 panel queries
+  (`infra/grafana/provisioning/dashboards/json/kpi-dashboard.json`).
+- **General lesson:** don't assume Grafana's bare `$var` and `${var}` interpolation are
+  interchangeable in every position a query might use them — when a query mixes both
+  forms and only one position fails, that inconsistency itself is a signal; prefer
+  `${var}` everywhere for raw-query datasources to remove the ambiguity entirely rather
+  than debugging which bare form happens to work where.
+
 ### General P4 lesson
 
 Every finding above was caught by one of two things: reading an official upstream
