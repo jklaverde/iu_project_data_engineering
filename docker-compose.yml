@@ -293,6 +293,45 @@ services:
       retries: 5
     mem_limit: 512m
 
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      cassandra-schema-init:
+        condition: service_completed_successfully
+      producer:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      KAFKA_TOPIC_NAME: ${KAFKA_TOPIC_NAME:-sensor-readings}
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: 9042
+      CASSANDRA_KEYSPACE: iot
+      PRODUCER_STATE_URL: http://producer:8000
+      SPARK_JOB_STATE_URL: http://spark-job:8000
+      BACKEND_KNOWN_DEVICE_IDS: ${BACKEND_KNOWN_DEVICE_IDS:-b8:27:eb:bf:9d:51,00:0f:00:70:91:0a,1c:bf:ce:15:ec:4d}
+      BACKEND_POLL_INTERVAL_SECONDS: ${BACKEND_POLL_INTERVAL_SECONDS:-2}
+      BACKEND_HEALTH_CHECK_INTERVAL_SECONDS: ${BACKEND_HEALTH_CHECK_INTERVAL_SECONDS:-5}
+      BACKEND_ADMIN_USERNAME: ${BACKEND_ADMIN_USERNAME:-admin}
+      BACKEND_ADMIN_PASSWORD: ${BACKEND_ADMIN_PASSWORD:?Set BACKEND_ADMIN_PASSWORD in .env before starting}
+      BACKEND_SESSION_SECRET: ${BACKEND_SESSION_SECRET:?Set BACKEND_SESSION_SECRET in .env before starting (e.g. openssl rand -hex 32)}
+      BACKEND_SESSION_TTL_SECONDS: ${BACKEND_SESSION_TTL_SECONDS:-43200}
+      BACKEND_COOKIE_SECURE: ${BACKEND_COOKIE_SECURE:-false}
+      BACKEND_GRAFANA_PORT: ${GRAFANA_PORT:-3000}
+      BACKEND_LOG_LEVEL: ${BACKEND_LOG_LEVEL:-INFO}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://localhost:8000/healthz',timeout=2).status==200 else 1)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 384m
+
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
     ports:

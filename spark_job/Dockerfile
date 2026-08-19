@@ -15,7 +15,7 @@ RUN /opt/spark/bin/spark-submit \
       /opt/spark/examples/jars/spark-examples.jar 1
 
 COPY requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir --require-hashes -r requirements.txt
 
 COPY spark_job/ ./spark_job/
 COPY run.py ./run.py

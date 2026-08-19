@@ -279,3 +279,86 @@ plan/memory reconstruction of it, or actually executing the exact query/command 
 dashboard or Dockerfile would run, rather than treating "the config looks right" as
 sufficient. Both are cheap to do and catch an entire class of bug that a syntax-only
 review cannot.
+
+---
+
+## P5 — Web app (FastAPI backend + React frontend)
+
+### 1. "Recent Cassandra rows" query returns nothing (or stale data) during REPLAY mode
+
+- **Symptom:** the Cassandra step's "recent rows" panel showed old/unrelated rows
+  (or none) for most of a fresh walkthrough session, only becoming correct once the
+  producer handed over to synthetic generation.
+- **Cause:** `raw_events`' partition key is `(device_id, bucket_start)`, where
+  `bucket_start` is derived from each row's own `event_ts`
+  (`spark_job/spark_job/time_buckets.py`) — NOT from wall-clock time. During REPLAY
+  mode, `event_ts` comes from the historical Kaggle dataset (e.g. `2020-07-12`), so a
+  query that guesses "the current bucket" from `datetime.now()` queries buckets that
+  replay-mode rows never land in.
+- **How it was found:** noticed the Cassandra step showed a fixed set of rows with a
+  `write_ts` far earlier than "just now" while watching the live UI, then cross-checked
+  the actual event/bucket timestamps being produced via `/api/steps/ingestion` against
+  what `/api/steps/cassandra` was querying for — not caught by a design review, only by
+  watching real replay traffic.
+- **Fix:** `backend/app/cassandra_client.py`'s `recent_raw_events_sync` now takes
+  `reference_timestamps` (sampled from real Kafka messages via
+  `kafka_client.KafkaReader.get_recent_events()`) and derives the buckets to query from
+  those, falling back to wall-clock buckets only when no samples exist yet (cold start).
+  Still single-partition point reads — no `ALLOW FILTERING` needed.
+
+### 2. One transient upstream hiccup crashed the entire frontend (blank/frozen page)
+
+- **Symptom:** restarting the `producer` container mid-session (used to test UC-3's
+  hand-over) sometimes left the whole web app frozen on a `Loading...` screen
+  requiring a manual reload. Console showed
+  `TypeError: Cannot read properties of undefined (reading 'toLocaleString')`.
+- **Cause:** `state_poller.py`'s `_refresh_fast` built the `ingestion` step by spreading
+  `producer_state` (from polling `producer:8000/state`) directly into the response dict.
+  When that poll failed (producer briefly unreachable during its own restart),
+  `producer_state` was `None`, so the `ingestion` object silently lost fields like
+  `events_sent_total` — and `IngestionStep.tsx` called `.toLocaleString()` on it
+  unconditionally. React 18 unmounts the *entire* root on an uncaught render error with
+  no `ErrorBoundary` in place, so one step's bad data took down the whole walkthrough,
+  not just that step.
+- **How it was found:** actually restarting `producer` mid-session in a live browser tab
+  while watching the console (per the plan's own "verify against the real system"
+  practice) — a static read of the code looked fine because nothing there assumes
+  upstream fetches always succeed until you watch what happens when one doesn't.
+- **Fix, two layers:** (1) `state_poller.py` now caches the last-known-good
+  `producer_state`/`spark_state` and merges new data on top of that cache instead of on
+  top of `{}`, so the response shape stays stable across a transient outage —
+  `source_reachable` still reflects the *current* poll so the UI can say "showing last
+  known data". (2) `IngestionStep.tsx` also got defensive fallbacks (`?? 0`, `?? "-"`,
+  `?? []`) as a second line of defense, and every step is now wrapped in a small
+  `ErrorBoundary` (`frontend/src/layout/ErrorBoundary.tsx`, keyed by the current step)
+  so a *future* bug in one step's rendering can't freeze the whole app again.
+
+### 3. `/api/anomalies` (and the Grafana anomaly-drill-down panel it mirrors) risks `READ_TOO_MANY_TOMBSTONES` as data volume grows — not fixed, flagged for later
+
+- **Symptom:** while cross-checking an anomaly row directly via `cqlsh` using the same
+  `device_id IN (...) ... ALLOW FILTERING` shape (without a `bucket_start`), one query
+  failed outright with `ReadFailure: ... READ_TOO_MANY_TOMBSTONES`; the same shape *with*
+  `bucket_start` narrowing to one partition succeeded but logged a tombstone warning
+  (~6,800 tombstone cells read alongside ~7,150 live rows in a single 15-minute bucket).
+- **Likely cause (not confirmed further):** the spark-cassandra-connector writes `NULL`
+  Row fields as per-column tombstones by default; `raw_events` has several
+  usually-null columns (`anomaly_reason` on the ~95% of rows that aren't anomalies), so
+  tombstones accumulate quickly at hundreds of rows/sec with no TTL/compaction pressure
+  to clear them.
+- **Why not fixed now:** `/api/anomalies` reuses the exact CQL shape already
+  provisioned (and accepted) for the P4 Grafana panel
+  (`infra/grafana/provisioning/dashboards/json/kpi-dashboard.json`), scoped by
+  `since_minutes`/`LIMIT` so it stayed well under the failure threshold in this
+  session's testing — but the underlying risk is shared by both the Grafana panel and
+  this new endpoint, and grows with data volume/retention, not with anything P5 added.
+  A real fix (e.g. `unset` instead of `null` for optional columns in the Spark sink, or
+  a lower `gc_grace_seconds`/more frequent compaction) is a P3/Cassandra-schema-level
+  change, out of scope for this phase.
+
+### General P5 lesson
+
+Both real bugs (#1 and #2) were invisible from reading the code or the JSON contract
+alone — they only showed up when actually watching live REPLAY-mode traffic and
+actually killing a container mid-session in a real browser tab, matching this
+project's established practice of verifying every phase against the running system
+rather than trusting a design as correct because it reads correctly.

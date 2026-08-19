@@ -8,7 +8,7 @@ doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along th
 
 ---
 
-## Status: P1-P4 done, committed. P5 (Web app) is next.
+## Status: P1-P5 done, committed. P6 (VPS deployment) is next.
 
 | Phase | What it is | Status |
 |---|---|---|
@@ -16,7 +16,7 @@ doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along th
 | P2 — Ingestion | Producer: Kaggle replay + synthetic hand-over | **Done** (commit `3d141b4`) |
 | P3 — Processing | PySpark Structured Streaming job: validation, anomalies, dual windows, Cassandra sink | **Done** (see this file's P3 section) |
 | P4 — Observability | Exporters wired, Grafana dashboards provisioned (KPI-1..5) | **Done** (see this file's P4 section) |
-| P5 — Web app | FastAPI read-only API + React guided UI + basic login | Not started |
+| P5 — Web app | FastAPI read-only API + React (TypeScript) guided UI + basic login | **Done** (see this file's P5 section) |
 | P6 — VPS deployment | 3 Contabo VPS, k3s, hardening | Not started |
 | P7 — Endurance | 48-hour run against §10 acceptance criteria | Not started |
 
@@ -77,12 +77,24 @@ docs/
   PROGRESS.md                this file
 REQUIREMENTS.md             frozen v1.0 spec - do not edit casually, see its own changelog header
 ```
-Each future Python service (the P5 FastAPI backend) is expected to get its own
-directory with its own `requirements.txt`, following the `producer/`/`spark_job/`
-pattern — not a shared root dependency file (NFR-10.8's minimal-deps-per-service
-spirit). Note `spark-worker` (defined in P1, `docker-compose.yml`) now also `build:`s
+Note `spark-worker` (defined in P1, `docker-compose.yml`) now also `build:`s
 from `spark_job/worker.Dockerfile` instead of pulling the plain upstream image — it
 needs the same Python packages as the driver whenever a job uses pandas UDFs.
+
+`backend/` (P5) follows the same per-service `Dockerfile` + `requirements.txt` +
+`README.md` pattern as `producer/`/`spark_job/`, with one deviation: its build
+`context:` in `docker-compose.yml` is the **repo root**, not `./backend`, because its
+multi-stage Dockerfile also needs to `COPY frontend/...` from a sibling directory (one
+combined container serves both the API and the built React app — see §4.1's "Web app
+(API + frontend)" single line item). `frontend/` is a plain Vite/React/TypeScript
+project, not run standalone in production.
+
+All three Python services now use **hash-pinned lockfiles** (NFR-10.8): each has a
+`requirements.in` (direct deps) and a generated `requirements.txt`
+(`pip-compile --generate-hashes`, run inside a container matching that service's own
+runtime base image — see `backend/README.md` for the exact command and why it must run
+in-container, not on a dev machine, for correct wheel hashes). Dockerfiles install with
+`--require-hashes`.
 
 ## Implementation decisions made beyond what REQUIREMENTS.md specifies
 
@@ -216,21 +228,73 @@ that touches the same surfaces:
 - `docker compose restart prometheus` is required after editing
   `infra/prometheus/prometheus.yml` on an already-running stack — no hot reload.
 
-## What P5 needs to do (from REQUIREMENTS.md §7 FR-W, §14)
+## P5 — Web app: implementation decisions and the state things are actually in now
 
-Not started yet. When picking this up:
-- FastAPI read-only API (FR-W2: observer mode only, Phase 1 has no control-panel
-  endpoints — see UC-7, explicitly a later phase) + a React guided UI + basic login
-  (FR-W4).
-- The producer's and Spark job's `GET /state` (JSON) endpoints are exactly what this
-  backend should poll for live pipeline state — internal ports `producer:8000` /
-  `spark-job:8000` from inside the Docker network, or the host-mapped
-  `PRODUCER_STATE_PORT`/`SPARK_JOB_STATE_PORT` (8001/8002) if developing the backend
-  outside Compose.
-- FR-W1's guided steps (deployment status → ingestion → Kafka → Spark → Cassandra →
-  KPI summary linking to Grafana) map directly onto what already exists: producer
-  `/state` for ingestion, Kafka broker/kafka-exporter for the Kafka step, Spark job
-  `/state` for the Spark step, and a Cassandra read (or the same `/state` data) for
-  the storage step.
-- FR-W3 (live updates, WebSocket or ≤2s polling): both `/state` endpoints are cheap
-  in-memory reads, safe to poll frequently from a backend.
+- **One combined container.** `backend`'s Dockerfile is multi-stage: a `node:24-slim`
+  stage builds the React app (`npm ci && npm run build`), then a
+  `python:3.11.9-slim-bookworm` stage installs the hash-pinned Python deps and serves
+  the built `dist/` via FastAPI's `StaticFiles` mounted at `/`, alongside the `/api/*`
+  and `/ws/*` routes. Host port 8000 (`BACKEND_PORT`).
+- **Auth**: a single admin credential (`BACKEND_ADMIN_USERNAME`/`BACKEND_ADMIN_PASSWORD`,
+  both required env vars, no defaults — same "required, no fallback" pattern as
+  `GRAFANA_ADMIN_PASSWORD`) plus a hand-rolled HMAC-SHA256-signed session cookie
+  (`backend/app/auth.py`) — no session-management dependency, deliberately, since
+  there's one static credential rather than a user table. `BACKEND_SESSION_SECRET`
+  (required, no default) signs it. Every `/api/*` data route and the WebSocket
+  handshake are guarded by `require_session` (checked **before** the WS `accept()`).
+- **Live updates**: WebSocket (`/ws/pipeline-state`) is primary; the frontend
+  (`frontend/src/state/usePipelineState.ts`) falls back to polling
+  `GET /api/pipeline-state` every `BACKEND_POLL_INTERVAL_SECONDS` (default 2s) if the
+  socket doesn't open within 3s or drops. The backend's own two background loops
+  (`backend/app/state_poller.py`) poll producer/spark-job `/state`, Kafka, and
+  Cassandra regardless of which transport reaches the browser — a fast loop (every
+  `BACKEND_POLL_INTERVAL_SECONDS`) for ingestion/kafka/spark/cassandra/summary, and a
+  slower one (`BACKEND_HEALTH_CHECK_INTERVAL_SECONDS`, default 5s) for the deployment
+  health grid.
+- **Upstream-outage resilience**: `state_poller.py` caches the last-known-good
+  `producer`/`spark-job` `/state` response and merges fresh data on top of that cache
+  rather than on top of `{}` — a transient restart of either service no longer changes
+  the *shape* of what the frontend receives, only `ingestion.source_reachable`. This
+  was added after a real crash was found live (see `docs/TROUBLESHOOTING.md` P5 #2) —
+  **do not remove this caching** without re-verifying the frontend survives a
+  `docker compose restart producer` mid-session.
+- **Cassandra "recent rows" bucket selection is event-time-based, not wall-clock**:
+  `cassandra_client.py`'s `recent_raw_events_sync` derives which `(device_id,
+  bucket_start)` partitions to point-read from real timestamps sampled off Kafka
+  (`kafka_client.KafkaReader.get_recent_events()`), not from `datetime.now()` — required
+  because REPLAY-mode `event_ts` values are historical (2020 Kaggle dates), not current
+  wall-clock time (see `docs/TROUBLESHOOTING.md` P5 #1). Any future change to how
+  "recent" is determined must keep this in mind.
+- **Backend also runs its own lightweight Kafka consumer**
+  (`backend/app/kafka_client.py`'s `KafkaReader`) — manual partition assignment,
+  `OFFSET_END` at startup, no consumer group commits — purely to sample recent raw
+  event content (producer's `/state` has no event content, only counters) and to
+  compute broker watermark offsets for the Kafka step's lag chart. This is a read-only
+  observer client; it must never be mistaken for or merged with the real Spark
+  consumer.
+- **No Docker socket** is used for the deployment-status step (UC-1) — every service is
+  probed over its own HTTP/TCP port instead (see `backend/README.md` / the P5 plan for
+  the reasoning: `:ro` doesn't actually restrict Docker API access, and a future P6 k3s
+  pod has no Docker socket to mount anyway).
+- **`/api/control/*` is reserved, not implemented** — no `routers/control.py` exists.
+  This is the seam UC-7's future control panel (pause/resume producer, trigger
+  hand-over) will need; documented in `backend/README.md` so it isn't rediscovered.
+- **Known, accepted limitation**: `/api/anomalies` can hit `READ_TOO_MANY_TOMBSTONES`
+  under high data volume — shared with the pre-existing P4 Grafana panel it mirrors,
+  not something P5 introduced. See `docs/TROUBLESHOOTING.md` P5 #3 before changing
+  either query.
+
+## What P6 needs to know (wire contract / deployment notes)
+
+- The whole web app is **one container** (`backend`, built from repo-root context) —
+  P6's k3s manifests need exactly one Deployment/Service for this, not two. No Docker
+  socket dependency to worry about porting.
+- `BACKEND_ADMIN_PASSWORD` and `BACKEND_SESSION_SECRET` are required env vars with no
+  defaults, same pattern as `GRAFANA_ADMIN_PASSWORD` — P6's secrets management needs to
+  supply both. `BACKEND_COOKIE_SECURE=false` is a **local-dev-only** setting; P6 (real
+  TLS) must set it `true` or session cookies won't get the `Secure` flag in production.
+- All three Python services' `requirements.txt` are hash-pinned and installed with
+  `pip install --require-hashes` — if P6's deployment pipeline ever needs to bump a
+  dependency, regenerate via the `pip-compile --generate-hashes` command in
+  `backend/README.md` (run inside a container matching the target platform), don't
+  hand-edit the lockfiles.

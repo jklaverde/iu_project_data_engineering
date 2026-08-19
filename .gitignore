@@ -8,3 +8,8 @@ __pycache__/
 # Kaggle dataset — downloadable via kaggle_repository/download_repository.py, not committed
 kaggle_repository/.complete/
 kaggle_repository/*.csv
+
+# Frontend build artifacts (P5) — package-lock.json IS committed (NFR-10.3)
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
