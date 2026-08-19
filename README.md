@@ -15,7 +15,8 @@ building and operating the stack.
 - Docker Desktop (WSL2 backend on Windows) or Docker Engine + Compose v2 on Linux.
 - ~16 GB RAM / 4 CPU cores free, ~25 GB free disk for normal use (see
   `REQUIREMENTS.md` NFR-3 for the 48-hour endurance-run sizing).
-- The Kaggle source dataset — see [Dataset](#dataset) below.
+- Internet access on first start, so the `dataset-init` container can fetch the
+  Kaggle source dataset — see [Dataset](#dataset) below. No manual download step.
 
 ## Quick start
 
@@ -24,17 +25,16 @@ cp .env.example .env
 # edit .env: set real values for GRAFANA_ADMIN_PASSWORD, BACKEND_ADMIN_PASSWORD,
 # and BACKEND_SESSION_SECRET (e.g. `openssl rand -hex 32` for the last one)
 
-python kaggle_repository/download_repository.py   # fetches the dataset, see below
-
 docker compose up -d --build
 ```
 
-First start builds the custom images and pre-warms Spark's dependency cache — this
-takes several minutes. Watch it come up with `docker compose ps`: every long-running
-service should reach `healthy`, and the `*-init`/`*-schema-init` one-shot containers
-should show `Exited (0)` (that's success). See `docs/TROUBLESHOOTING.md` if anything
-looks different, and `docs/PROGRESS.md`'s "Resuming locally" section for cold-start
-timing details (baseline recomputation, catching up on a Kafka backlog).
+First start builds the custom images, pre-warms Spark's dependency cache, and fetches
+the Kaggle dataset into a named volume — this takes several minutes. Watch it come up
+with `docker compose ps`: every long-running service should reach `healthy`, and the
+`*-init`/`*-schema-init` one-shot containers should show `Exited (0)` (that's success).
+See `docs/TROUBLESHOOTING.md` if anything looks different, and `docs/PROGRESS.md`'s
+"Resuming locally" section for cold-start timing details (baseline recomputation,
+catching up on a Kafka backlog).
 
 Stop (keeps all data):
 ```
@@ -89,16 +89,21 @@ no service failure. To run it:
 
 ## Dataset
 
-The Kaggle source dataset (§5.1 of `REQUIREMENTS.md`) is not committed to the repo — it's
-~62 MB and freely downloadable. Fetch it locally with:
+The Kaggle source dataset (§5.1 of `REQUIREMENTS.md`, `garystafford/environmental-sensor-data-132k`)
+is not committed to the repo — it's ~62 MB and public. `docker compose up -d` fetches
+it automatically via the one-shot `dataset-init` service (same pattern as
+`kafka-topic-init`/`cassandra-schema-init`): it downloads into a named volume
+(`kaggle_dataset`) that `producer`, `spark-job`, and `spark-worker` all mount
+read-only, and skips the download entirely on future restarts once the volume already
+has the file.
 
-```
-python kaggle_repository/download_repository.py
-```
+The dataset is public, so this needs **no credentials** in the common case. If Kaggle
+ever requires auth for it, set `KAGGLE_USERNAME`/`KAGGLE_KEY` in `.env` (from
+https://www.kaggle.com/settings → API → Create New Token) — never commit those values.
 
-This uses `kagglehub` and requires Kaggle API credentials on your machine (either
-`~/.kaggle/kaggle.json` or the `KAGGLE_USERNAME`/`KAGGLE_KEY` environment variables) —
-never commit those credentials to this repo.
+To run the fetch by hand outside Docker (e.g. to inspect the CSV locally), see
+`kaggle_repository/download_repository.py` — it takes the same env vars and writes to
+`./kaggle_repository` by default.
 
 ## Deploying for real users
 

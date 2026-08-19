@@ -1,6 +1,9 @@
 .venv/
 .env
 
+# Developer-facing build-process notes (local reference only, not part of the shipped repo)
+development_notes/
+
 # Python build artifacts
 __pycache__/
 *.pyc

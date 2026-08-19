@@ -362,3 +362,43 @@ alone — they only showed up when actually watching live REPLAY-mode traffic an
 actually killing a container mid-session in a real browser tab, matching this
 project's established practice of verifying every phase against the running system
 rather than trusting a design as correct because it reads correctly.
+
+---
+
+## P6 — VPS deployment (interim single-host Compose, see docs/DEPLOYMENT.md)
+
+### 1. `producer` crash-loops on a fresh VPS deploy: `FileNotFoundError: /data/iot_telemetry_data.csv`
+
+- **Symptom:** `producer` restarts forever with a Python traceback ending in
+  `FileNotFoundError: [Errno 2] No such file or directory:
+  '/data/iot_telemetry_data.csv'`, immediately after `producer_starting` logs.
+- **Cause:** the Kaggle dataset isn't committed to the repo (~62 MB, gitignored) and
+  the only way to get it in place was a manual host-side step
+  (`python kaggle_repository/download_repository.py`) documented in the README — easy
+  to skip entirely on a fresh VPS clone, especially since nothing about
+  `docker compose up -d` itself hints that a non-Docker prerequisite exists.
+  Compounding this: even once noticed, `pip install --user kagglehub` fails outright
+  on modern Debian/Ubuntu with `error: externally-managed-environment` (PEP 668) — the
+  system's own pip refuses a bare global install, and the "quick" fixes people reach
+  for (`--break-system-packages`, or "just use `sudo`") both fight the OS's package
+  management rather than working with it.
+- **Fix:** removed the manual step entirely. A new one-shot `dataset-init` service
+  (own directory `kaggle_repository/`, own `Dockerfile` + hash-pinned
+  `requirements.txt`) downloads the dataset into a named volume (`kaggle_dataset`)
+  automatically as part of `docker compose up -d` — the same idiom this project
+  already uses for `kafka-topic-init`/`cassandra-schema-init`. `producer`, `spark-job`,
+  and `spark-worker` now all mount that named volume read-only instead of a
+  `./kaggle_repository` host bind-mount, and all three `depends_on:
+  dataset-init: condition: service_completed_successfully`. Idempotent by design
+  (`download_repository.py` checks whether the target file already exists before
+  attempting a download), so it's a fast no-op on every restart after the first.
+- **A pleasant surprise while fixing this:** the dataset turned out to need **no
+  Kaggle credentials at all** for an anonymous download via `kagglehub` — confirmed by
+  actually running the fetch with none configured, not assumed from the library's
+  docs. `KAGGLE_USERNAME`/`KAGGLE_KEY` are kept as optional `.env` fallbacks (empty by
+  default) for if that ever changes, rather than required vars — a required-but-usually-
+  empty credential would have been worse UX than no requirement at all.
+- **General lesson:** a "prerequisite" that lives outside `docker compose up -d` in a
+  README step is a deployment footgun waiting to happen — if a real container can do
+  the fetch/setup step itself (even a trivial one-shot one), that's more robust than
+  documenting a manual step well, because it can't be skipped by accident.

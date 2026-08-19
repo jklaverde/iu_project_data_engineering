@@ -77,15 +77,12 @@ docker compose version   # confirm the Compose plugin is present
 ```bash
 git clone https://github.com/<your-fork-or-org>/iu_project_data_engineering.git
 cd iu_project_data_engineering
-
-# The Kaggle dataset isn't committed (~62 MB) - fetch it:
-pip install --user kagglehub   # or use a venv
-python kaggle_repository/download_repository.py
 ```
 
-`download_repository.py` needs Kaggle API credentials
-(`~/.kaggle/kaggle.json` or `KAGGLE_USERNAME`/`KAGGLE_KEY` env vars) — see the root
-`README.md`. **Never commit these credentials.**
+The Kaggle dataset (~62 MB, public) is **not** committed and needs no manual fetch
+step — the `dataset-init` service in `docker-compose.yml` downloads it automatically
+into a named volume the first time you run `docker compose up -d` (§7). Nothing to
+install on the VPS itself for this; it runs inside its own container.
 
 ## 5. Configure secrets
 
@@ -105,7 +102,8 @@ set `BACKEND_COOKIE_SECURE=true` — otherwise the session cookie won't get the 
 flag and the login can be sent in cleartext.
 
 All other `.env` values (rates, ports, watermarks) can stay at their defaults for a
-first deployment.
+first deployment. `KAGGLE_USERNAME`/`KAGGLE_KEY` can stay empty — the dataset is
+public and `dataset-init` only needs them if Kaggle ever starts requiring auth for it.
 
 ## 6. Firewall: decide what's actually public
 
@@ -234,9 +232,9 @@ than the local-dev expectation of manually re-running `docker compose up -d`.
 ## 9. Backups
 
 All stateful data lives in named Docker volumes: `kafka_data`, `cassandra_data`,
-`prometheus_data`, `grafana_data`, `spark_checkpoints`. Back them up with the volume
-stopped (or accept a slightly-inconsistent live snapshot for a lower-stakes demo
-deployment):
+`prometheus_data`, `grafana_data`, `spark_checkpoints`, `kaggle_dataset`. Back up the
+ones worth backing up with the volume stopped (or accept a slightly-inconsistent live
+snapshot for a lower-stakes demo deployment):
 
 ```bash
 docker compose stop
@@ -248,9 +246,10 @@ sudo tar czf backup-$(date +%F).tar.gz \
 docker compose start
 ```
 
-(Kafka's `kafka_data` and `spark_checkpoints` are consumer/checkpoint state, not
-irreplaceable — resetting them just restarts the stream from scratch. Cassandra's data
-is the actual sensor history and is worth backing up for real.) Copy the archive off
+(Kafka's `kafka_data` and `spark_checkpoints` are consumer/checkpoint state, and
+`kaggle_dataset` is a public dataset `dataset-init` re-fetches automatically if it's
+ever missing — none of those three are worth backing up. Cassandra's data is the
+actual sensor history and is worth backing up for real.) Copy the archive off
 the VPS (`scp`/`rsync` to another machine, or your provider's snapshot feature on the
 whole disk) — a backup that only lives on the box it's protecting against isn't a
 backup.

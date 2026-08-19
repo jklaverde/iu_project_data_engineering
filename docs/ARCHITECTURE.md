@@ -69,9 +69,18 @@ matching `*_PORT` variable in `.env`.
 
 ### Ingestion
 
+**`dataset-init`** — a one-shot container (own directory `kaggle_repository/`) that
+downloads the public Kaggle dataset (`garystafford/environmental-sensor-data-132k`,
+~62 MB, not committed to the repo) into a named volume (`kaggle_dataset`) before
+`producer`/`spark-job`/`spark-worker` start — same idiom as `kafka-topic-init`/
+`cassandra-schema-init`. Idempotent: skips the download entirely if the volume already
+has the file, so it costs nothing on restarts. Needs no credentials for this dataset
+in the common case (it's public); `KAGGLE_USERNAME`/`KAGGLE_KEY` in `.env` are an
+optional fallback only, in case Kaggle ever requires auth for it.
+
 **`producer`** — *the only thing that writes to Kafka.*
 Own directory `producer/` (Python, `confluent-kafka`). Streams
-`kaggle_repository/iot_telemetry_data.csv` row by row at
+`iot_telemetry_data.csv` (from the `kaggle_dataset` volume) row by row at
 `PRODUCER_RATE_MSGS_PER_SEC` (default 100 msg/s), building one canonical JSON event
 per row (`producer/producer/schema.py`) and publishing it with `device_id` as the
 Kafka key. Once the file is exhausted it hands over to a synthetic generator

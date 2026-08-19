@@ -17,7 +17,7 @@ doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along th
 | P3 — Processing | PySpark Structured Streaming job: validation, anomalies, dual windows, Cassandra sink | **Done** (see this file's P3 section) |
 | P4 — Observability | Exporters wired, Grafana dashboards provisioned (KPI-1..5) | **Done** (see this file's P4 section) |
 | P5 — Web app | FastAPI read-only API + React (TypeScript) guided UI + basic login | **Done** (see this file's P5 section) |
-| P6 — VPS deployment | 3 Contabo VPS, k3s, hardening | Not started |
+| P6 — VPS deployment | 3 Contabo VPS, k3s, hardening | Not started — an interim single-VPS Compose deployment exists instead, see `docs/DEPLOYMENT.md` and `docs/TROUBLESHOOTING.md` P6 section |
 | P7 — Endurance | 48-hour run against §10 acceptance criteria | Not started |
 
 ## Resuming locally
@@ -44,11 +44,13 @@ consuming, and if Kafka already has a large backlog (e.g. from a producer that's
 running a while), the first micro-batch can take several minutes to catch up — this is
 expected, not a hang (see `docs/TROUBLESHOOTING.md` P3 section).
 
-If `kaggle_repository/iot_telemetry_data.csv` is missing (it's gitignored, not
-committed — see `docs/TROUBLESHOOTING.md`), regenerate it first:
-```
-python kaggle_repository/download_repository.py
-```
+The Kaggle dataset (`iot_telemetry_data.csv`, gitignored, not committed) is fetched
+automatically by the `dataset-init` one-shot service into a named volume
+(`kaggle_dataset`) — no manual step needed, and it's a no-op on restarts once the
+volume already has the file (see `docs/TROUBLESHOOTING.md` P6 section for the bug this
+replaced: a bare VPS deploy used to crash-loop `producer` because that manual step was
+easy to skip). To fetch it by hand instead (e.g. to inspect it outside Docker), run
+`python kaggle_repository/download_repository.py`.
 
 ## Repo layout (as it stands)
 
@@ -65,6 +67,8 @@ infra/
   grafana/provisioning/     P4: datasources.yaml (Prometheus + Cassandra) + one
                              dashboard JSON (5 rows, KPI-1..5)
   prometheus/prometheus.yml real exporter scrape jobs as of P4 (was self-scrape only)
+kaggle_repository/           P6: dataset-init's own Dockerfile + requirements.txt +
+                             download_repository.py (also runnable standalone)
 producer/                   P2: the ingestion service (own Dockerfile + requirements.txt)
   producer/                 the importable Python package
 spark_job/                  P3: the streaming job (own Dockerfile + requirements.txt)
@@ -178,8 +182,9 @@ that touches the same surfaces:
   API on port 4040 does not expose Structured Streaming query progress, confirmed not
   assumed). `GET /healthz` for the compose healthcheck.
 - `spark-worker` now builds a custom image (`spark_job/worker.Dockerfile`) instead of
-  pulling `apache/spark:3.5.9` directly, and mounts both `./kaggle_repository:/data:ro`
-  and the checkpoint volume — required because executors run there, not in the
+  pulling `apache/spark:3.5.9` directly, and mounts both the `kaggle_dataset` volume
+  read-only (populated by `dataset-init` — see the P6 section below) and the checkpoint
+  volume — required because executors run there, not in the
   `spark-job` driver container (see `docs/TROUBLESHOOTING.md`'s whole P3 section, which
   is entirely about this driver/executor distinction).
 

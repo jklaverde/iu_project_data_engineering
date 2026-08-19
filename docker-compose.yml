@@ -58,12 +58,27 @@ services:
     restart: "no"
     mem_limit: 256m
 
+  dataset-init:
+    build:
+      context: ./kaggle_repository
+      dockerfile: Dockerfile
+    environment:
+      KAGGLE_DATASET_OUTPUT_DIR: /data
+      KAGGLE_USERNAME: ${KAGGLE_USERNAME:-}
+      KAGGLE_KEY: ${KAGGLE_KEY:-}
+    volumes:
+      - kaggle_dataset:/data
+    restart: "no"
+    mem_limit: 384m
+
   producer:
     build:
       context: ./producer
       dockerfile: Dockerfile
     depends_on:
       kafka-topic-init:
+        condition: service_completed_successfully
+      dataset-init:
         condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
@@ -76,7 +91,7 @@ services:
       PRODUCER_STATE_HTTP_PORT: 8000
       PRODUCER_LOG_LEVEL: ${PRODUCER_LOG_LEVEL:-INFO}
     volumes:
-      - ./kaggle_repository:/data:ro
+      - kaggle_dataset:/data:ro
     ports:
       - "${PRODUCER_STATE_PORT:-8001}:8000"
     healthcheck:
@@ -153,6 +168,8 @@ services:
         condition: service_healthy
       spark-job-volume-init:
         condition: service_completed_successfully
+      dataset-init:
+        condition: service_completed_successfully
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     volumes:
       # executors run here, not in the spark-job driver container - any local
@@ -161,7 +178,7 @@ services:
       # Same reasoning for spark_checkpoints: Structured Streaming state-store
       # data (for stateful ops like applyInPandasWithState and windowed
       # aggregations) is written by executors, not the driver.
-      - ./kaggle_repository:/data:ro
+      - kaggle_dataset:/data:ro
       - spark_checkpoints:/opt/spark-checkpoints
     ports:
       - "${SPARK_WORKER_UI_PORT:-8091}:8081"
@@ -197,6 +214,8 @@ services:
         condition: service_healthy
       spark-job-volume-init:
         condition: service_completed_successfully
+      dataset-init:
+        condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
       KAFKA_TOPIC_NAME: ${KAFKA_TOPIC_NAME:-sensor-readings}
@@ -215,7 +234,7 @@ services:
       SPARK_JOB_STATE_HTTP_PORT: 8000
       SPARK_JOB_LOG_LEVEL: ${SPARK_JOB_LOG_LEVEL:-INFO}
     volumes:
-      - ./kaggle_repository:/data:ro
+      - kaggle_dataset:/data:ro
       - spark_checkpoints:/opt/spark-checkpoints
     ports:
       - "${SPARK_JOB_STATE_PORT:-8002}:8000"
@@ -361,3 +380,4 @@ volumes:
   prometheus_data:
   grafana_data:
   spark_checkpoints:
+  kaggle_dataset:
