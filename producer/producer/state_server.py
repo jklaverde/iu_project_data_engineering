@@ -3,6 +3,7 @@ import logging
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .metrics import render_prometheus_text
 from .state import ProducerState
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,13 @@ def _make_handler(state: ProducerState):
                 body = json.dumps(state.as_dict()).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path == "/metrics":
+                body = render_prometheus_text(state.as_dict())
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)

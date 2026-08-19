@@ -183,3 +183,99 @@ process a real backlog and recover from a restart." None of these would have sur
 from a syntax check, a `spark-submit --deploy-mode client` dry run against `local[*]`,
 or code review alone — they are all specifically about the driver/executor split in a
 genuine (if small) cluster.
+
+---
+
+## P4 — Observability (Prometheus exporters, Grafana dashboards)
+
+### 9. `node-exporter`'s recommended `/:/host:ro,rslave` mount fails on Docker Desktop
+
+- **Symptom:** `docker compose up` fails immediately with `path / is mounted on / but
+  it is not a shared or slave mount`.
+- **Cause:** `rslave` mount propagation (common in node-exporter docker-compose
+  examples written for native Linux hosts) needs the source mount to already be a
+  shared/slave mount — not guaranteed by Docker Desktop's Linux VM on Windows.
+- **Fix:** drop the propagation flag, mount as plain `/:/host:ro`. Still gives real
+  filesystem metrics for whatever the Docker Desktop VM sees as `/` (see #12 below for
+  the scoping caveat that comes with that).
+
+### 10. Cassandra's base image can't download over HTTPS at build time: `curl: (77) error setting certificate file`
+
+- **Symptom:** `RUN curl -fsSL ... jmx_prometheus_javaagent.jar` fails during
+  `docker build`, even after installing `curl` (fixes a prior `curl: not found`).
+- **Cause:** the base `cassandra:4.1.12` image has neither `curl` nor
+  `ca-certificates` installed. `curl` alone isn't enough for an HTTPS URL — without a
+  CA bundle it can't verify any TLS certificate.
+- **Fix:** `apt-get install -y curl ca-certificates` together, not just `curl`.
+
+### 11. Modern Grafana images don't have `grafana-cli`
+
+- **Symptom:** `RUN grafana-cli --pluginsDir ... plugins install ...` fails with
+  `grafana-cli: not found`.
+- **Cause:** Grafana consolidated its CLI into the main `grafana` binary — the command
+  is `grafana cli ...` (a subcommand), not a separate `grafana-cli` executable.
+  Confirmed by actually running `grafana --help` inside the image rather than assuming
+  the old command still works.
+- **Fix:** `grafana cli --pluginsDir "$DIR" plugins install <id> <version>`. Note
+  `--pluginsDir` is a flag on `cli` itself (before the `plugins install` subcommand),
+  not on `plugins install` — confirmed via `grafana cli --help`.
+- **Related gotcha, same build step:** the image's `grafana` user has no matching
+  `grafana` *group* — its actual group is `root` (gid 0). `chown -R grafana:grafana`
+  fails with `unknown user/group`; use `chown -R grafana:root` (confirmed via `id`
+  inside the container: `uid=472(grafana) gid=0(root)`).
+
+### 12. jmx_exporter: the official Cassandra example's actual metric names differ from assumption
+
+- **Symptom:** dashboard panels for disk usage and GC pauses show no data even though
+  the exporter itself is scraping fine (Prometheus target `UP`, other Cassandra
+  metrics present).
+- **Cause, two separate issues:**
+  1. The `Storage/Load` MBean (data-directory disk usage) exposes its value via a JMX
+     `Count` attribute in this Cassandra version, not `Value` — jmx_exporter's generic
+     rules therefore produce `cassandra_storage_load_count`, not the initially-assumed
+     `cassandra_storage_load`.
+  2. jmx_exporter's javaagent **auto-exports** `jvm_gc_collection_seconds_{count,sum}`
+     from its own built-in JVM collector, completely independent of the
+     `whitelistObjectNames`/`rules:` config. A custom rule added for
+     `java.lang:type=GarbageCollector` (`jvm_gc_collection_count`/`_time_ms`) was
+     silently never used — the built-in exporter's names won regardless.
+- **How it was found:** curling the exporter's raw `/metrics` output directly and
+  grepping for the expected names, rather than trusting the dashboard JSON was correct
+  because the config "looked right."
+- **Fix:** dashboard queries updated to `cassandra_storage_load_count` and
+  `jvm_gc_collection_seconds_sum` (unit `s`, not `ms`); the redundant custom GC rule
+  was deleted from `cassandra-jmx-exporter.yml` entirely rather than left as dead
+  config.
+- **General lesson:** don't trust an exporter config's *intended* metric names without
+  checking the exporter's actual `/metrics` output — an MBean's attribute name
+  (`Value` vs `Count`) isn't always what a generic rule pattern assumes, and some
+  "custom" rules can be silently shadowed by an exporter's own built-in metric set.
+
+### 13. CQL clause order: `LIMIT` before `ALLOW FILTERING`, not after
+
+- **Symptom:** a Grafana panel query fails with
+  `mismatched input 'LIMIT' expecting EOF` when the query ends in
+  `... ALLOW FILTERING LIMIT 100`.
+- **Cause:** CQL requires `LIMIT` to appear before `ALLOW FILTERING` in a `SELECT`
+  statement — the reverse of what reads naturally in English ("filter everything,
+  then limit the result").
+- **How it was found:** testing the dashboard's exact query strings directly against
+  Grafana's `/api/ds/query` HTTP endpoint with real parameter values substituted in,
+  not just visually reviewing the JSON — this caught a syntax error that a JSON review
+  alone would have missed entirely (the query is a plain string field from Grafana's
+  point of view, never parsed until it reaches Cassandra).
+- **Fix:** `... LIMIT 100 ALLOW FILTERING`.
+- **General lesson:** for any datasource where the "query" is an opaque string inside
+  dashboard JSON (raw SQL/CQL, PromQL, etc.), verify it by actually executing it
+  through the real API before trusting the dashboard provisions cleanly — a valid JSON
+  file can still contain a query that only fails once a user actually views the panel.
+
+### General P4 lesson
+
+Every finding above was caught by one of two things: reading an official upstream
+example/tool's output directly (the real jmx_exporter Cassandra example, the real
+`grafana cli --help` output, the real `/metrics` text) instead of trusting a
+plan/memory reconstruction of it, or actually executing the exact query/command a
+dashboard or Dockerfile would run, rather than treating "the config looks right" as
+sufficient. Both are cheap to do and catch an entire class of bug that a syntax-only
+review cannot.

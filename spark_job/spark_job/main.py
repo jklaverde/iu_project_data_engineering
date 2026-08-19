@@ -6,6 +6,7 @@ from pyspark.sql import SparkSession
 from .agg_query import build_agg_query
 from .baseline import compute_seed_baseline
 from .config import load_config
+from .latency_tracker import LatencyTracker
 from .logging_setup import configure_logging
 from .query_progress import QueryProgressTracker, make_listener
 from .raw_query import build_raw_query
@@ -43,10 +44,11 @@ def main() -> None:
     }))
 
     tracker = QueryProgressTracker()
+    latency_tracker = LatencyTracker()
     spark.streams.addListener(make_listener(tracker))
-    start_state_server(tracker, config.state_http_port)
+    start_state_server(tracker, latency_tracker, config.state_http_port)
 
-    raw_query = build_raw_query(spark, config, baseline, ceilings)
+    raw_query = build_raw_query(spark, config, baseline, ceilings, latency_tracker=latency_tracker)
 
     agg_1m_query = build_agg_query(
         spark, config, baseline, ceilings,

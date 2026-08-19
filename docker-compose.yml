@@ -87,7 +87,9 @@ services:
     mem_limit: 384m
 
   cassandra:
-    image: cassandra:4.1.12
+    build:
+      context: ./infra/cassandra
+      dockerfile: Dockerfile
     environment:
       CASSANDRA_CLUSTER_NAME: iot-cluster-dev
       CASSANDRA_DC: dc1
@@ -95,8 +97,10 @@ services:
       CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
       MAX_HEAP_SIZE: 1G
       HEAP_NEWSIZE: 256M
+      JVM_EXTRA_OPTS: "-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=7070:/opt/jmx-exporter/cassandra-jmx-exporter.yml"
     ports:
       - "${CASSANDRA_PORT:-9042}:9042"
+      - "${CASSANDRA_JMX_EXPORTER_PORT:-7070}:7070"
     volumes:
       - cassandra_data:/var/lib/cassandra
     healthcheck:
@@ -220,6 +224,39 @@ services:
     mem_limit: 1500m
     restart: unless-stopped
 
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    command:
+      - "--kafka.server=kafka:19092"
+      - "--web.listen-address=:9308"
+      - "--topic.filter=^${KAFKA_TOPIC_NAME:-sensor-readings}$$"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_EXPORTER_PORT:-9308}:9308"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9308/metrics || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    mem_limit: 256m
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro
+    ports:
+      - "${NODE_EXPORTER_PORT:-9100}:9100"
+    mem_limit: 128m
+
   prometheus:
     image: prom/prometheus:v3.14.0
     volumes:
@@ -235,14 +272,18 @@ services:
     mem_limit: 512m
 
   grafana:
-    image: grafana/grafana:13.1.4
+    build:
+      context: ./infra/grafana
+      dockerfile: Dockerfile
+      args:
+        CASSANDRA_PLUGIN_VERSION: ${GRAFANA_CASSANDRA_PLUGIN_VERSION:-3.3.0}
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env before starting}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
-      # - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro   # mounted starting P4 (FR-G1)
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     healthcheck:

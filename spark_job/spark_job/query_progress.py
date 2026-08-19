@@ -1,3 +1,4 @@
+import json
 import threading
 
 from pyspark.sql.streaming import StreamingQueryListener
@@ -33,6 +34,22 @@ def make_listener(tracker: QueryProgressTracker) -> StreamingQueryListener:
             watermark = None
             if p.eventTime:
                 watermark = p.eventTime.get("watermark")
+
+            # sources[].endOffset is a JSON string Spark already provides per
+            # progress event, e.g. {"sensor-readings":{"0":123,"1":456}} -
+            # last offset this query has read per partition (KPI-1 lag,
+            # combined in PromQL with kafka-exporter's broker-side offset).
+            kafka_offsets = {}
+            for source in (p.sources or []):
+                end_offset = getattr(source, "endOffset", None)
+                if not end_offset:
+                    continue
+                try:
+                    for _topic, partitions in json.loads(end_offset).items():
+                        kafka_offsets.update(partitions)
+                except (ValueError, TypeError, AttributeError):
+                    pass
+
             tracker.record(name, {
                 "batch_id": p.batchId,
                 "num_input_rows": p.numInputRows,
@@ -40,6 +57,7 @@ def make_listener(tracker: QueryProgressTracker) -> StreamingQueryListener:
                 "processing_time_ms": p.durationMs.get("triggerExecution") if p.durationMs else None,
                 "event_time_watermark": watermark,
                 "timestamp": p.timestamp,
+                "kafka_consumed_offsets": kafka_offsets,
             })
 
         def onQueryTerminated(self, event):

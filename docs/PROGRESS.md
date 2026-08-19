@@ -8,14 +8,14 @@ doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along th
 
 ---
 
-## Status: P1, P2 and P3 done, committed. P4 (Observability) is next.
+## Status: P1-P4 done, committed. P5 (Web app) is next.
 
 | Phase | What it is | Status |
 |---|---|---|
 | P1 — Foundation | docker-compose stack: Kafka, Cassandra, Spark (standalone, no job), Prometheus, Grafana | **Done** (commits `cab33ec`, `e0d4d25`) |
 | P2 — Ingestion | Producer: Kaggle replay + synthetic hand-over | **Done** (commit `3d141b4`) |
 | P3 — Processing | PySpark Structured Streaming job: validation, anomalies, dual windows, Cassandra sink | **Done** (see this file's P3 section) |
-| P4 — Observability | Exporters wired, Grafana dashboards provisioned | Not started |
+| P4 — Observability | Exporters wired, Grafana dashboards provisioned (KPI-1..5) | **Done** (see this file's P4 section) |
 | P5 — Web app | FastAPI read-only API + React guided UI + basic login | Not started |
 | P6 — VPS deployment | 3 Contabo VPS, k3s, hardening | Not started |
 | P7 — Endurance | 48-hour run against §10 acceptance criteria | Not started |
@@ -25,12 +25,18 @@ doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along th
 ```
 docker compose up -d
 ```
-Brings up the full stack (Kafka, Cassandra, Spark standalone + the streaming job,
-Prometheus, Grafana, kafka-ui, and the producer) — the producer starts automatically
-and immediately begins replaying the Kaggle dataset at 100 msg/s into topic
-`sensor-readings`, and the Spark job starts consuming and writing to Cassandra
-immediately after. See the root `README.md` for the verification checklist and
-`docker compose down` / `down -v`.
+Brings up the full stack (Kafka + kafka-exporter, Cassandra with a baked-in JMX
+exporter javaagent, Spark standalone + the streaming job, Prometheus, Grafana with the
+Cassandra datasource plugin baked in, node-exporter, kafka-ui, and the producer) — the
+producer starts automatically and immediately begins replaying the Kaggle dataset at
+100 msg/s into topic `sensor-readings`, and the Spark job starts consuming and writing
+to Cassandra immediately after. Grafana auto-provisions both datasources (Prometheus +
+Cassandra) and one dashboard (5 rows, one per KPI-1..5) with zero manual UI steps. See
+the root `README.md` for the verification checklist and `docker compose down` / `down -v`.
+
+**If you edit `infra/prometheus/prometheus.yml` while the stack is already running,
+`docker compose restart prometheus` is required** — Prometheus does not hot-reload
+scrape config changes from a running container picking up an edited mounted file.
 
 **Heads up on cold start:** on first launch (or after a full `down -v`), the Spark job
 recomputes its anomaly-detection baseline from the CSV (~30-60s) before it starts
@@ -51,7 +57,14 @@ docker-compose.yml          root compose file - the whole local stack (FR-D1)
 .env / .env.example         all runtime config (FR-D2) - .env is gitignored
 infra/
   cassandra/schema/         CQL, applied by the cassandra-schema-init one-shot container
-  prometheus/prometheus.yml self-scrape only for now; P4 adds exporter targets
+  cassandra/Dockerfile      P4: bakes in the jmx_exporter javaagent (KPI-4)
+  cassandra/jmx-exporter/   P4: exporter config, based verbatim on jmx_exporter's own
+                             official Cassandra example - see docs/TROUBLESHOOTING.md #12
+                             before changing metric names in here
+  grafana/Dockerfile        P4: bakes in the Cassandra datasource plugin
+  grafana/provisioning/     P4: datasources.yaml (Prometheus + Cassandra) + one
+                             dashboard JSON (5 rows, KPI-1..5)
+  prometheus/prometheus.yml real exporter scrape jobs as of P4 (was self-scrape only)
 producer/                   P2: the ingestion service (own Dockerfile + requirements.txt)
   producer/                 the importable Python package
 spark_job/                  P3: the streaming job (own Dockerfile + requirements.txt)
@@ -158,22 +171,66 @@ that touches the same surfaces:
   `spark-job` driver container (see `docs/TROUBLESHOOTING.md`'s whole P3 section, which
   is entirely about this driver/executor distinction).
 
-## What P4 needs to do (from REQUIREMENTS.md §7 FR-G, §8 NFR-7, §14)
+**Observability (P4) — implementation decisions and the wire contract for P5**
+- Producer and Spark job both gained `GET /metrics` (Prometheus text exposition,
+  hand-formatted, no `prometheus_client` dependency) alongside their existing `/state`
+  JSON — same port (8000 internal), same HTTP server. P5's backend can read either
+  `/state` (JSON, simpler to consume) or scrape `/metrics` itself if it wants
+  Prometheus-native data; both stay in sync since they read the same tracker objects.
+- **KPI-1 lag is genuinely 3 separate numbers**, not one — the `raw_events`/`agg_1m`/
+  `agg_1h` queries are 3 independent Kafka consumers (Structured Streaming doesn't use
+  classic consumer-group offsets, so `kafka_consumergroup_lag` isn't usable here; lag
+  is computed in PromQL as broker offset (`kafka_topic_partition_current_offset`,
+  from kafka-exporter) minus Spark's self-reported offset
+  (`spark_job_kafka_consumed_offset{query,partition}`, added to
+  `query_progress.py`'s listener in P4) — legend/label by `query`, don't collapse to a
+  single number.
+- **KPI-2 latency is a per-micro-batch snapshot** (p50/p95/max of `write_ts -
+  event_ts`, plus a produce→ingest and ingest→write hop breakdown), computed in
+  `cassandra_sink.py`'s `raw_events` writer only (the only table with all 3
+  timestamps on one row) and exposed via a new `LatencyTracker`. Not a true
+  cross-batch streaming quantile — refreshed every trigger interval (30s default),
+  which is what actually matters for checking NFR-1's bound is currently met.
+- **Grafana needs two datasources** — Prometheus (KPI-1/2/4) and a baked-in Cassandra
+  plugin, `hadesarchitect-cassandra-datasource` (KPI-3/5, queried directly against
+  `agg_1m`/`agg_1h`/`raw_events`). The plugin is baked into a custom `grafana`
+  image at a path **outside** the pre-existing `grafana_data` named volume
+  (`GF_PATHS_PLUGINS=/usr/local/grafana-plugins`) — installing into the default
+  `/var/lib/grafana/plugins` would be silently shadowed by that already-populated
+  volume forever. If a future phase adds more plugins, keep using this same
+  out-of-volume path.
+- **Cassandra now builds a custom image too** (`infra/cassandra/Dockerfile`), baking
+  in a jmx_exporter javaagent via `JVM_EXTRA_OPTS` (port 7070). The exporter config
+  (`infra/cassandra/jmx-exporter/cassandra-jmx-exporter.yml`) is jmx_exporter's own
+  official Cassandra example fetched verbatim, not hand-written — if KPI-4 metrics
+  ever need to change, re-diff against the upstream example rather than guessing at
+  MBean names; real metric names sometimes differ from what seems obvious (e.g. disk
+  usage is `cassandra_storage_load_count`, not `..._load`, and GC pauses come from
+  jmx_exporter's own built-in JVM collector as `jvm_gc_collection_seconds_{count,sum}`,
+  not a custom rule — see `docs/TROUBLESHOOTING.md` #12).
+- The dashboard's `$device_id` template variable is a **static list** (the 3 real
+  device MAC IDs), not a CQL-driven variable — `SELECT DISTINCT` isn't valid on a
+  partial partition-key column in Cassandra. If a future phase ever adds real devices
+  beyond these 3 (it currently never does — confirmed the synthetic generator only
+  ever cycles the same 3 IDs), this variable needs a matching update.
+- `docker compose restart prometheus` is required after editing
+  `infra/prometheus/prometheus.yml` on an already-running stack — no hot reload.
+
+## What P5 needs to do (from REQUIREMENTS.md §7 FR-W, §14)
 
 Not started yet. When picking this up:
-- Wire real exporters (Kafka exporter, Cassandra/JMX exporter, node exporter) into
-  `infra/prometheus/prometheus.yml`, which currently only self-scrapes (see the
-  commented-out placeholder job stanzas already in that file from P1).
-- The producer's `/state` (port 8001) and the Spark job's `/state` (port 8002) are
-  plain JSON, not Prometheus exposition format — P4 needs to either add a `/metrics`
-  endpoint alongside each (reusing the same underlying state/tracker objects) or run a
-  small adapter; both producer and Spark job were deliberately built to make this easy
-  without a redesign.
-- Grafana dashboards + datasources as code (FR-G1) — `infra/grafana/provisioning/` does
-  not exist yet; the `grafana` service in `docker-compose.yml` has the mount
-  commented out, waiting for P4.
-- KPI catalogue is §9 of `REQUIREMENTS.md` — KPI-1 (throughput/lag) and KPI-4
-  (Cassandra health) come from the new exporters; KPI-2 (latency) and KPI-5 (business
-  aggregates) can already be computed today directly from `raw_events`/`agg_1m`/`agg_1h`
-  (real data exists in Cassandra right now); KPI-3 (anomaly metrics) similarly already
-  has real `is_anomaly`/`anomaly_reason`/`anomaly_count` data to chart.
+- FastAPI read-only API (FR-W2: observer mode only, Phase 1 has no control-panel
+  endpoints — see UC-7, explicitly a later phase) + a React guided UI + basic login
+  (FR-W4).
+- The producer's and Spark job's `GET /state` (JSON) endpoints are exactly what this
+  backend should poll for live pipeline state — internal ports `producer:8000` /
+  `spark-job:8000` from inside the Docker network, or the host-mapped
+  `PRODUCER_STATE_PORT`/`SPARK_JOB_STATE_PORT` (8001/8002) if developing the backend
+  outside Compose.
+- FR-W1's guided steps (deployment status → ingestion → Kafka → Spark → Cassandra →
+  KPI summary linking to Grafana) map directly onto what already exists: producer
+  `/state` for ingestion, Kafka broker/kafka-exporter for the Kafka step, Spark job
+  `/state` for the Spark step, and a Cassandra read (or the same `/state` data) for
+  the storage step.
+- FR-W3 (live updates, WebSocket or ≤2s polling): both `/state` endpoints are cheap
+  in-memory reads, safe to poll frequently from a backend.

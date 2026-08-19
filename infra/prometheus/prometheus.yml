@@ -7,13 +7,25 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # --- P4 (Observability phase) adds real scrape targets here, e.g.: ---
-  # - job_name: 'kafka-exporter'
-  #   static_configs:
-  #     - targets: ['kafka-exporter:9308']
-  # - job_name: 'cassandra-exporter'
-  #   static_configs:
-  #     - targets: ['cassandra-exporter:7070']
-  # - job_name: 'node-exporter'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
+  # jmx_exporter runs as a javaagent inside the cassandra container itself
+  # (not a separate polling container - see infra/cassandra/Dockerfile), so
+  # the scrape target is the cassandra service's own hostname.
+  - job_name: 'cassandra-exporter'
+    static_configs:
+      - targets: ['cassandra:7070']
+
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'producer'
+    static_configs:
+      - targets: ['producer:8000']
+
+  - job_name: 'spark-job'
+    static_configs:
+      - targets: ['spark-job:8000']

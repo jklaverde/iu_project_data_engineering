@@ -1,0 +1,243 @@
+{
+  "uid": "iot-kpi-dashboard",
+  "title": "IoT Sensor Pipeline - KPIs",
+  "description": "REQUIREMENTS.md Sec 9 KPI catalogue (KPI-1..5). Rows 1/2/4 read Prometheus; rows 3/5 read Cassandra directly.",
+  "tags": ["iot-sensor-pipeline"],
+  "timezone": "utc",
+  "editable": false,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "device_id",
+        "type": "custom",
+        "label": "Device",
+        "query": "b8:27:eb:bf:9d:51,00:0f:00:70:91:0a,1c:bf:ce:15:ec:4d",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "options": []
+      },
+      {
+        "name": "granularity",
+        "type": "custom",
+        "label": "Aggregate granularity",
+        "query": "agg_1m,agg_1h",
+        "multi": false,
+        "includeAll": false,
+        "current": { "text": "agg_1m", "value": "agg_1m" },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    { "id": 100, "type": "row", "title": "KPI-1 — Throughput & consumer lag", "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 } },
+    {
+      "id": 101, "type": "timeseries", "title": "Produced vs consumed rate (msgs/s)",
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(kafka_topic_partition_current_offset{topic=\"sensor-readings\"}[1m]))", "legendFormat": "produced" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_query_input_rows_per_second{query=~\"raw_events|agg_1m|agg_1h\"}", "legendFormat": "consumed ({{query}})" }
+      ]
+    },
+    {
+      "id": 102, "type": "timeseries", "title": "Per-partition lag by query",
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kafka_topic_partition_current_offset{topic=\"sensor-readings\"} - on(partition) spark_job_kafka_consumed_offset{query=\"raw_events\"}", "legendFormat": "raw_events p{{partition}}" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kafka_topic_partition_current_offset{topic=\"sensor-readings\"} - on(partition) spark_job_kafka_consumed_offset{query=\"agg_1m\"}", "legendFormat": "agg_1m p{{partition}}" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "kafka_topic_partition_current_offset{topic=\"sensor-readings\"} - on(partition) spark_job_kafka_consumed_offset{query=\"agg_1h\"}", "legendFormat": "agg_1h p{{partition}}" }
+      ]
+    },
+    {
+      "id": 103, "type": "stat", "title": "Total events produced",
+      "gridPos": { "x": 0, "y": 9, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(kafka_topic_partition_current_offset{topic=\"sensor-readings\"})", "instant": true }
+      ]
+    },
+
+    { "id": 200, "type": "row", "title": "KPI-2 — End-to-end latency", "gridPos": { "x": 0, "y": 14, "w": 24, "h": 1 } },
+    {
+      "id": 201, "type": "timeseries", "title": "End-to-end latency (event produced -> Cassandra write)",
+      "gridPos": { "x": 0, "y": 15, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_e2e_latency_seconds{quantile=\"0.5\"}", "legendFormat": "p50" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_e2e_latency_seconds{quantile=\"0.95\"}", "legendFormat": "p95" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_e2e_latency_seconds_max", "legendFormat": "max" }
+      ]
+    },
+    {
+      "id": 202, "type": "timeseries", "title": "Per-hop latency breakdown",
+      "gridPos": { "x": 12, "y": 15, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_hop_latency_seconds{hop=\"produce_to_ingest\",quantile=\"0.5\"}", "legendFormat": "produce->ingest p50" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_hop_latency_seconds{hop=\"produce_to_ingest\",quantile=\"0.95\"}", "legendFormat": "produce->ingest p95" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_hop_latency_seconds{hop=\"ingest_to_write\",quantile=\"0.5\"}", "legendFormat": "ingest->write p50" },
+        { "refId": "D", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "spark_job_hop_latency_seconds{hop=\"ingest_to_write\",quantile=\"0.95\"}", "legendFormat": "ingest->write p95" }
+      ]
+    },
+
+    { "id": 300, "type": "row", "title": "KPI-3 — Anomaly metrics", "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 } },
+    {
+      "id": 301, "type": "timeseries", "title": "Anomalies per 1-min window",
+      "gridPos": { "x": 0, "y": 24, "w": 8, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
+          "target": "SELECT device_id, anomaly_count, window_start FROM iot.agg_1m WHERE device_id IN (${device_id:singlequote}) AND day IN ('${__from:date:YYYY-MM-DD}','${__to:date:YYYY-MM-DD}') AND window_start > $__timeFrom AND window_start < $__timeTo"
+        }
+      ]
+    },
+    {
+      "id": 302, "type": "timeseries", "title": "Anomaly rate %",
+      "gridPos": { "x": 8, "y": 24, "w": 8, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
+          "target": "SELECT device_id, anomaly_count, event_count, window_start FROM iot.agg_1m WHERE device_id IN (${device_id:singlequote}) AND day IN ('${__from:date:YYYY-MM-DD}','${__to:date:YYYY-MM-DD}') AND window_start > $__timeFrom AND window_start < $__timeTo"
+        }
+      ],
+      "transformations": [
+        { "id": "calculateField", "options": { "mode": "binary", "binary": { "left": "anomaly_count", "operator": "/", "right": "event_count" }, "alias": "anomaly_ratio", "replaceFields": false } },
+        { "id": "calculateField", "options": { "mode": "binary", "binary": { "left": "anomaly_ratio", "operator": "*", "right": "100" }, "alias": "anomaly_rate_pct", "replaceFields": false } }
+      ]
+    },
+    {
+      "id": 303, "type": "table", "title": "Top anomalous device (selected range)",
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot",
+          "target": "SELECT device_id, anomaly_count, window_start FROM iot.agg_1m WHERE device_id IN (${device_id:singlequote}) AND day IN ('${__from:date:YYYY-MM-DD}','${__to:date:YYYY-MM-DD}') AND window_start > $__timeFrom AND window_start < $__timeTo"
+        }
+      ],
+      "transformations": [
+        { "id": "groupBy", "options": { "fields": { "device_id": { "aggregations": [], "operation": "groupby" }, "anomaly_count": { "aggregations": ["sum"], "operation": "aggregate" } } } },
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "field": "anomaly_count (sum)", "desc": true }] } }
+      ]
+    },
+    {
+      "id": 304, "type": "table", "title": "Anomaly drill-down (raw events, UC-6)",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot",
+          "target": "SELECT device_id, event_id, event_ts, anomaly_reason FROM iot.raw_events WHERE device_id IN (${device_id:singlequote}) AND is_anomaly = true AND event_ts > $__timeFrom AND event_ts < $__timeTo LIMIT 100 ALLOW FILTERING"
+        }
+      ]
+    },
+
+    { "id": 400, "type": "row", "title": "KPI-4 — Cassandra health", "gridPos": { "x": 0, "y": 40, "w": 24, "h": 1 } },
+    {
+      "id": 401, "type": "timeseries", "title": "Data-directory disk usage & growth rate",
+      "gridPos": { "x": 0, "y": 41, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "cassandra_storage_load_count", "legendFormat": "disk used" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "deriv(cassandra_storage_load_count[1h])", "legendFormat": "growth rate (bytes/s)" }
+      ]
+    },
+    {
+      "id": 402, "type": "timeseries", "title": "Write latency (keyspace iot)",
+      "gridPos": { "x": 12, "y": 41, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "cassandra_keyspace_writelatency_seconds{keyspace=\"iot\",quantile=\"0.95\"}", "legendFormat": "p95" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "cassandra_keyspace_writelatency_seconds{keyspace=\"iot\",quantile=\"0.99\"}", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 403, "type": "timeseries", "title": "Pending compactions",
+      "gridPos": { "x": 0, "y": 49, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "cassandra_compaction_pendingtasks", "legendFormat": "pending compactions" }
+      ]
+    },
+    {
+      "id": 404, "type": "timeseries", "title": "GC pauses",
+      "description": "jvm_gc_collection_seconds_{count,sum} is auto-exported by jmx_exporter's built-in JVM collector - no custom rule needed (an earlier attempt at one was silently shadowed/redundant).",
+      "gridPos": { "x": 12, "y": 49, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "increase(jvm_gc_collection_seconds_sum[5m])", "legendFormat": "{{gc}}" }
+      ]
+    },
+
+    { "id": 500, "type": "row", "title": "KPI-5 — Business aggregates ($granularity)", "gridPos": { "x": 0, "y": 57, "w": 24, "h": 1 } },
+    {
+      "id": 501, "type": "timeseries", "title": "Temperature (avg / max)",
+      "gridPos": { "x": 0, "y": 58, "w": 8, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
+          "target": "SELECT device_id, temp_avg, temp_max, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+        }
+      ]
+    },
+    {
+      "id": 502, "type": "timeseries", "title": "Humidity avg, max CO/LPG/smoke",
+      "gridPos": { "x": 8, "y": 58, "w": 8, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
+          "target": "SELECT device_id, humidity_avg, co_max, lpg_max, smoke_max, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+        }
+      ]
+    },
+    {
+      "id": 503, "type": "timeseries", "title": "Motion & light activity ratio",
+      "gridPos": { "x": 16, "y": 58, "w": 8, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
+          "target": "SELECT device_id, motion_active_ratio, light_active_ratio, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+        }
+      ]
+    },
+    {
+      "id": 504, "type": "timeseries", "title": "Pressure (hPa) — simulated, D23",
+      "description": "Atmospheric pressure is not present in the source dataset - simulated for every row (D23) and labeled synthetic here per REQUIREMENTS.md Sec 5.5/9.",
+      "gridPos": { "x": 0, "y": 66, "w": 12, "h": 8 },
+      "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": { "unit": "pressurehpa" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+          "queryType": "query", "rawQuery": true, "keyspace": "iot", "alias": "{{ device_id }}",
+          "target": "SELECT device_id, pressure_avg, pressure_max, window_start FROM iot.$granularity WHERE device_id IN (${device_id:singlequote}) AND window_start > $__timeFrom AND window_start < $__timeTo ALLOW FILTERING"
+        }
+      ]
+    }
+  ]
+}
