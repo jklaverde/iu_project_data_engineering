@@ -1,0 +1,13 @@
+# PySpark itself ships with the apache/spark:3.5.9 base image (must match the
+# cluster's exact build - see the Dockerfile) and is NOT pip-installed here.
+# The Cassandra connector (org.apache.spark.sql.cassandra) is a JVM-side
+# dependency loaded via spark-submit --packages, with no corresponding Python
+# package to install here.
+#
+# pandas/pyarrow ARE required, though: applyInPandasWithState (the adaptive
+# per-device anomaly-detection state, see anomaly_state.py) is a pandas UDF
+# under the hood and needs Arrow-based serialization between the JVM and
+# Python - neither ships in the base apache/spark image (confirmed by a
+# ModuleNotFoundError on first real run, not assumed upfront).
+pandas==2.2.3
+pyarrow==17.0.0

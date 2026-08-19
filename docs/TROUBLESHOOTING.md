@@ -76,3 +76,110 @@ under the phase that surfaced them.
 - **Lesson:** don't hardcode `container_name:` in a compose file meant to run on a
   shared dev machine with many other projects — let Compose's project-prefixed default
   naming do its job.
+
+---
+
+## P3 — Processing (PySpark Structured Streaming job)
+
+The unifying theme of every bug below: **this is a real distributed cluster** (a
+`spark-job` driver container plus a separate `spark-worker` executor container), not a
+single-process local Spark session. Anything that "obviously" only needs to exist on
+the driver — a mounted file, a checkpoint directory, an installed Python package, an
+importable module — can silently fail on the executor instead, often with no error
+until a task actually runs there. Every fix below is a variant of "make sure executors
+have it too, not just the driver."
+
+### 4. Batch CSV read fails on the executor: `File file:/data/iot_telemetry_data.csv does not exist`
+
+- **Symptom:** the job's one-time baseline-seed read
+  (`spark.read.csv(SPARK_JOB_BASELINE_CSV_PATH)`) fails with
+  `SparkFileNotFoundException`, reported by a task running on the **worker's** IP, not
+  the driver.
+- **Cause:** `spark.read.csv(...)` is a distributed batch read — Spark schedules the
+  actual read task on an **executor** (`spark-worker`), not the driver (`spark-job`).
+  Only `spark-job`'s `docker-compose.yml` service had `./kaggle_repository:/data:ro`
+  mounted.
+- **Fix:** mount the same volume into `spark-worker` too.
+- **General lesson:** any local file path a Spark job reads or writes must be mounted
+  identically on every node that can run a task for that job, not just the driver —
+  true even for a single-worker "cluster."
+
+### 5. Checkpoint `mkdir` fails for state-store paths, on top of the already-expected volume-permission issue
+
+- **Symptom:** `java.io.IOException: mkdir of file:/opt/spark-checkpoints/agg_1m/state/1/0/_metadata failed`
+  (and similarly for `raw_events`, `agg_1h`).
+- **Cause:** two layered issues. First, the generic one already known from P1 #2's
+  lesson: a fresh named Docker volume mounts root-owned, breaking writes from the
+  image's non-root user (confirmed `apache/spark:3.5.9` runs as `spark`, uid 185, via
+  `docker run --rm apache/spark:3.5.9 id`) — fixed with a `spark-job-volume-init`
+  one-shot `chown -R 185:185`, same pattern as `kafka-volume-init`. Second, and less
+  obvious: Structured Streaming's **state-store data** (for `applyInPandasWithState`
+  and windowed aggregations) is written by **executors**, not the driver — so even
+  after fixing permissions, `spark_checkpoints` still needed to be mounted into
+  `spark-worker`, not just `spark-job`.
+- **Fix:** mount `spark_checkpoints` into both `spark-job` and `spark-worker`; chown via
+  `spark-job-volume-init` before either starts.
+
+### 6. `ModuleNotFoundError: No module named 'pandas'` / `'pyarrow'` on the executor
+
+- **Symptom:** the driver starts fine (imports work there), but the first micro-batch
+  that actually runs the `applyInPandasWithState` function fails on the executor with
+  `ModuleNotFoundError`, deep in PySpark's own Arrow serialization code.
+- **Cause:** `applyInPandasWithState` is a pandas UDF under the hood — it needs
+  `pandas`/`pyarrow` installed wherever the UDF actually executes, which is the
+  **executor**, not the driver. The base `apache/spark:3.5.9` image ships neither.
+  `spark_job/Dockerfile` correctly pip-installs both, but `spark-worker` was still using
+  the plain upstream image.
+- **Fix:** a new `spark_job/worker.Dockerfile` (base image + the same
+  `requirements.txt`), and `spark-worker` in `docker-compose.yml` switched from a
+  pulled `image:` to a `build:` using it.
+- **General lesson:** PySpark auto-distributes `--packages` JARs to executors, but does
+  **not** auto-distribute pip-installed Python packages — those need to be baked into
+  whatever image the executors actually run.
+
+### 7. `ModuleNotFoundError: No module named 'spark_job'` on the executor, when unpickling a closure
+
+- **Symptom:** different from #6 — this is the job's *own* package, not a third-party
+  one, failing to import on the executor while deserializing the
+  `applyInPandasWithState` function via `cloudpickle.loads`.
+- **Cause:** a wrong assumption going in was that cloudpickle always serializes a
+  function fully "by value," so only the driver needs the defining package importable.
+  Not true: cloudpickle pickles functions defined in an **importable module** (as
+  opposed to `__main__`, or a truly dynamically-constructed function) **by reference** —
+  it stores the module/qualname and expects the receiving side to `import` it, the same
+  as plain `pickle` would for a top-level function. Since `spark_job` was never shipped
+  to the executor (only the driver container has it copied in), unpickling fails there.
+- **Fix:** zip the `spark_job/` package at Docker build time
+  (`shutil.make_archive('/opt/app/spark_job', 'zip', '/opt/app', 'spark_job')`) and add
+  `--py-files /opt/app/spark_job.zip` to the `spark-submit` command in
+  `entrypoint.sh`.
+- **General lesson:** don't assume PySpark UDF closures are executor-independent just
+  because they're passed as plain Python callables — if the function lives in a real
+  package (not `__main__`), ship that package via `--py-files` regardless.
+
+### 8. Cassandra connector rejects a write with columns the target table doesn't have
+
+- **Symptom:** `java.util.NoSuchElementException: Columns not found in table
+  iot.agg_1h: write_ts` (and the same for `agg_1m`) — the connector aborts the write
+  outright rather than silently dropping the unrecognized column.
+- **Cause:** the shared `foreachBatch` writer helper
+  (`cassandra_sink.make_foreach_batch_writer`) unconditionally added a `write_ts`
+  column to every DataFrame it wrote, but only `iot.raw_events` actually has that
+  column in its CQL schema — `agg_1m`/`agg_1h` don't (a window's aggregate has no
+  single meaningful "row write time" the way one event does).
+- **Fix:** made `stamp_write_ts` a parameter of the writer factory, `True` only for the
+  `raw_events` query.
+- **General lesson:** a generic "one writer for every table" helper is a trap the
+  moment the tables' schemas actually differ — verify against each target table's real
+  column list rather than assuming a shared enrichment step is harmless everywhere it's
+  reused.
+
+### General P3 lesson
+
+All five bugs above were caught by actually running the job against the live stack —
+including, usefully, a stack that already had ~9 hours (~500K messages) of real
+producer traffic queued in Kafka, which turned "does it start" into "does it correctly
+process a real backlog and recover from a restart." None of these would have surfaced
+from a syntax check, a `spark-submit --deploy-mode client` dry run against `local[*]`,
+or code review alone — they are all specifically about the driver/executor split in a
+genuine (if small) cluster.
