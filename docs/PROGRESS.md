@@ -8,7 +8,7 @@ doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along th
 
 ---
 
-## Status: P1-P5 done, committed. P6 (VPS deployment) is next.
+## Status: P1-P5 done, committed. Interim single-VPS deployment done and live-validated on a real VPS. Full P6 (3-VPS k3s) and P7 (endurance) not started.
 
 | Phase | What it is | Status |
 |---|---|---|
@@ -17,8 +17,13 @@ doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along th
 | P3 — Processing | PySpark Structured Streaming job: validation, anomalies, dual windows, Cassandra sink | **Done** (see this file's P3 section) |
 | P4 — Observability | Exporters wired, Grafana dashboards provisioned (KPI-1..5) | **Done** (see this file's P4 section) |
 | P5 — Web app | FastAPI read-only API + React (TypeScript) guided UI + basic login | **Done** (see this file's P5 section) |
-| P6 — VPS deployment | 3 Contabo VPS, k3s, hardening | Not started — an interim single-VPS Compose deployment exists instead, see `docs/DEPLOYMENT.md` and `docs/TROUBLESHOOTING.md` P6 section |
+| Interim VPS deployment | Single-VPS Compose deployment: `dataset-init`, reboot-safe restart policies, `docs/ARCHITECTURE.md` + `docs/DEPLOYMENT.md`, a real Grafana dashboard bug found and fixed on a live deploy | **Done — actually deployed and used on a real Linux VPS**, not just designed (see this file's "Interim VPS deployment" section below) |
+| P6 (full) — VPS deployment | 3 Contabo VPS, k3s, hardening, Kafka/Cassandra replicated across nodes | **Not started** — see "What full P6 (k3s) needs to know" below |
 | P7 — Endurance | 48-hour run against §10 acceptance criteria | Not started |
+
+**If you're picking this project back up, read "Where to pick this up next" at the very
+bottom of this file first** — it's the prioritized list of what's actually worth doing
+next, ahead of everything else in this file.
 
 ## Resuming locally
 
@@ -77,9 +82,19 @@ spark_job/                  P3: the streaming job (own Dockerfile + requirements
   worker.Dockerfile         spark-worker's own image build (needs the same Python deps
                              as the driver - see docs/TROUBLESHOOTING.md #6)
 docs/
+  ARCHITECTURE.md           every module explained, system + data-flow diagrams,
+                             security model - the user-facing "how it's built" doc
+  DEPLOYMENT.md             step-by-step single-VPS deployment guide (hardening,
+                             firewall, optional TLS reverse proxy, backups) - this is
+                             the guide actually used for the live VPS deploy below
   TROUBLESHOOTING.md        bugs/gotchas log, by phase
   PROGRESS.md                this file
 REQUIREMENTS.md             frozen v1.0 spec - do not edit casually, see its own changelog header
+development_notes/          gitignored, LOCAL ONLY (not in git, may not exist on a
+                             fresh clone/different machine) - a developer-facing build
+                             narrative (what was built in what order, why, bugs found)
+                             if it exists on the machine you're on, read it for a
+                             deeper first-hand account than this file provides
 ```
 Note `spark-worker` (defined in P1, `docker-compose.yml`) now also `build:`s
 from `spark_job/worker.Dockerfile` instead of pulling the plain upstream image — it
@@ -289,7 +304,62 @@ that touches the same surfaces:
   not something P5 introduced. See `docs/TROUBLESHOOTING.md` P5 #3 before changing
   either query.
 
-## What P6 needs to know (wire contract / deployment notes)
+## Interim VPS deployment — implementation decisions and current state
+
+Not the full `REQUIREMENTS.md` §4.1 target (3-VPS k3s — that's "full P6" below, not
+started). This is a smaller, real piece of work: making the existing single-host
+Compose stack actually deployable on a public VPS, and **it has genuinely been
+deployed to and exercised on a real Linux VPS** (dataset fetch tested cold, Grafana
+login reconfigured, a real dashboard bug found and fixed against the live instance) —
+this is meaningfully more validated than "designed but never run."
+
+- **`dataset-init`** (own directory `kaggle_repository/`, own `Dockerfile` +
+  hash-pinned `requirements.txt`) — a one-shot service, same idiom as
+  `kafka-topic-init`/`cassandra-schema-init`, that downloads the Kaggle dataset into a
+  new named volume (`kaggle_dataset`) before `producer`/`spark-job`/`spark-worker`
+  start. Replaces a manual host-side `pip install kagglehub` step that (a) was easy to
+  forget entirely on a fresh VPS clone, crash-looping `producer`, and (b) fails outright
+  on modern Debian/Ubuntu with a PEP 668 `externally-managed-environment` error even
+  when remembered. **Confirmed needs no Kaggle credentials** for this dataset (it's
+  public) — `KAGGLE_USERNAME`/`KAGGLE_KEY` in `.env` are an untested-but-present
+  fallback only, not required. Idempotent: skips the download if the volume already has
+  the file. `producer`/`spark-job`/`spark-worker` all switched from a
+  `./kaggle_repository:/data:ro` host bind-mount to this named volume, and all three
+  gained `depends_on: dataset-init: condition: service_completed_successfully`. Full
+  story: `docs/TROUBLESHOOTING.md` P6 §1.
+- **Every long-running service got `restart: unless-stopped`** (previously only
+  `spark-job` had it) — without this, an unattended VPS reboot would leave most of the
+  stack down until someone manually ran `docker compose up -d` again. Purely additive,
+  doesn't change local-dev behavior.
+- **`docs/ARCHITECTURE.md` and `docs/DEPLOYMENT.md` are new** — the user-facing
+  "how it's built" and "how to put it on a VPS" docs (see their own content for what's
+  in them; both are written to also be read by a newcomer, not just future-Claude).
+  `README.md` was also rewritten — it had been stuck describing only P1 infrastructure.
+- **A real bug was found and fixed against the live VPS deployment, not local dev**:
+  four KPI-5 Grafana panels used bare `$granularity` in a table-name position
+  (`FROM iot.$granularity WHERE ...`) instead of `${granularity}` like the working
+  `device_id` variable in the same queries — Cassandra's CQL grammar treats a lone `$`
+  as the start of a dollar-quoted string and fails parsing right after it. Fixed to
+  `${granularity}` in `infra/grafana/provisioning/dashboards/json/kpi-dashboard.json`.
+  Full root-cause story (including how it was diagnosed live via Grafana's Query
+  Inspector and a direct `/api/ds/query` call against the running instance):
+  `docs/TROUBLESHOOTING.md` P4 §14.
+- **Important, non-obvious, NOT a bug**: KPI-5 panels can legitimately show "No data"
+  for a long time after a fresh deploy, even with a perfectly correct query. Cassandra's
+  `window_start` is derived from each row's own `event_ts`, which during REPLAY mode is
+  a historical Kaggle-dataset date (e.g. `2020-07-15`) — confirmed by querying `agg_1m`
+  directly on the live VPS. Since the panels filter `window_start` against Grafana's
+  real wall-clock time range, **no row can ever match until the producer hands over to
+  SYNTHETIC mode** (real timestamps). This is the same wall-clock-vs-event-time root
+  cause as the P5 backend bug (`docs/TROUBLESHOOTING.md` P5 §1), just surfacing in
+  Grafana instead. **Don't "fix" this again** — it resolves on its own, or force it
+  sooner with `PRODUCER_REPLAY_ROW_LIMIT` for testing. Full story:
+  `docs/TROUBLESHOOTING.md` P4 §14's "Related, NOT a bug" note.
+- **The live VPS deployment's IP/credentials are intentionally not recorded anywhere in
+  this repo** — if you need to reach it again, ask the user; don't assume a specific
+  address or store one here even temporarily.
+
+## What full P6 (k3s) needs to know (wire contract / deployment notes)
 
 - The whole web app is **one container** (`backend`, built from repo-root context) —
   P6's k3s manifests need exactly one Deployment/Service for this, not two. No Docker
@@ -303,3 +373,45 @@ that touches the same surfaces:
   dependency, regenerate via the `pip-compile --generate-hashes` command in
   `backend/README.md` (run inside a container matching the target platform), don't
   hand-edit the lockfiles.
+
+---
+
+## Where to pick this up next
+
+Read this section first if you're extending the project. Roughly in priority order —
+not a strict queue, pick whichever matches what's actually being asked for:
+
+1. **Full P6 (3-VPS k3s cluster)** — the actual next roadmap phase per
+   `REQUIREMENTS.md` §4.1/§14. Not started; the interim single-VPS deployment above is
+   real but is explicitly *not* this. Needs: k3s manifests (StatefulSets for
+   Kafka/Cassandra, D19 — no operators), Traefik ingress + self-signed TLS (D25),
+   flannel WireGuard inter-node traffic, NFR-11 firewall rules, NFR-12 node sizing. The
+   "What full P6 (k3s) needs to know" section directly above has the wire-contract
+   details (single web-app container, required secrets, hash-pinned deps) already
+   confirmed and ready to carry over.
+2. **P7 — 48-hour endurance run** (§10 acceptance criteria) — can actually be attempted
+   against the *current* single-VPS or local deployment even before full P6 exists,
+   since the acceptance criteria (sustained 500 msg/s, no restarts, bounded lag/disk
+   growth) don't inherently require the multi-node topology. Worth checking with the
+   user whether they want this run against what exists now or want to wait for full P6.
+3. **UC-7 — web app control panel** (start/stop producer, trigger hand-over, from the
+   UI) — explicitly deferred since Phase 1's inception. The backend already reserves
+   `/api/control/*` (no `routers/control.py` yet — see the P5 section above) as the
+   intended seam; the frontend has no control affordances at all yet. This is a
+   self-contained, medium-sized feature addition, not a rethink of anything existing.
+4. **Known technical debt, not yet fixed** (safe to leave, but don't rediscover from
+   scratch if asked to address them):
+   - `/api/anomalies` and its mirrored Grafana panel can hit
+     `READ_TOO_MANY_TOMBSTONES` under sustained data volume (`docs/TROUBLESHOOTING.md`
+     P5 §3) — likely needs a Spark-sink-level fix (write `unset` instead of `null` for
+     optional Cassandra columns) or Cassandra compaction tuning, not a query change.
+   - The frontend's production JS bundle is a single ~1.3 MB chunk (Vite's own build
+     warning, not investigated further) — code-splitting (e.g. lazy-loading ECharts or
+     per-step chunks) would help initial load time but wasn't judged worth the
+     complexity for a 6-step internal tool during P5.
+5. **Anything not listed here** — this file plus `docs/TROUBLESHOOTING.md` (bugs/root
+   causes/fixes, by phase) should cover essentially every non-obvious decision and gotcha
+   in the codebase; `docs/ARCHITECTURE.md` covers what every module does and why. If a
+   question isn't answered by those three files, it's genuinely new ground — treat it
+   with the same rigor as everything above (verify against the real running system,
+   don't assume, surface real trade-offs to the user rather than silently deciding them).

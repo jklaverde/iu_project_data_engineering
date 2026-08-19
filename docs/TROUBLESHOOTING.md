@@ -293,6 +293,22 @@ genuine (if small) cluster.
   panel in a browser to see real data render, not just re-reading the query string.
 - **Fix:** `FROM iot.${granularity} WHERE ...` in all four KPI-5 panel queries
   (`infra/grafana/provisioning/dashboards/json/kpi-dashboard.json`).
+- **Related, NOT a bug — don't re-"fix" this:** once the query itself is correct, the
+  KPI-5 panels can still legitimately show **"No data"** for a while after a fresh
+  deploy. `window_start` is derived from each row's own `event_ts`
+  (`spark_job/spark_job/time_buckets.py`), and during REPLAY mode `event_ts` is a
+  historical Kaggle-dataset date (e.g. `2020-07-15`) — confirmed by querying `agg_1m`
+  directly via `/api/ds/query` and seeing real `window_start` values from 2020. Since
+  the panels filter `window_start > $__timeFrom AND window_start < $__timeTo`, which
+  Grafana resolves to real wall-clock "now," **no row can ever match while REPLAY mode
+  is still running**, no matter how long you wait or how wide the time range. This
+  resolves itself automatically once the producer hands over to SYNTHETIC mode (real
+  timestamps) — or force it sooner for testing with `PRODUCER_REPLAY_ROW_LIMIT` (see
+  the root README). This is the same wall-clock-vs-event-time root cause as P5 bug #1
+  above, just surfacing in a Grafana panel instead of the web app's backend — the web
+  app's fix (deriving buckets from real observed timestamps) doesn't generalize to a
+  Grafana time-range picker, since Grafana has no equivalent of "ask the live data what
+  time it actually is."
 - **General lesson:** don't assume Grafana's bare `$var` and `${var}` interpolation are
   interchangeable in every position a query might use them — when a query mixes both
   forms and only one position fails, that inconsistency itself is a signal; prefer
