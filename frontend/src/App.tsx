@@ -36,8 +36,12 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <span className={`connection-badge connection-${connectionMode}`}>
             {connectionMode === "ws" ? "live (websocket)" : connectionMode === "polling" ? "live (polling)" : "connecting..."}
           </span>
-          <button onClick={() => setShowAbout(true)}>About the project</button>
-          <button onClick={onLogout}>Log out</button>
+          <button className="btn btn-accent" onClick={() => setShowAbout(true)}>
+            About the project
+          </button>
+          <button className="btn btn-ghost" onClick={onLogout}>
+            Log out
+          </button>
         </div>
       </header>
 
