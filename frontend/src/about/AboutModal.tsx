@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const FLOW = ["Producer", "Kafka", "Spark", "Cassandra"];
+const FLOW = ["Producer", "Kafka", "Spark", "Cassandra", "Grafana"];
 
 export default function AboutModal({ onClose }: { onClose: () => void }) {
   useEffect(() => {
@@ -40,10 +40,10 @@ export default function AboutModal({ onClose }: { onClose: () => void }) {
 
         <div className="modal-body">
           <p className="about-summary">
-            Ever wondered what actually happens the instant a sensor reading is sent,
-            processed, and stored — all in real time? This project builds that pipeline
-            for real, end to end, so you can watch it happen live instead of just
-            reading about it.
+            This project aims to illustrate, in a hands-on way, how sensor data moves
+            through a pipeline connecting several different technologies — from the
+            moment a reading is produced to the moment it is processed and stored, in
+            real time.
           </p>
 
           <p>
@@ -62,8 +62,9 @@ export default function AboutModal({ onClose }: { onClose: () => void }) {
             Runs as the <code>backend</code> service in the project's own{" "}
             <code>docker-compose.yml</code> stack, alongside Kafka, Cassandra, Spark,
             Prometheus, and Grafana — built together with the React/TypeScript frontend
-            into a single container. Read-only by design: it never writes to Kafka or
-            Cassandra, only observes what the producer and Spark job are already doing.
+            into a single container. This web app is just a window into the pipeline —
+            it watches what the producer and Spark are doing, but it never sends
+            messages into Kafka or writes rows into Cassandra itself.
           </p>
 
           <div className="about-divider" />
