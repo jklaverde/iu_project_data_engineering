@@ -4,7 +4,9 @@ Running status doc so a future session (or a different machine) can pick this pr
 back up without re-deriving context. Update this at the end of each phase. See
 `REQUIREMENTS.md` for the frozen v1.0 spec and phase roadmap (§14) — this file tracks
 progress *against* that roadmap plus implementation-level decisions the requirements
-doc doesn't cover. See `docs/TROUBLESHOOTING.md` for bugs/gotchas found along the way.
+doc doesn't cover. See `docs/ARCHITECTURE.md` for how the system is built and
+`docs/PROJECT_STRUCTURE.md` for what every individual file does, and
+`docs/TROUBLESHOOTING.md` for bugs/gotchas found along the way.
 
 ---
 
@@ -87,6 +89,8 @@ docs/
   DEPLOYMENT.md             step-by-step single-VPS deployment guide (hardening,
                              firewall, optional TLS reverse proxy, backups) - this is
                              the guide actually used for the live VPS deploy below
+  PROJECT_STRUCTURE.md      every tracked file in the repo, one line each, what it does -
+                             the fastest way to find which file owns a given behavior
   TROUBLESHOOTING.md        bugs/gotchas log, by phase
   PROGRESS.md                this file
 REQUIREMENTS.md             frozen v1.0 spec - do not edit casually, see its own changelog header

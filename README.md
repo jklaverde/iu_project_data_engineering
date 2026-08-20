@@ -5,8 +5,9 @@ A streaming sensor-data pipeline — Kafka → Spark Structured Streaming → Ca
 with a guided web app and Grafana dashboards, running end to end from one
 `docker compose up -d`. See `REQUIREMENTS.md` for the full project scope and phase
 roadmap, `docs/ARCHITECTURE.md` for how the system is built (every module explained,
-diagrams, data flow), `docs/DEPLOYMENT.md` for putting this on a public VPS,
-`docs/PROGRESS.md` for current status and where to pick this project back up, and
+diagrams, data flow), `docs/PROJECT_STRUCTURE.md` for what every single file in the
+repo does, `docs/DEPLOYMENT.md` for putting this on a public VPS, `docs/PROGRESS.md`
+for current status and where to pick this project back up, and
 `docs/TROUBLESHOOTING.md` for non-obvious bugs and environment gotchas found while
 building and operating the stack.
 

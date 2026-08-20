@@ -1,10 +1,11 @@
 # Architecture
 
 This document explains what the system is, how data moves through it, and what every
-container/module does and why it exists. See `REQUIREMENTS.md` for the frozen v1.0
-specification this was built against, `docs/PROGRESS.md` for phase-by-phase build
-history and implementation decisions, and `docs/TROUBLESHOOTING.md` for non-obvious
-bugs found along the way. `docs/DEPLOYMENT.md` covers putting this on a VPS.
+container/module does and why it exists. See `docs/PROJECT_STRUCTURE.md` for the
+finer-grained, per-file version of this same explanation, `REQUIREMENTS.md` for the
+frozen v1.0 specification this was built against, `docs/PROGRESS.md` for phase-by-phase
+build history and implementation decisions, and `docs/TROUBLESHOOTING.md` for
+non-obvious bugs found along the way. `docs/DEPLOYMENT.md` covers putting this on a VPS.
 
 ## What this is
 
