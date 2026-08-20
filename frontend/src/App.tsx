@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, logout, me } from "./api";
+import AboutModal from "./about/AboutModal";
 import LoginForm from "./auth/LoginForm";
 import ErrorBoundary from "./layout/ErrorBoundary";
 import Stepper from "./layout/Stepper";
@@ -25,6 +26,7 @@ const STEPS: { name: StepName; label: string }[] = [
 function Shell({ onLogout }: { onLogout: () => void }) {
   const { state, connectionMode } = usePipelineState();
   const [currentStep, setCurrentStep] = useState<StepName>("deployment");
+  const [showAbout, setShowAbout] = useState(false);
 
   return (
     <div className="shell">
@@ -34,9 +36,12 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <span className={`connection-badge connection-${connectionMode}`}>
             {connectionMode === "ws" ? "live (websocket)" : connectionMode === "polling" ? "live (polling)" : "connecting..."}
           </span>
+          <button onClick={() => setShowAbout(true)}>About the project</button>
           <button onClick={onLogout}>Log out</button>
         </div>
       </header>
+
+      {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
 
       <PipelineFlowDiagram state={state} />
 
