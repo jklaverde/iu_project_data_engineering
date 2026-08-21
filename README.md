@@ -1,12 +1,15 @@
 # iu_project_data_engineering
 Project: Data Engineering for IU Akademie
 
-A streaming sensor-data pipeline — Kafka → Spark Structured Streaming → Cassandra —
-with a guided web app and Grafana dashboards, running end to end from one
-`docker compose up -d`. See `REQUIREMENTS.md` for the full project scope and phase
-roadmap, `docs/ARCHITECTURE.md` for how the system is built (every module explained,
-diagrams, data flow), `docs/PROJECT_STRUCTURE.md` for what every single file in the
-repo does, `docs/DEPLOYMENT.md` for putting this on a public VPS, `docs/PROGRESS.md`
+A role-based environmental sensor platform for the municipality of Lingen (Ems) — Kafka →
+Spark Structured Streaming → Cassandra underneath, with two web app roles on top: an
+**environmental/planner** role (a live sensor map, air quality scoring, citizen-facing
+alerts) and an **infrastructure/admin** role (the pipeline health tour, centralized logs,
+Grafana-fired alerts with log drill-down) — plus a Grafana KPI dashboard, all running end
+to end from one `docker compose up -d`. See `REQUIREMENTS.md` for the full project scope
+and phase roadmap, `docs/ARCHITECTURE.md` for how the system is built (every module
+explained, diagrams, data flow), `docs/PROJECT_STRUCTURE.md` for what every single file in
+the repo does, `docs/DEPLOYMENT.md` for putting this on a public VPS, `docs/PROGRESS.md`
 for current status and where to pick this project back up, and
 `docs/TROUBLESHOOTING.md` for non-obvious bugs and environment gotchas found while
 building and operating the stack.
@@ -24,7 +27,8 @@ building and operating the stack.
 ```
 cp .env.example .env
 # edit .env: set real values for GRAFANA_ADMIN_PASSWORD, BACKEND_ADMIN_PASSWORD,
-# and BACKEND_SESSION_SECRET (e.g. `openssl rand -hex 32` for the last one)
+# BACKEND_PLANNER_PASSWORD, and BACKEND_SESSION_SECRET (e.g. `openssl rand -hex 32`
+# for the last one)
 
 docker compose up -d --build
 ```
@@ -49,9 +53,23 @@ docker compose down -v
 
 ## Walkthrough guide
 
-Once the stack is healthy, open **http://localhost:8000** and log in with
-`BACKEND_ADMIN_USERNAME`/`BACKEND_ADMIN_PASSWORD` from `.env`. The guided web app walks
-through the pipeline in six steps, all showing live data with WebSocket updates:
+Once the stack is healthy, open **http://localhost:8000** and log in with one of the two
+role accounts from `.env` — the same login form serves both roles, which one you land on
+depends on which account you use.
+
+### Environmental/planner role (`BACKEND_PLANNER_USERNAME`/`BACKEND_PLANNER_PASSWORD`)
+
+A live map of Lingen (Ems) with one pin per sensor, colored by current status
+(ok/warning/critical). Click a pin to see its latest reading, air quality score, comfort
+index, a 24h trend chart, and its chronic-exposure rate — and a citizen-facing feed of
+recent alerts, in plain language rather than raw sensor values. This is the surface that
+actually answers "is it safe here, and is it a persistent problem or a one-off"
+(`REQUIREMENTS.md` UC-8).
+
+### Infrastructure/admin role (`BACKEND_ADMIN_USERNAME`/`BACKEND_ADMIN_PASSWORD`)
+
+**Pipeline tab** — the guided pipeline tour in six steps, all showing live data with
+WebSocket updates:
 
 1. **Deployment** — a health grid of every service in the stack.
 2. **Ingestion** — the producer's current mode (replaying the dataset vs. generating
@@ -61,6 +79,11 @@ through the pipeline in six steps, all showing live data with WebSocket updates:
 5. **Cassandra** — the most recently written rows.
 6. **Summary** — totals, and a link into Grafana for historical trends.
 
+**Alerts tab** — a live feed of Grafana-fired alerts (consumer lag, Cassandra write
+latency, elevated per-service error rate, service down), each with a one-click link into
+Grafana Explore, pre-scoped to that alert's service and a recent time window
+(`REQUIREMENTS.md` UC-9).
+
 Watch for the **hand-over** (`REQUIREMENTS.md` UC-3): the producer replays the full
 Kaggle dataset (~67 minutes at the default 100 msg/s) before switching to synthetic
 generation — the Ingestion step's mode badge flips from `REPLAY` to `SYNTHETIC` when it
@@ -69,7 +92,7 @@ in `.env` before starting — this replays only the last N rows instead of the w
 
 Grafana (**http://localhost:3000**, credentials from `.env`) has the full KPI
 dashboard (`REQUIREMENTS.md` §9: throughput/lag, latency, business aggregates, disk
-growth, anomaly drill-down) auto-provisioned — no manual setup needed.
+growth, anomaly drill-down, and now logs) auto-provisioned — no manual setup needed.
 
 ## Endurance-run procedure
 

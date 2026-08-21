@@ -6,6 +6,7 @@ from pyspark.sql import SparkSession
 from .agg_query import build_agg_query
 from .baseline import compute_seed_baseline
 from .config import load_config
+from .device_thresholds_sink import write_device_thresholds
 from .latency_tracker import LatencyTracker
 from .logging_setup import configure_logging
 from .query_progress import QueryProgressTracker, make_listener
@@ -42,6 +43,7 @@ def main() -> None:
         "device_ids": sorted(baseline.keys()),
         "ceilings": ceilings,
     }))
+    write_device_thresholds(spark, baseline, ceilings, config.cassandra_keyspace)
 
     tracker = QueryProgressTracker()
     latency_tracker = LatencyTracker()

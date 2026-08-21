@@ -1,0 +1,12 @@
+# Root notification policy: route every alert to the backend webhook contact point.
+# No sub-routes needed - this project has one contact point and one audience (the
+# admin role) for now.
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: backend-webhook
+    group_by: ["alertname"]
+    group_wait: 10s
+    group_interval: 1m
+    repeat_interval: 15m

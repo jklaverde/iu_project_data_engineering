@@ -16,6 +16,8 @@ class Config:
     health_check_interval_seconds: float = 5.0
     admin_username: str = "admin"
     admin_password: str = ""
+    planner_username: str = "planner"
+    planner_password: str = ""
     session_secret: str = ""
     session_ttl_seconds: int = 43200
     cookie_secure: bool = False
@@ -39,6 +41,8 @@ def load_config() -> Config:
         health_check_interval_seconds=float(os.getenv("BACKEND_HEALTH_CHECK_INTERVAL_SECONDS", "5")),
         admin_username=os.getenv("BACKEND_ADMIN_USERNAME", "admin"),
         admin_password=os.environ["BACKEND_ADMIN_PASSWORD"],
+        planner_username=os.getenv("BACKEND_PLANNER_USERNAME", "planner"),
+        planner_password=os.environ["BACKEND_PLANNER_PASSWORD"],
         session_secret=os.environ["BACKEND_SESSION_SECRET"],
         session_ttl_seconds=int(os.getenv("BACKEND_SESSION_TTL_SECONDS", "43200")),
         cookie_secure=os.getenv("BACKEND_COOKIE_SECURE", "false").lower() == "true",

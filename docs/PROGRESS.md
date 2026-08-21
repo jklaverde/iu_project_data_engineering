@@ -10,7 +10,7 @@ doc doesn't cover. See `docs/ARCHITECTURE.md` for how the system is built and
 
 ---
 
-## Status: P1-P5 done, committed. Interim single-VPS deployment done and live-validated on a real VPS. Full P6 (3-VPS k3s) and P7 (endurance) not started.
+## Status: P1-P5 done, committed. Interim single-VPS deployment done and live-validated on a real VPS. P8 (role-based redirect, R0-R5) implemented AND live-verified end to end locally (one real bug found and fixed: loki healthcheck). Full P6 (3-VPS k3s) and P7 (endurance) not started.
 
 | Phase | What it is | Status |
 |---|---|---|
@@ -22,6 +22,7 @@ doc doesn't cover. See `docs/ARCHITECTURE.md` for how the system is built and
 | Interim VPS deployment | Single-VPS Compose deployment: `dataset-init`, reboot-safe restart policies, `docs/ARCHITECTURE.md` + `docs/DEPLOYMENT.md`, a real Grafana dashboard bug found and fixed on a live deploy | **Done — actually deployed and used on a real Linux VPS**, not just designed (see this file's "Interim VPS deployment" section below) |
 | P6 (full) — VPS deployment | 3 Contabo VPS, k3s, hardening, Kafka/Cassandra replicated across nodes | **Not started** — see "What full P6 (k3s) needs to know" below |
 | P7 — Endurance | 48-hour run against §10 acceptance criteria | Not started |
+| P8 — Role-based redirect | Two roles (admin/planner), `device_metadata`/`device_thresholds`, Leaflet map, Loki+Promtail, Grafana alerting + webhook + Alerts tab, `REQUIREMENTS.md` v2.0 rewrite | **Done — live-verified against a real `docker compose up`** (both role logins, live map with real pins, admin Pipeline/Alerts tabs, a real alert firing→resolving through the full Grafana→webhook→UI→Explore-drill-down chain). One bug found and fixed live: `loki` healthcheck used `wget` against an image with no shell at all (`docs/TROUBLESHOOTING.md` P8 §1). Not yet run: the 48h endurance profile against P8's additions specifically (see P7 below). |
 
 **If you're picking this project back up, read "Where to pick this up next" at the very
 bottom of this file first** — it's the prioritized list of what's actually worth doing
@@ -348,17 +349,14 @@ this is meaningfully more validated than "designed but never run."
   Full root-cause story (including how it was diagnosed live via Grafana's Query
   Inspector and a direct `/api/ds/query` call against the running instance):
   `docs/TROUBLESHOOTING.md` P4 §14.
-- **Important, non-obvious, NOT a bug**: KPI-5 panels can legitimately show "No data"
-  for a long time after a fresh deploy, even with a perfectly correct query. Cassandra's
-  `window_start` is derived from each row's own `event_ts`, which during REPLAY mode is
-  a historical Kaggle-dataset date (e.g. `2020-07-15`) — confirmed by querying `agg_1m`
-  directly on the live VPS. Since the panels filter `window_start` against Grafana's
-  real wall-clock time range, **no row can ever match until the producer hands over to
-  SYNTHETIC mode** (real timestamps). This is the same wall-clock-vs-event-time root
-  cause as the P5 backend bug (`docs/TROUBLESHOOTING.md` P5 §1), just surfacing in
-  Grafana instead. **Don't "fix" this again** — it resolves on its own, or force it
-  sooner with `PRODUCER_REPLAY_ROW_LIMIT` for testing. Full story:
-  `docs/TROUBLESHOOTING.md` P4 §14's "Related, NOT a bug" note.
+- **RESOLVED (D28), kept for history**: KPI-5 panels used to legitimately show "No data"
+  for a long time after a fresh deploy, even with a perfectly correct query, because
+  `window_start` is derived from each row's own `event_ts`, which during REPLAY mode used
+  to be a historical Kaggle-dataset date (e.g. `2020-07-15`). Root cause fixed at the
+  producer: `producer/producer/replay.py` now stamps `event_ts = now()` (same as
+  `synthetic.py` already did), so REPLAY-mode rows land in real, current time buckets
+  from the start of a run — no more dead window before SYNTHETIC hand-over. Full story:
+  `docs/TROUBLESHOOTING.md` P4 §14's updated note and P5 §1.
 - **The live VPS deployment's IP/credentials are intentionally not recorded anywhere in
   this repo** — if you need to reach it again, ask the user; don't assume a specific
   address or store one here even temporarily.
@@ -385,35 +383,46 @@ this is meaningfully more validated than "designed but never run."
 Read this section first if you're extending the project. Roughly in priority order —
 not a strict queue, pick whichever matches what's actually being asked for:
 
-1. **Full P6 (3-VPS k3s cluster)** — the actual next roadmap phase per
+1. **P8 is now live-verified locally** (see the P8 row in the table above and
+   `docs/TROUBLESHOOTING.md` P8 §1-§2 for the two bugs live testing found and fixed —
+   the `loki` healthcheck, and the citizen alert feed showing raw Spark diagnostic
+   text). What's *not* yet confirmed: this was a single fresh-start local run, not a
+   sustained/restart-cycled one — e.g. Promtail's Docker-socket bind-mount behavior on
+   a different host OS, or Loki/Grafana behavior across a `docker compose down && up`
+   cycle (does the alerting state survive? does Promtail resume tailing correctly?),
+   haven't been exercised. Low priority unless P7's endurance run or real VPS
+   deployment surfaces something.
+2. **Full P6 (3-VPS k3s cluster)** — the actual next roadmap phase per
    `REQUIREMENTS.md` §4.1/§14. Not started; the interim single-VPS deployment above is
    real but is explicitly *not* this. Needs: k3s manifests (StatefulSets for
    Kafka/Cassandra, D19 — no operators), Traefik ingress + self-signed TLS (D25),
    flannel WireGuard inter-node traffic, NFR-11 firewall rules, NFR-12 node sizing. The
    "What full P6 (k3s) needs to know" section directly above has the wire-contract
    details (single web-app container, required secrets, hash-pinned deps) already
-   confirmed and ready to carry over.
-2. **P7 — 48-hour endurance run** (§10 acceptance criteria) — can actually be attempted
+   confirmed and ready to carry over — now also needs the Loki/Promtail/alerting pieces
+   from P8 carried into the k3s manifests, not just the original P1-P5 services.
+4. **P7 — 48-hour endurance run** (§10 acceptance criteria) — can actually be attempted
    against the *current* single-VPS or local deployment even before full P6 exists,
    since the acceptance criteria (sustained 500 msg/s, no restarts, bounded lag/disk
    growth) don't inherently require the multi-node topology. Worth checking with the
    user whether they want this run against what exists now or want to wait for full P6.
-3. **UC-7 — web app control panel** (start/stop producer, trigger hand-over, from the
+5. **UC-7 — web app control panel** (start/stop producer, trigger hand-over, from the
    UI) — explicitly deferred since Phase 1's inception. The backend already reserves
    `/api/control/*` (no `routers/control.py` yet — see the P5 section above) as the
    intended seam; the frontend has no control affordances at all yet. This is a
    self-contained, medium-sized feature addition, not a rethink of anything existing.
-4. **Known technical debt, not yet fixed** (safe to leave, but don't rediscover from
+6. **Known technical debt, not yet fixed** (safe to leave, but don't rediscover from
    scratch if asked to address them):
    - `/api/anomalies` and its mirrored Grafana panel can hit
      `READ_TOO_MANY_TOMBSTONES` under sustained data volume (`docs/TROUBLESHOOTING.md`
      P5 §3) — likely needs a Spark-sink-level fix (write `unset` instead of `null` for
      optional Cassandra columns) or Cassandra compaction tuning, not a query change.
-   - The frontend's production JS bundle is a single ~1.3 MB chunk (Vite's own build
-     warning, not investigated further) — code-splitting (e.g. lazy-loading ECharts or
-     per-step chunks) would help initial load time but wasn't judged worth the
-     complexity for a 6-step internal tool during P5.
-5. **Anything not listed here** — this file plus `docs/TROUBLESHOOTING.md` (bugs/root
+   - The frontend's production JS bundle is a single ~1.45 MB chunk (grew from ~1.3 MB
+     after adding Leaflet in P8; Vite's own build warning, not investigated further) —
+     code-splitting (e.g. lazy-loading ECharts/Leaflet per role, since a given session
+     only ever needs one of the two) would help initial load time but wasn't judged
+     worth the complexity for an internal tool at this scale.
+7. **Anything not listed here** — this file plus `docs/TROUBLESHOOTING.md` (bugs/root
    causes/fixes, by phase) should cover essentially every non-obvious decision and gotcha
    in the codebase; `docs/ARCHITECTURE.md` covers what every module does and why. If a
    question isn't answered by those three files, it's genuinely new ground — treat it

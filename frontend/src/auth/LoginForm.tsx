@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ApiError, login } from "../api";
+import type { Role } from "../types";
 
-export default function LoginForm({ onSuccess }: { onSuccess: () => void }) {
+export default function LoginForm({ onSuccess }: { onSuccess: (role: Role) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -12,8 +13,8 @@ export default function LoginForm({ onSuccess }: { onSuccess: () => void }) {
     setError(null);
     setSubmitting(true);
     try {
-      await login(username, password);
-      onSuccess();
+      const res = await login(username, password);
+      onSuccess(res.role);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setError("Invalid username or password.");
@@ -28,8 +29,8 @@ export default function LoginForm({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="login-screen">
       <form className="login-form" onSubmit={handleSubmit}>
-        <h1>Sensor Pipeline Walkthrough</h1>
-        <p>Sign in to observe the live pipeline (Kafka → Spark → Cassandra).</p>
+        <h1>Lingen (Ems) Environmental Sensors</h1>
+        <p>Sign in with your infrastructure/admin or environmental/planner account.</p>
         <label>
           Username
           <input

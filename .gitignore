@@ -4,6 +4,9 @@
 # Developer-facing build-process notes (local reference only, not part of the shipped repo)
 development_notes/
 
+# Claude Code local runtime/session state (not part of the shipped repo)
+.claude/
+
 # Python build artifacts
 __pycache__/
 *.pyc

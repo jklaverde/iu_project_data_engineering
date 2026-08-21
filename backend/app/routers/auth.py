@@ -15,10 +15,11 @@ class LoginRequest(BaseModel):
 @router.post("/login")
 def login(body: LoginRequest, response: Response, request: Request):
     config: Config = request.app.state.config
-    if not check_credentials(body.username, body.password, config):
+    role = check_credentials(body.username, body.password, config)
+    if role is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    token = create_session_token(body.username, config)
+    token = create_session_token(body.username, role, config)
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
@@ -27,7 +28,7 @@ def login(body: LoginRequest, response: Response, request: Request):
         secure=config.cookie_secure,
         max_age=config.session_ttl_seconds,
     )
-    return {"username": body.username}
+    return {"username": body.username, "role": role}
 
 
 @router.post("/logout")
@@ -39,6 +40,7 @@ def logout(response: Response):
 @router.get("/me")
 def me(request: Request, session: str | None = Cookie(default=None)):
     config: Config = request.app.state.config
-    if session is None or not verify_session_token(session, config):
+    payload = verify_session_token(session, config) if session is not None else None
+    if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return {"authenticated": True}
+    return {"authenticated": True, "role": payload.get("r")}

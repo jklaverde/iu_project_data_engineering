@@ -1,4 +1,4 @@
-import type { PipelineState, RawEventRow } from "./types";
+import type { AdminAlert, PipelineState, RawEventRow, Role, SensorsResponse, SensorHistoryResponse } from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -16,7 +16,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function login(username: string, password: string): Promise<{ username: string }> {
+export function login(username: string, password: string): Promise<{ username: string; role: Role }> {
   return request("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -28,8 +28,23 @@ export function logout(): Promise<{ status: string }> {
   return request("/api/auth/logout", { method: "POST" });
 }
 
-export function me(): Promise<{ authenticated: boolean }> {
+export function me(): Promise<{ authenticated: boolean; role: Role }> {
   return request("/api/auth/me");
+}
+
+export function fetchSensors(): Promise<SensorsResponse> {
+  return request("/api/sensors");
+}
+
+export function fetchSensorHistory(
+  deviceId: string,
+  params: { granularity?: "1m" | "1h"; hours?: number } = {},
+): Promise<SensorHistoryResponse> {
+  const search = new URLSearchParams();
+  if (params.granularity) search.set("granularity", params.granularity);
+  if (params.hours) search.set("hours", String(params.hours));
+  const qs = search.toString();
+  return request(`/api/sensors/${encodeURIComponent(deviceId)}/history${qs ? `?${qs}` : ""}`);
 }
 
 export function fetchPipelineState(): Promise<PipelineState> {
@@ -47,6 +62,10 @@ export function fetchAnomalies(params: {
   if (params.limit) search.set("limit", String(params.limit));
   const qs = search.toString();
   return request(`/api/anomalies${qs ? `?${qs}` : ""}`);
+}
+
+export function fetchAdminAlerts(): Promise<{ alerts: AdminAlert[] }> {
+  return request("/api/admin/alerts");
 }
 
 export function connectPipelineStateSocket(

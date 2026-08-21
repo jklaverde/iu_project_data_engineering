@@ -1,0 +1,153 @@
+# Provisioned-as-code alert rules (R4 of the role-based redirect) - matches this
+# project's no-manual-UI-setup ethos already used for dashboards.yaml/datasources.yaml.
+# Every query here reuses metric names already tested in
+# infra/grafana/provisioning/dashboards/json/kpi-dashboard.json (KPI-1/KPI-4 panels) -
+# no new metrics invented. Each rule uses the canonical query -> reduce -> threshold
+# 3-stage pattern so the same shape works for both Prometheus and Loki datasources.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: infra-health
+    folder: Alerting
+    interval: 1m
+    rules:
+      - uid: consumer-lag-high
+        title: Kafka consumer lag high (raw_events query)
+        condition: C
+        for: 2m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "raw_events consumer lag is above 2000 messages"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              range: true
+              expr: >-
+                max(kafka_topic_partition_current_offset{topic="sensor-readings"}
+                - on(partition) spark_job_kafka_consumed_offset{query="raw_events"})
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [2000] }
+
+      - uid: cassandra-write-latency-high
+        title: Cassandra write latency high (keyspace iot, p95)
+        condition: C
+        for: 2m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: warning
+          service: cassandra
+        annotations:
+          summary: "Cassandra p95 write latency for keyspace iot is above 500ms (placeholder threshold - see REQUIREMENTS.md Sec 10, to be replaced by a calibrated benchmark value like the endurance-run threshold)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              range: true
+              expr: cassandra_keyspace_writelatency_seconds{keyspace="iot",quantile="0.95"}
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [0.5] }
+
+      - uid: elevated-error-log-rate
+        title: Elevated ERROR log rate per service
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.container }} logged more than 5 ERROR lines in the last 5 minutes"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: loki
+            model:
+              refId: A
+              range: true
+              expr: sum by (container) (count_over_time({level="ERROR"}[5m]))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [5] }
+
+      - uid: service-down
+        title: Service down (not scraping)
+        condition: C
+        for: 1m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is not reachable by Prometheus"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              range: true
+              expr: up{job=~"kafka-exporter|cassandra-exporter|producer|spark-job"}
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: lt, params: [1] }

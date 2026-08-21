@@ -1,0 +1,42 @@
+# Single-binary Loki, filesystem storage - matches this project's local/single-machine
+# Docker Compose scope (same posture as Cassandra's SimpleStrategy RF=1, see
+# infra/cassandra/schema/001_keyspace.cql). Feeds the infrastructure/admin role's
+# centralized logs (R3 of the role-based redirect).
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Operational log retention (this project's logs), independent of NFR-4's
+  # "keep everything" policy - that applies to sensor data in Cassandra, not
+  # Loki's own log volume. 7 days is enough for a demo/endurance-run scope.
+  retention_period: 168h
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem

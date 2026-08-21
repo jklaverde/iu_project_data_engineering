@@ -6,6 +6,7 @@
   --muted: #9298b3;
   --accent: #4f8cff;
   --good: #3ecf8e;
+  --warn: #f5a623;
   --bad: #ff5d6c;
   --flow-line: #2a2f47;
 }
@@ -151,6 +152,34 @@ header {
 .btn-ghost:hover {
   color: var(--text);
   border-color: var(--muted);
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.2rem;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+
+.admin-tab:hover {
+  color: var(--text);
+}
+
+.admin-tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .body {
@@ -577,4 +606,142 @@ main {
   color: var(--muted);
   font-size: 0.78rem;
   margin-top: 0.5rem;
+}
+
+/* Planner role (R2) - map view */
+
+.planner-shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.planner-body {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.map-container {
+  flex: 2;
+  min-width: 0;
+  height: 640px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.planner-sidebar {
+  flex: 1;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sensor-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sensor-marker span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+}
+
+.leaflet-container {
+  background: var(--panel);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.popup-area {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 0.3rem;
+}
+
+.popup-reason {
+  color: var(--bad);
+  font-size: 0.82rem;
+  margin-top: 0.3rem;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+  margin: 0.3rem 0 0.8rem;
+}
+
+.status-ok {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 45%, var(--border));
+}
+
+.status-warning {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+}
+
+.status-critical {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, var(--border));
+}
+
+.status-unknown {
+  color: var(--muted);
+}
+
+.metric-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.8rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.score-row {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.8rem;
+}
+
+.score-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.score-value {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.alert-feed {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.alert-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }

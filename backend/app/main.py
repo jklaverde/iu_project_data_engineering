@@ -5,12 +5,13 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .auth import make_require_session
+from .alert_store import AlertStore
+from .auth import make_require_role, make_require_session
 from .cassandra_client import CassandraReader
 from .config import load_config
 from .kafka_client import KafkaReader
 from .logging_setup import configure_logging
-from .routers import anomalies, auth, steps, ws
+from .routers import admin, anomalies, auth, sensors, steps, ws
 from .state_poller import StatePoller
 from .ws_manager import ConnectionManager
 
@@ -45,8 +46,10 @@ def create_app() -> FastAPI:
     )
     app.state.ws_manager = ConnectionManager()
     app.state.poller = StatePoller(config, app.state.kafka_reader, app.state.cassandra_reader, app.state.ws_manager)
+    app.state.alert_store = AlertStore()
 
     require_session = make_require_session(config)
+    require_admin = make_require_role(config, "admin")
 
     @app.get("/healthz")
     def healthz():
@@ -55,6 +58,9 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(steps.router, dependencies=[Depends(require_session)])
     app.include_router(anomalies.router, dependencies=[Depends(require_session)])
+    app.include_router(sensors.router, dependencies=[Depends(require_session)])
+    app.include_router(admin.webhook_router)
+    app.include_router(admin.alerts_router, dependencies=[Depends(require_admin)])
     app.include_router(ws.router)
 
     # Serves the React build (mounted last so it only catches paths no API

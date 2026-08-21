@@ -141,7 +141,7 @@ services:
       CASSANDRA_PORT: 9042
     entrypoint: ["/bin/bash", "-c"]
     command:
-      - "for i in $(seq 1 30); do cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/001_keyspace.cql && break; echo 'cassandra not ready yet, retrying...'; sleep 5; done && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/002_raw_events.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/003_agg_1m.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/004_agg_1h.cql"
+      - "for i in $(seq 1 30); do cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/001_keyspace.cql && break; echo 'cassandra not ready yet, retrying...'; sleep 5; done && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/002_raw_events.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/003_agg_1m.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/004_agg_1h.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/005_device_metadata.cql && cqlsh $$CASSANDRA_HOST $$CASSANDRA_PORT -f /schema/006_device_thresholds.cql"
     restart: "no"
     mem_limit: 256m
 
@@ -298,6 +298,35 @@ services:
     mem_limit: 512m
     restart: unless-stopped
 
+  loki:
+    image: grafana/loki:3.6.11
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    # No healthcheck: the official grafana/loki image is distroless-style -
+    # no shell, no wget/curl/nc, confirmed via `docker compose exec loki sh`
+    # failing with "executable file not found" - there is nothing a
+    # CMD-SHELL or exec-array healthcheck could run inside this container.
+    # promtail depends on service_started instead of service_healthy below.
+    mem_limit: 512m
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.6.11
+    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    volumes:
+      - ./infra/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      loki:
+        condition: service_started
+    mem_limit: 256m
+    restart: unless-stopped
+
   grafana:
     build:
       context: ./infra/grafana
@@ -345,6 +374,8 @@ services:
       BACKEND_HEALTH_CHECK_INTERVAL_SECONDS: ${BACKEND_HEALTH_CHECK_INTERVAL_SECONDS:-5}
       BACKEND_ADMIN_USERNAME: ${BACKEND_ADMIN_USERNAME:-admin}
       BACKEND_ADMIN_PASSWORD: ${BACKEND_ADMIN_PASSWORD:?Set BACKEND_ADMIN_PASSWORD in .env before starting}
+      BACKEND_PLANNER_USERNAME: ${BACKEND_PLANNER_USERNAME:-planner}
+      BACKEND_PLANNER_PASSWORD: ${BACKEND_PLANNER_PASSWORD:?Set BACKEND_PLANNER_PASSWORD in .env before starting}
       BACKEND_SESSION_SECRET: ${BACKEND_SESSION_SECRET:?Set BACKEND_SESSION_SECRET in .env before starting (e.g. openssl rand -hex 32)}
       BACKEND_SESSION_TTL_SECONDS: ${BACKEND_SESSION_TTL_SECONDS:-43200}
       BACKEND_COOKIE_SECURE: ${BACKEND_COOKIE_SECURE:-false}
@@ -379,5 +410,6 @@ volumes:
   cassandra_data:
   prometheus_data:
   grafana_data:
+  loki_data:
   spark_checkpoints:
   kaggle_dataset:

@@ -110,3 +110,91 @@ export interface PipelineState {
 }
 
 export type StepName = keyof PipelineState;
+
+// Mirrors backend/app/routers/sensors.py + backend/app/environment.py (R1 of the
+// role-based redirect - environmental/planner role).
+
+export type Role = "admin" | "planner";
+
+export type MetricStatus = "ok" | "warning" | "critical";
+
+export interface DeviceReading {
+  device_id: string;
+  bucket_start: string | null;
+  event_ts: string | null;
+  event_id: string;
+  ingest_ts: string | null;
+  write_ts: string | null;
+  co: number;
+  humidity: number;
+  lpg: number;
+  smoke: number;
+  temp: number;
+  light: boolean;
+  motion: boolean;
+  pressure: number;
+  is_synthetic: boolean;
+  is_anomaly: boolean;
+  anomaly_reason: string | null;
+}
+
+export interface DeviceStatus {
+  overall: MetricStatus | "unknown";
+  reason: string | null;
+  metrics: Record<string, MetricStatus>;
+}
+
+export interface SensorEntry {
+  device_id: string;
+  name: string;
+  area: string;
+  lat: number;
+  lon: number;
+  reading: DeviceReading | null;
+  status: DeviceStatus;
+  air_quality_score: number | null;
+  comfort_index: number | null;
+}
+
+export interface SensorsResponse {
+  sensors: SensorEntry[];
+}
+
+export interface AggregateWindow {
+  device_id: string;
+  window_start: string | null;
+  window_end: string | null;
+  event_count: number;
+  anomaly_count: number;
+  co_avg: number; co_min: number; co_max: number;
+  humidity_avg: number; humidity_min: number; humidity_max: number;
+  lpg_avg: number; lpg_min: number; lpg_max: number;
+  smoke_avg: number; smoke_min: number; smoke_max: number;
+  temp_avg: number; temp_min: number; temp_max: number;
+  pressure_avg: number; pressure_min: number; pressure_max: number;
+  light_active_count: number; light_active_ratio: number;
+  motion_active_count: number; motion_active_ratio: number;
+}
+
+export interface SensorHistoryResponse {
+  device_id: string;
+  granularity: "1m" | "1h";
+  windows: AggregateWindow[];
+  chronic_exposure_ratio: number | null;
+  trend: "improving" | "worsening" | "stable" | null;
+}
+
+// Mirrors backend/app/routers/admin.py (R4 - infrastructure/admin role, alerting).
+
+export interface AdminAlert {
+  id: string;
+  status: "firing" | "resolved";
+  alertname: string;
+  severity: string;
+  service: string | null;
+  summary: string;
+  starts_at: string | null;
+  ends_at: string | null;
+  generator_url: string | null;
+  received_at: string;
+}

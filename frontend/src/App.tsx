@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, logout, me } from "./api";
 import AboutModal from "./about/AboutModal";
+import AlertsTab from "./admin/AlertsTab";
 import LoginForm from "./auth/LoginForm";
 import ErrorBoundary from "./layout/ErrorBoundary";
 import Stepper from "./layout/Stepper";
@@ -11,8 +12,9 @@ import IngestionStep from "./steps/IngestionStep";
 import KafkaStep from "./steps/KafkaStep";
 import SparkStep from "./steps/SparkStep";
 import SummaryStep from "./steps/SummaryStep";
+import MapView from "./planner/MapView";
 import { usePipelineState } from "./state/usePipelineState";
-import type { StepName } from "./types";
+import type { Role, StepName } from "./types";
 
 const STEPS: { name: StepName; label: string }[] = [
   { name: "deployment", label: "1. Deployment" },
@@ -23,15 +25,18 @@ const STEPS: { name: StepName; label: string }[] = [
   { name: "summary", label: "6. Summary" },
 ];
 
+type AdminTab = "pipeline" | "alerts";
+
 function Shell({ onLogout }: { onLogout: () => void }) {
   const { state, connectionMode } = usePipelineState();
   const [currentStep, setCurrentStep] = useState<StepName>("deployment");
   const [showAbout, setShowAbout] = useState(false);
+  const [adminTab, setAdminTab] = useState<AdminTab>("pipeline");
 
   return (
     <div className="shell">
       <header>
-        <h1>Sensor Pipeline Walkthrough</h1>
+        <h1>Infrastructure Console</h1>
         <div className="header-right">
           <span className={`connection-badge connection-${connectionMode}`}>
             {connectionMode === "ws" ? "live (websocket)" : connectionMode === "polling" ? "live (polling)" : "connecting..."}
@@ -47,45 +52,82 @@ function Shell({ onLogout }: { onLogout: () => void }) {
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
 
-      <PipelineFlowDiagram state={state} />
+      <nav className="admin-tabs">
+        <button
+          className={`admin-tab ${adminTab === "pipeline" ? "admin-tab-active" : ""}`}
+          onClick={() => setAdminTab("pipeline")}
+        >
+          Pipeline
+        </button>
+        <button
+          className={`admin-tab ${adminTab === "alerts" ? "admin-tab-active" : ""}`}
+          onClick={() => setAdminTab("alerts")}
+        >
+          Alerts
+        </button>
+      </nav>
 
-      <div className="body">
-        <Stepper steps={STEPS} current={currentStep} onSelect={setCurrentStep} />
-        <main>
-          <ErrorBoundary key={currentStep}>
-            {currentStep === "deployment" && <DeploymentStep data={state.deployment} />}
-            {currentStep === "ingestion" && <IngestionStep data={state.ingestion} />}
-            {currentStep === "kafka" && <KafkaStep data={state.kafka} spark={state.spark} />}
-            {currentStep === "spark" && <SparkStep data={state.spark} />}
-            {currentStep === "cassandra" && <CassandraStep data={state.cassandra} />}
-            {currentStep === "summary" && <SummaryStep data={state.summary} />}
-          </ErrorBoundary>
-        </main>
-      </div>
+      {adminTab === "pipeline" && (
+        <>
+          <PipelineFlowDiagram state={state} />
+
+          <div className="body">
+            <Stepper steps={STEPS} current={currentStep} onSelect={setCurrentStep} />
+            <main>
+              <ErrorBoundary key={currentStep}>
+                {currentStep === "deployment" && <DeploymentStep data={state.deployment} />}
+                {currentStep === "ingestion" && <IngestionStep data={state.ingestion} />}
+                {currentStep === "kafka" && <KafkaStep data={state.kafka} spark={state.spark} />}
+                {currentStep === "spark" && <SparkStep data={state.spark} />}
+                {currentStep === "cassandra" && <CassandraStep data={state.cassandra} />}
+                {currentStep === "summary" && <SummaryStep data={state.summary} />}
+              </ErrorBoundary>
+            </main>
+          </div>
+        </>
+      )}
+
+      {adminTab === "alerts" && <AlertsTab grafanaPort={state.summary?.grafana_port ?? null} />}
     </div>
   );
 }
 
+interface Session {
+  authenticated: boolean;
+  role: Role;
+}
+
 export default function App() {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
     me()
-      .then(() => setAuthenticated(true))
-      .catch((err) => setAuthenticated(err instanceof ApiError && err.status === 401 ? false : false));
+      .then((res) => setSession(res.authenticated ? res : null))
+      .catch((err) => {
+        if (!(err instanceof ApiError && err.status === 401)) {
+          console.error(err);
+        }
+        setSession(null);
+      })
+      .finally(() => setChecked(true));
   }, []);
 
   const handleLogout = async () => {
     await logout().catch(() => {});
-    setAuthenticated(false);
+    setSession(null);
   };
 
-  if (authenticated === null) {
+  if (!checked) {
     return <div className="loading">Loading...</div>;
   }
 
-  if (!authenticated) {
-    return <LoginForm onSuccess={() => setAuthenticated(true)} />;
+  if (!session) {
+    return <LoginForm onSuccess={(role) => setSession({ authenticated: true, role })} />;
+  }
+
+  if (session.role === "planner") {
+    return <MapView onLogout={handleLogout} />;
   }
 
   return <Shell onLogout={handleLogout} />;

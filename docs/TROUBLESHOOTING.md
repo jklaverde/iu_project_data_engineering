@@ -293,22 +293,29 @@ genuine (if small) cluster.
   panel in a browser to see real data render, not just re-reading the query string.
 - **Fix:** `FROM iot.${granularity} WHERE ...` in all four KPI-5 panel queries
   (`infra/grafana/provisioning/dashboards/json/kpi-dashboard.json`).
-- **Related, NOT a bug — don't re-"fix" this:** once the query itself is correct, the
-  KPI-5 panels can still legitimately show **"No data"** for a while after a fresh
-  deploy. `window_start` is derived from each row's own `event_ts`
-  (`spark_job/spark_job/time_buckets.py`), and during REPLAY mode `event_ts` is a
-  historical Kaggle-dataset date (e.g. `2020-07-15`) — confirmed by querying `agg_1m`
-  directly via `/api/ds/query` and seeing real `window_start` values from 2020. Since
-  the panels filter `window_start > $__timeFrom AND window_start < $__timeTo`, which
-  Grafana resolves to real wall-clock "now," **no row can ever match while REPLAY mode
-  is still running**, no matter how long you wait or how wide the time range. This
-  resolves itself automatically once the producer hands over to SYNTHETIC mode (real
-  timestamps) — or force it sooner for testing with `PRODUCER_REPLAY_ROW_LIMIT` (see
-  the root README). This is the same wall-clock-vs-event-time root cause as P5 bug #1
-  above, just surfacing in a Grafana panel instead of the web app's backend — the web
-  app's fix (deriving buckets from real observed timestamps) doesn't generalize to a
-  Grafana time-range picker, since Grafana has no equivalent of "ask the live data what
-  time it actually is."
+- **UPDATE (D28) — root cause since fixed, note kept for history:** the "No data during
+  REPLAY" behavior described below no longer happens. `producer/producer/replay.py` used
+  to stamp `event_ts` from the source CSV's own historical `ts` column (e.g.
+  `2020-07-15`); it now stamps `event_ts = datetime.now(timezone.utc)` at publish time,
+  same as `synthetic.py` already did — so `window_start` (derived from `event_ts`) tracks
+  real wall-clock time throughout REPLAY mode too, and the KPI-5 panels have data from
+  the start of a run, not just after synthetic hand-over. The analysis below is kept for
+  context on why the symptom looked the way it did.
+  ~~Once the query itself is correct, the KPI-5 panels can still legitimately show
+  "No data" for a while after a fresh deploy. `window_start` is derived from each row's
+  own `event_ts` (`spark_job/spark_job/time_buckets.py`), and during REPLAY mode
+  `event_ts` is a historical Kaggle-dataset date (e.g. `2020-07-15`) — confirmed by
+  querying `agg_1m` directly via `/api/ds/query` and seeing real `window_start` values
+  from 2020. Since the panels filter `window_start > $__timeFrom AND window_start <
+  $__timeTo`, which Grafana resolves to real wall-clock "now," no row can ever match
+  while REPLAY mode is still running, no matter how long you wait or how wide the time
+  range. This resolved itself automatically once the producer handed over to SYNTHETIC
+  mode (real timestamps) — or could be forced sooner for testing with
+  `PRODUCER_REPLAY_ROW_LIMIT` (see the root README). This was the same
+  wall-clock-vs-event-time root cause as P5 bug #1 below, just surfacing in a Grafana
+  panel instead of the web app's backend — the web app's fix (deriving buckets from real
+  observed timestamps) didn't generalize to a Grafana time-range picker, since Grafana
+  has no equivalent of "ask the live data what time it actually is."~~
 - **General lesson:** don't assume Grafana's bare `$var` and `${var}` interpolation are
   interchangeable in every position a query might use them — when a query mixes both
   forms and only one position fails, that inconsistency itself is a signal; prefer
@@ -331,6 +338,12 @@ review cannot.
 
 ### 1. "Recent Cassandra rows" query returns nothing (or stale data) during REPLAY mode
 
+- **UPDATE (D28):** the root cause (REPLAY-mode `event_ts` dated to the historical
+  source CSV) is now fixed at the producer (`producer/producer/replay.py` stamps
+  `event_ts = now()`, see the P4 KPI-5 note above). The `reference_timestamps`
+  workaround below is no longer strictly necessary — wall-clock buckets would now work
+  directly — but it's still correct behavior (harmless no-op once `event_ts` already
+  tracks real time) and hasn't been ripped out.
 - **Symptom:** the Cassandra step's "recent rows" panel showed old/unrelated rows
   (or none) for most of a fresh walkthrough session, only becoming correct once the
   producer handed over to synthetic generation.
@@ -447,3 +460,60 @@ rather than trusting a design as correct because it reads correctly.
   README step is a deployment footgun waiting to happen — if a real container can do
   the fetch/setup step itself (even a trivial one-shot one), that's more robust than
   documenting a manual step well, because it can't be skipped by accident.
+
+---
+
+## P8 — Role-based redirect (Loki/Promtail, alerting, planner map)
+
+### 1. `loki` service never reaches `healthy`, which blocks `promtail` from starting at all
+
+- **Symptom:** on the first real `docker compose up -d --build` after adding Loki (D30),
+  `docker compose ps` showed `iu-sensor-pipeline-loki-1` stuck at `Up ... (unhealthy)`
+  indefinitely, and `promtail` never started at all (its `depends_on: loki: condition:
+  service_healthy` never got satisfied) — the overall `docker compose up -d` command
+  itself exited with a non-zero status.
+- **Cause:** the healthcheck (`CMD-SHELL "wget --no-verbose --tries=1 --spider
+  http://localhost:3100/ready || exit 1"`) assumed the same tooling the Prometheus/
+  exporter images ship with. The official `grafana/loki` image does not: confirmed by
+  running `docker compose exec loki sh` and getting `exec: "sh": executable file not
+  found in $PATH` — this image ships nothing but the `loki` binary and CA certs, no
+  shell, no wget/curl/nc at all. A `CMD-SHELL` healthcheck (which requires a shell to
+  interpret it) can never work against this image, regardless of which tool it tries
+  to invoke.
+- **How it was found:** live-verified against a real `docker compose up`, not assumed
+  from the Dockerfile — `docker compose logs loki` showed Loki itself starting and
+  serving real queries successfully (`msg="Loki started"`, later serving real Grafana
+  alert-rule queries with `status=200`), which ruled out an application-level failure
+  and pointed straight at the healthcheck mechanism itself. `docker compose exec loki
+  sh` then confirmed exactly why no shell-based check could ever pass.
+- **Fix:** removed the `healthcheck:` block from `loki` entirely (there is nothing
+  inside the container that could run one) and changed `promtail`'s dependency from
+  `condition: service_healthy` to `condition: service_started` — Promtail already
+  retries its own push requests to Loki, so a hard health-gate wasn't actually load-
+  bearing for correctness, only for start-order tidiness that this image can't support.
+- **General lesson:** don't assume a Docker Hub image includes the same debugging
+  toolbox as unrelated images already in the stack, even official ones from the same
+  vendor — Loki's image is deliberately minimal for image-size/attack-surface reasons.
+  When adding a healthcheck for a new image, verify what's actually executable inside
+  it (`docker compose exec <service> sh` or `ls /bin`) before picking a check strategy,
+  rather than copy-pasting a working pattern from a different image.
+
+### 2. Citizen-facing alert feed showed raw Spark diagnostic strings, not plain language
+
+- **Symptom:** during live verification, the planner role's "Recent alerts" panel
+  showed entries like `temp:sigma(-4.23sigma) near Emsbruecke` — technically correct
+  (it is the real `anomaly_reason` from `raw_events`, and the device name *was*
+  correctly resolved) but not remotely citizen-friendly, defeating the point of R2's
+  citizen-facing framing (`REQUIREMENTS.md` FR-E3).
+- **Cause:** `AlertFeed.tsx` passed `a.anomaly_reason` straight through from
+  `GET /api/anomalies`, which returns Spark's own internal diagnostic format
+  (`spark_job/spark_job/anomaly_state.py`: `"{metric}:ceiling(...)"` /
+  `"{metric}:sigma(...)"`) verbatim — appropriate for the admin's anomaly log, not for
+  a citizen reading the map.
+- **Fix:** added `friendlyReason()` in `frontend/src/planner/AlertFeed.tsx` — parses
+  the `;`-joined metric tokens and renders e.g. "elevated smoke" (ceiling crossings) or
+  "unusual temperature" (sigma deviations) per metric, joined with commas.
+- **General lesson:** an internal diagnostic string being technically present and
+  correctly wired end-to-end (right device, right event, right timing) isn't the same
+  as the feature actually being done — this one only surfaced by looking at real
+  rendered output with real anomaly data flowing through, not by reading the code.

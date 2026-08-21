@@ -24,3 +24,10 @@ datasources:
       # but the plugin's config schema requires the fields to be present.
       password: cassandra
     editable: false
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false

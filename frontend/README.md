@@ -17,6 +17,16 @@ dev-only build-time dependency carries no runtime/security surface beyond
 what `vite build` already needs. `.npmrc`'s `ignore-scripts=true` and the
 committed `package-lock.json` still apply to it like every other dependency.
 
+## NFR-10.1 justification: Leaflet
+
+Leaflet (plus dev-only `@types/leaflet`) is not on the original allowlist either, but unlike
+TypeScript it *does* ship to the browser (the planner role's map view, `src/planner/MapView.tsx`).
+Added because the role-based redirect requires a map, and Leaflet is the minimal-footprint way to get
+one: MIT-licensed, no telemetry or network calls beyond fetching map tiles from the configured tile
+server, no API key or billing account required (unlike Mapbox GL JS or the Google Maps SDK). Exact
+version pinned (`1.9.4`, released 2023 — well past NFR-10.3's 14-day cooldown), `.npmrc`'s
+`ignore-scripts=true` and the committed `package-lock.json` apply to it like every other dependency.
+
 ## Dev workflow
 
 ```

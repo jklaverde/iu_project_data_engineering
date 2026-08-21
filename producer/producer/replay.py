@@ -34,8 +34,13 @@ def run_replay(
             reader = itertools.islice(reader, stats.total_rows - row_limit, None)
 
         for row in reader:
-            event_ts = datetime.fromtimestamp(float(row["ts"]), tz=timezone.utc)
-            ingest_ts = datetime.now(timezone.utc)
+            # The CSV's own `ts` column is only used to preserve file read
+            # order (already globally sorted, interleaved across devices) -
+            # it is not emitted as event_ts. Replayed events are stamped with
+            # the current time, same as synthetic.py, so "last N minutes"
+            # queries have data throughout replay instead of a 2020-dated gap.
+            event_ts = datetime.now(timezone.utc)
+            ingest_ts = event_ts
             device_id = row["device"]
 
             event = build_event(

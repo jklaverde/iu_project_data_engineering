@@ -1,0 +1,14 @@
+# Single webhook contact point -> the backend's own admin API, so alerts show up
+# live in the infrastructure/admin role's "Alerts" tab (backend/app/routers/admin.py)
+# without the admin needing to separately watch Grafana's own alert list.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: backend-webhook
+    receivers:
+      - uid: backend-webhook-receiver
+        type: webhook
+        settings:
+          url: http://backend:8000/api/admin/alerts/webhook
+          httpMethod: POST

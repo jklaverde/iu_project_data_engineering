@@ -11,7 +11,7 @@ router = APIRouter(tags=["ws"])
 async def ws_pipeline_state(websocket: WebSocket):
     config = websocket.app.state.config
     token = websocket.cookies.get(COOKIE_NAME)
-    if token is None or not verify_session_token(token, config):
+    if token is None or verify_session_token(token, config) is None:
         await websocket.close(code=1008)
         return
 

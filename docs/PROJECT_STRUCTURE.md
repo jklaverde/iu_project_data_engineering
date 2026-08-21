@@ -14,10 +14,10 @@ already found and fixed in a given file before you go looking for new ones.
 | File | What it does |
 |---|---|
 | `README.md` | User-facing quick start: prerequisites, one-command start, walkthrough guide, endurance-run procedure. |
-| `REQUIREMENTS.md` | The frozen v1.0 specification — scope, architecture, decision log (D1-D27), phase roadmap. Do not edit casually; see its own changelog header. |
+| `REQUIREMENTS.md` | The specification — scope, architecture, decision log, phase roadmap. Do not edit casually; see its own changelog header. |
 | `docker-compose.yml` | The entire stack: every service, port mapping, volume, healthcheck, and dependency ordering. Start here to see how any two services actually connect. |
 | `.env.example` | Every runtime config variable, documented inline, with safe placeholder values. `cp` this to `.env` and fill in real secrets. |
-| `.gitignore` | Excludes `.env`, `__pycache__`, the Kaggle CSV, frontend build artifacts, and the local-only `development_notes/`. |
+| `.gitignore` | Excludes `.env`, `__pycache__`, the Kaggle CSV, frontend build artifacts, and the local-only `development_notes/` and `.claude/`. |
 
 ## docs/
 
@@ -42,7 +42,8 @@ already found and fixed in a given file before you go looking for new ones.
 | `app/logging_setup.py` | JSON-line log formatter, identical pattern to `producer`/`spark_job`'s own. |
 | `app/auth.py` | Hand-rolled HMAC-SHA256-signed session cookie: `create_session_token`/`verify_session_token`/`check_credentials`, and the `require_session` FastAPI dependency every protected route uses. |
 | `app/kafka_client.py` | `KafkaReader` — a **read-only observer** Kafka consumer (manual partition assignment, `OFFSET_END` at startup, no consumer-group commits): samples recent raw event content and computes per-partition broker watermark offsets. Never to be confused with the real Spark consumer. |
-| `app/cassandra_client.py` | `CassandraReader` — single-partition point reads for "recent rows" (bucket derived from real observed Kafka timestamps, not wall-clock — see `docs/TROUBLESHOOTING.md` P5 §1) and the `/api/anomalies` query (mirrors the Grafana anomaly panel's CQL shape). |
+| `app/cassandra_client.py` | `CassandraReader` — single-partition point reads for "recent rows" (bucket derived from real observed Kafka timestamps, not wall-clock — see `docs/TROUBLESHOOTING.md` P5 §1) and the `/api/anomalies` query (mirrors the Grafana anomaly panel's CQL shape). Also `device_metadata_sync`/`device_thresholds_sync` (small lookup tables), `latest_reading_sync` (one device's newest row), and `aggregates_sync` (agg_1m/agg_1h history) for the R1 sensors/environment role. |
+| `app/environment.py` | Pure functions (no I/O) turning a device's latest reading + its Cassandra-persisted threshold stats into role-appropriate signals: `metric_status`/`device_status` (ok/warning/critical, reusing Spark's own anomaly thresholds), `air_quality_score`, `comfort_index`, `chronic_exposure_ratio`, `trend_direction`. |
 | `app/upstream_http.py` | Stdlib `urllib` helpers (wrapped in `asyncio.to_thread`) to poll `producer`'s and `spark-job`'s `/state`/`/healthz` endpoints and to do plain HTTP reachability probes for the deployment-status step. |
 | `app/state_poller.py` | `StatePoller` — the two background asyncio loops (fast: ingestion/kafka/spark/cassandra/summary; slow: deployment health grid) that assemble the combined snapshot and broadcast it over WebSocket. Caches last-known-good upstream state so a transient outage doesn't change the response shape (see `docs/TROUBLESHOOTING.md` P5 §2). |
 | `app/ws_manager.py` | `ConnectionManager` — tracks connected WebSocket clients, broadcasts the snapshot to all of them. |
@@ -50,35 +51,43 @@ already found and fixed in a given file before you go looking for new ones.
 | `app/routers/auth.py` | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`. |
 | `app/routers/steps.py` | `GET /api/pipeline-state` (full snapshot) and `GET /api/steps/{name}` (one step). |
 | `app/routers/anomalies.py` | `GET /api/anomalies?device_id=&since_minutes=&limit=`. |
+| `app/routers/sensors.py` | `GET /api/sensors` (every known device: metadata, latest reading, status, air quality score, comfort index — feeds the planner role's map) and `GET /api/sensors/{device_id}/history` (agg_1m/agg_1h trend + chronic-exposure ratio). |
+| `app/routers/admin.py` | `POST /api/admin/alerts/webhook` (unauthenticated — receives Grafana's alertmanager-style webhook payload, see `infra/grafana/provisioning/alerting/`) and `GET /api/admin/alerts` (admin-role-gated recent alert feed). Split into two `APIRouter`s so `main.py` can gate them differently. |
+| `app/alert_store.py` | `AlertStore` — small in-memory ring buffer of recent Grafana-fired alerts; Grafana itself stays the system of record, this is just a live feed for the admin UI. |
 | `app/routers/ws.py` | `/ws/pipeline-state` — validates the session cookie *before* accepting the WebSocket handshake, sends the cached snapshot immediately, then just waits for broadcasts. |
 
-## frontend/ — P5 guided walkthrough UI (React + TypeScript + Vite + Apache ECharts)
+## frontend/ — P5 role-based UI (React + TypeScript + Vite + Apache ECharts + Leaflet)
 
 | File | What it does |
 |---|---|
 | `package.json` / `package-lock.json` | Explicit, minimal, exact-pinned dependency list (NFR-10.1) + committed lockfile. |
 | `.npmrc` | `ignore-scripts=true` (NFR-10.2). |
 | `tsconfig.json` / `vite.config.ts` / `index.html` | TypeScript config; Vite config (dev-mode `/api`/`/ws` proxy to the backend container); the single HTML shell. |
-| `README.md` | The NFR-10.1 justification for adding TypeScript to the dependency allowlist. |
+| `README.md` | NFR-10.1 justifications for TypeScript and Leaflet (the two off-allowlist dependencies). |
 | `src/main.tsx` | React root render (`createRoot(...).render(<App/>)`). |
-| `src/App.tsx` | Top-level component: checks auth (`GET /api/auth/me`), shows `LoginForm` or the `Shell` (stepper + pipeline diagram + the active step), owns `currentStep` state. |
-| `src/api.ts` | `fetch`-based API client (credentials included) + `connectPipelineStateSocket()` WebSocket helper. |
-| `src/types.ts` | TypeScript interfaces mirroring every backend response shape — the single source of truth for the frontend/backend JSON contract. |
+| `src/App.tsx` | Top-level component: checks auth (`GET /api/auth/me`, now carries `role`), shows `LoginForm`, the admin `Shell` (stepper + pipeline diagram + the active step), or the planner `MapView`. |
+| `src/api.ts` | `fetch`-based API client (credentials included), `connectPipelineStateSocket()` WebSocket helper, `fetchSensors`/`fetchSensorHistory` for the planner role. |
+| `src/types.ts` | TypeScript interfaces mirroring every backend response shape — the single source of truth for the frontend/backend JSON contract. Includes `Role`, `SensorEntry`, `AggregateWindow`, etc. |
 | `src/vite-env.d.ts` | Vite's ambient type declarations. |
-| `src/styles.css` | All styling — dark theme, layout, the SVG pipeline-flow animation's keyframes. |
-| `src/auth/LoginForm.tsx` | The login screen. |
+| `src/styles.css` | All styling — dark theme, layout, the SVG pipeline-flow animation's keyframes, the planner map/status-badge styles. |
+| `src/auth/LoginForm.tsx` | The login screen (shared by both roles; passes the returned `role` up to `App`). |
 | `src/layout/Stepper.tsx` | The six-step side navigation (freely clickable, not gated). |
 | `src/layout/StepShell.tsx` | Shared "waiting for data..." wrapper every step component uses. |
 | `src/layout/ErrorBoundary.tsx` | Per-step React error boundary (added after a real crash — see `docs/TROUBLESHOOTING.md` P5 §2) so one step's bad data can't freeze the whole app. |
 | `src/pipeline/PipelineFlowDiagram.tsx` | The custom SVG pipeline animation (D26) — 4 boxes, CSS motion-path particles, the REPLAY/SYNTHETIC hand-over badge. |
 | `src/charts/EChartWrapper.tsx` | Reusable ECharts `init`/`setOption`/`dispose` wrapper used by every chart. |
-| `src/state/usePipelineState.ts` | The WebSocket-primary/polling-fallback hook every step reads live data from. |
+| `src/state/usePipelineState.ts` | The WebSocket-primary/polling-fallback hook every admin step reads live data from. |
+| `src/state/useSensors.ts` | Polling hook (`GET /api/sensors`) the planner map view reads live sensor data from. |
 | `src/steps/DeploymentStep.tsx` | Step 1 — service health grid. |
 | `src/steps/IngestionStep.tsx` | Step 2 — producer mode/counters/recent events. |
 | `src/steps/KafkaStep.tsx` | Step 3 — live throughput chart + per-query lag. |
 | `src/steps/SparkStep.tsx` | Step 4 — per-query batch progress + end-to-end latency. |
 | `src/steps/CassandraStep.tsx` | Step 5 — most recently written rows. |
 | `src/steps/SummaryStep.tsx` | Step 6 — totals + the Grafana link (built client-side from `location.hostname`). |
+| `src/planner/MapView.tsx` | Environmental/planner role's top-level view (R2) — raw Leaflet map (no react-leaflet, to keep the dependency minimal) centered on Lingen (Ems), one status-colored marker per sensor from `useSensors()`. |
+| `src/planner/SensorDetailPanel.tsx` | Selected sensor's readings, status badge, air quality score, comfort index, and a 24h CO trend chart (`GET /api/sensors/{id}/history`). |
+| `src/planner/AlertFeed.tsx` | Citizen-framed recent-alerts feed, reusing `GET /api/anomalies` with device names substituted for raw IDs. |
+| `src/admin/AlertsTab.tsx` | Admin role's Alerts tab (R4) — polls `GET /api/admin/alerts`, each entry links out to a client-built Grafana Explore URL (Loki query pre-filled for that alert's service) for log drill-down. |
 
 ## producer/ — P2 ingestion service
 
@@ -116,6 +125,7 @@ already found and fixed in a given file before you go looking for new ones.
 | `spark_job/config.py` | `Config` dataclass + `load_config()` for every `SPARK_JOB_*`/`KAFKA_*`/`CASSANDRA_*` env var. |
 | `spark_job/schema.py` | `EVENT_SCHEMA` (matches the producer's JSON exactly) + `read_kafka()`/`parse_and_cast()`. |
 | `spark_job/baseline.py` | `compute_seed_baseline()` — one-time batch read of the CSV computing per-device mean/std (the EWMA seed) and per-device absolute ceilings for `co`/`smoke`/`lpg`. |
+| `spark_job/device_thresholds_sink.py` | `write_device_thresholds()` — persists that same seeded baseline into `iot.device_thresholds` once at startup, so the backend's environmental/planner role (`backend/app/environment.py`) reads the exact same numbers this job's own anomaly detector uses. |
 | `spark_job/anomaly_state.py` | `flag_anomalies()` / the `applyInPandasWithState` function — the adaptive per-device EWMA anomaly detector, checked *before* the state updates with the current event's own value. |
 | `spark_job/raw_query.py` | `build_raw_query()` — the `raw_events` streaming query (validates, detects anomalies, buckets, writes every row with `write_ts` + latency tracking). |
 | `spark_job/agg_query.py` | `build_agg_query()` — the shared builder both `agg_1m` and `agg_1h` use (tumbling window, per-metric avg/min/max, anomaly/active-ratio aggregates). |
@@ -145,8 +155,15 @@ already found and fixed in a given file before you go looking for new ones.
 | `cassandra/schema/002_raw_events.cql` | The `raw_events` table — partitioned by `(device_id, bucket_start)`, a 15-minute bucket. |
 | `cassandra/schema/003_agg_1m.cql` | The `agg_1m` table — partitioned by `(device_id, day)`. |
 | `cassandra/schema/004_agg_1h.cql` | The `agg_1h` table — partitioned by `(device_id, month)`. |
+| `cassandra/schema/005_device_metadata.cql` | The `device_metadata` table (name/area/lat/lon per known device) + its seed `INSERT`s — data-derived Lingen (Ems) placements, not arbitrary (see `REQUIREMENTS.md` D28's neighboring history). Feeds the planner role's map. |
+| `cassandra/schema/006_device_thresholds.cql` | The `device_thresholds` table — empty until `spark_job` writes it at startup (`spark_job/spark_job/device_thresholds_sink.py`). |
 | `grafana/Dockerfile` | Bakes the `hadesarchitect-cassandra-datasource` plugin into a path **outside** the `grafana_data` volume (installing into the default path would be silently shadowed by that pre-existing volume). |
-| `grafana/provisioning/datasources/datasources.yaml` | Auto-provisions the Prometheus and Cassandra datasources — no manual UI setup. |
+| `grafana/provisioning/datasources/datasources.yaml` | Auto-provisions the Prometheus, Cassandra, and Loki datasources — no manual UI setup. Loki needs no plugin (built into core Grafana), unlike Cassandra. |
 | `grafana/provisioning/dashboards/dashboards.yaml` | Points Grafana at the dashboard JSON directory, `updateIntervalSeconds: 30`, `allowUiUpdates: false`. |
 | `grafana/provisioning/dashboards/json/kpi-dashboard.json` | The single 5-row KPI dashboard (KPI-1..5) — every panel's exact CQL/PromQL query lives here. See `docs/TROUBLESHOOTING.md` #13 and P4 §14 before touching any Cassandra panel's `target` string. |
 | `prometheus/prometheus.yml` | The real exporter scrape jobs (kafka-exporter, cassandra:7070, node-exporter, producer, spark-job). Requires `docker compose restart prometheus` after editing — no hot reload. |
+| `loki/loki-config.yml` | Single-binary Loki (filesystem storage, RF=1 — same local-dev posture as Cassandra's keyspace) — the infrastructure/admin role's centralized log store (R3). |
+| `promtail/promtail-config.yml` | Tails every compose container's stdout via Docker service discovery (no per-service logging change needed — everything already emits JSON-line logs) and ships to Loki. Only `container`/`stream`/`level` become indexed labels; everything else stays queryable via LogQL `\| json`. |
+| `grafana/provisioning/alerting/rules.yaml` | Provisioned-as-code alert rules (R4): Kafka consumer lag, Cassandra write latency, elevated ERROR log rate (Loki), service down — every query reuses metric names already tested in `kpi-dashboard.json`. |
+| `grafana/provisioning/alerting/contactpoints.yaml` | One webhook contact point → `backend`'s `/api/admin/alerts/webhook`. |
+| `grafana/provisioning/alerting/policies.yaml` | Root notification policy routing every alert to that contact point. |
