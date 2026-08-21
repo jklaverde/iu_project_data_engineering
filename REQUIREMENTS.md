@@ -403,10 +403,14 @@ containers.
   `device_metadata` location (§5.6), colored by current overall status
   (ok/warning/critical/unknown).
 - FR-E2. Clicking a marker shows that device's latest reading, per-metric status, air
-  quality score, comfort index, and a 24h trend chart with chronic-exposure ratio and
-  trend direction (`GET /api/sensors`, `GET /api/sensors/{device_id}/history`).
-- FR-E3. A citizen-facing recent-alerts feed reuses `GET /api/anomalies`, framed in plain
-  language (device name and reason, not raw device IDs and z-scores).
+  quality score, comfort index, and chronic-exposure ratio and trend direction
+  (`GET /api/sensors`, `GET /api/sensors/{device_id}/history`).
+- FR-E3. Selecting a device shows a per-metric behavior-over-time view (D34): one chart
+  each at minute/hour/day/week resolution (`GET /api/sensors/{device_id}/timeline`),
+  with a shaded region over any time span where that metric was outside the acceptable
+  range — a visual answer to "was this device okay, and for how long wasn't it," which
+  replaced an earlier plain-text recent-alerts feed (superseded design, R2) that didn't
+  make chronic-vs-one-off problems legible at a glance.
 - FR-E4. Live updates via polling (`GET /api/sensors` — no WebSocket message type was
   added for this role in Phase 1; the backend already broadcasts alert updates over the
   existing channel for a future upgrade, see §4.2).
@@ -597,6 +601,7 @@ The 48-hour run at the NFR-2 rate passes when:
 | D31 | Alerting | Grafana's own provisioned alert rules (reusing metric names already tested in the KPI dashboard) route to a webhook contact point into the backend, which broadcasts over the existing WebSocket channel; each alert links to a client-built Grafana Explore URL for one-click log drill-down, instead of building a bespoke log viewer |
 | D32 | Planner map | Leaflet (raw API, not `react-leaflet`) chosen over Mapbox GL/Google Maps for the map view — MIT-licensed, no API key/billing, minimal-footprint, consistent with NFR-10.1's dependency discipline; centered on Lingen (Ems) as the reference municipality |
 | D33 | Threshold/AQI data source | The planner role's per-metric status and air quality score reuse the exact same mean/std/ceiling values that seed Spark's own streaming anomaly detector (persisted once at Spark startup into a new `device_thresholds` table), rather than inventing a separate set of "safety limits" — one source of truth for "statistically unusual" and "environmentally in the warning/critical band" |
+| D34 | Per-sensor timeline replaces the alert feed | The citizen-facing recent-alerts text list (D32-era) was replaced by four charts (minute/hour/day/week) per selected metric, each with shaded regions over unhealthy time spans, computed from `agg_1m`/`agg_1h` — "day"/"week" are rolled up from `agg_1h` in Python rather than adding two more Cassandra tables purely for a display resolution. Chosen over a text log because the whole point is showing *how long* and *how often* a metric was bad, which a scrolling list of individual events doesn't make legible at a glance |
 
 ---
 

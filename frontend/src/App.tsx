@@ -36,7 +36,10 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="shell">
       <header>
-        <h1>Infrastructure Console</h1>
+        <div>
+          <p className="eyebrow">Infrastructure / Admin</p>
+          <h1>Pipeline Console</h1>
+        </div>
         <div className="header-right">
           <span className={`connection-badge connection-${connectionMode}`}>
             {connectionMode === "ws" ? "live (websocket)" : connectionMode === "polling" ? "live (polling)" : "connecting..."}

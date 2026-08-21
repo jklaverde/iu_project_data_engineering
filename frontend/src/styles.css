@@ -1,14 +1,26 @@
 :root {
-  --bg: #0f1220;
-  --panel: #171b2e;
-  --border: #2a2f47;
-  --text: #e6e8f0;
-  --muted: #9298b3;
-  --accent: #4f8cff;
-  --good: #3ecf8e;
-  --warn: #f5a623;
-  --bad: #ff5d6c;
-  --flow-line: #2a2f47;
+  --bg: #0b0e1a;
+  --bg-elevated: #11142280;
+  --panel: #151a2c;
+  --panel-2: #1c2238;
+  --border: #2a3050;
+  --border-soft: #232945;
+  --text: #eef0f8;
+  --muted: #8d93b0;
+  --accent: #5b8cff;
+  --accent-2: #8b6cff;
+  --good: #34d399;
+  --warn: #fbbf24;
+  --bad: #fb6f84;
+  --flow-line: #2a3050;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(3, 5, 14, 0.45);
+  --shadow-lg: 0 20px 60px rgba(3, 5, 14, 0.6);
 }
 
 * {
@@ -17,9 +29,14 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 640px at 12% -8%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+    radial-gradient(900px 560px at 100% 0%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--text);
-  font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .loading,
@@ -31,40 +48,61 @@ body {
 }
 
 .login-form {
-  background: var(--panel);
+  background: linear-gradient(165deg, var(--panel-2) 0%, var(--panel) 65%);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 2rem;
-  width: 320px;
+  border-radius: var(--radius-lg);
+  padding: 2.25rem;
+  width: 340px;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.85rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.login-form h1 {
+  letter-spacing: -0.02em;
 }
 
 .login-form label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.9rem;
+  gap: 0.3rem;
+  font-size: 0.85rem;
   color: var(--muted);
 }
 
 .login-form input {
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 0.5rem;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.65rem;
   color: var(--text);
+  font-size: 0.95rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .login-form button {
   margin-top: 0.5rem;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   border: none;
-  border-radius: 6px;
-  padding: 0.6rem;
+  border-radius: var(--radius-sm);
+  padding: 0.65rem;
   color: white;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.login-form button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .error {
@@ -73,55 +111,79 @@ body {
 }
 
 .shell {
-  max-width: 1100px;
+  max-width: 1160px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 1.5rem 1.5rem 3rem;
 }
 
 header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+header h1 {
+  margin: 0.15rem 0 0;
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  margin-top: 0.3rem;
 }
 
 .connection-badge {
-  font-size: 0.8rem;
-  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
   border-radius: 999px;
   border: 1px solid var(--border);
+  background: var(--panel);
 }
 
 .connection-ws {
   color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--border));
 }
 
 .connection-polling {
   color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
 }
 
 .btn {
   font-family: inherit;
   font-size: 0.82rem;
-  font-weight: 500;
-  padding: 0.45rem 0.95rem;
+  font-weight: 600;
+  padding: 0.5rem 1.05rem;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--text);
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, transform 0.12s ease, box-shadow 0.12s ease;
 }
 
 .btn:hover {
   border-color: var(--accent);
   transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .btn:active {
@@ -134,31 +196,32 @@ header {
 }
 
 .btn-accent {
-  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, var(--panel)), color-mix(in srgb, var(--accent-2) 22%, var(--panel)));
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   color: var(--text);
 }
 
 .btn-accent:hover {
-  background: color-mix(in srgb, var(--accent) 28%, var(--panel));
   border-color: var(--accent);
 }
 
 .btn-ghost {
   background: transparent;
   color: var(--muted);
+  box-shadow: none;
 }
 
 .btn-ghost:hover {
   color: var(--text);
   border-color: var(--muted);
+  box-shadow: none;
 }
 
 .admin-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  border-bottom: 1px solid var(--border);
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .admin-tab {
@@ -167,19 +230,24 @@ header {
   border-bottom: 2px solid transparent;
   color: var(--muted);
   font-family: inherit;
-  font-size: 0.9rem;
-  padding: 0.5rem 0.2rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.6rem 0.9rem;
   margin-bottom: -1px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .admin-tab:hover {
   color: var(--text);
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
 }
 
 .admin-tab-active {
   color: var(--accent);
   border-bottom-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .body {
@@ -191,7 +259,7 @@ header {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  min-width: 160px;
+  min-width: 170px;
 }
 
 .stepper button {
@@ -199,14 +267,24 @@ header {
   border: 1px solid var(--border);
   color: var(--text);
   text-align: left;
-  padding: 0.6rem 0.8rem;
-  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
+}
+
+.stepper button:hover {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
 }
 
 .stepper .step-active {
   border-color: var(--accent);
   color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  box-shadow: var(--shadow-sm);
 }
 
 main {
@@ -215,10 +293,25 @@ main {
 }
 
 .step {
-  background: var(--panel);
+  background: linear-gradient(165deg, var(--panel-2) 0%, var(--panel) 70%);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  padding: 1.4rem 1.5rem;
+  box-shadow: var(--shadow-md);
+}
+
+.step h3 {
+  margin-top: 0;
+  letter-spacing: -0.01em;
+}
+
+.section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0.9rem 0 0.5rem;
 }
 
 .waiting {
@@ -238,25 +331,33 @@ main {
 
 .service-card {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem;
+  background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.service-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
 }
 
 .service-card.healthy {
-  border-color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 45%, var(--border));
 }
 
 .service-card.unhealthy {
-  border-color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 55%, var(--border));
 }
 
 .service-name {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 0.9rem;
 }
 
 .service-detail,
 .service-latency {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--muted);
 }
 
@@ -267,8 +368,9 @@ main {
 }
 
 .stat-value {
-  font-size: 1.6rem;
+  font-size: 1.7rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .stat-label {
@@ -281,7 +383,7 @@ main {
 }
 
 .mode-synthetic {
-  color: #f5a623;
+  color: var(--warn);
 }
 
 .event-table,
@@ -296,10 +398,18 @@ main {
 
 .event-table th,
 .event-table td {
-  border-bottom: 1px solid var(--border);
-  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 0.5rem 0.6rem;
   text-align: left;
   font-size: 0.85rem;
+}
+
+.event-table th {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
 }
 
 .anomaly-row {
@@ -315,16 +425,18 @@ main {
 
 .query-card {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem;
+  background: color-mix(in srgb, var(--panel-2) 60%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 0.8rem;
 }
 
 .pipeline-flow {
-  background: var(--panel);
+  background: linear-gradient(165deg, var(--panel-2) 0%, var(--panel) 70%);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.5rem 1rem;
-  margin-bottom: 1rem;
+  border-radius: var(--radius-lg);
+  padding: 0.6rem 1.1rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-md);
 }
 
 .flow-box {
@@ -354,7 +466,7 @@ main {
 }
 
 .mode-badge-synthetic {
-  fill: #f5a623;
+  fill: var(--warn);
 }
 
 .handover-badge {
@@ -399,23 +511,26 @@ main {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 8, 16, 0.65);
+  background: rgba(4, 6, 14, 0.7);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* Must clear Leaflet's own stacking (panes up to ~650, controls 1000) -
+     the map used to render on top of this modal before this was raised. */
+  z-index: 2000;
   padding: 1.5rem;
 }
 
 .modal-card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   max-width: 560px;
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-lg);
 }
 
 .about-card {
@@ -447,10 +562,13 @@ main {
   line-height: 1;
   cursor: pointer;
   padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
 .modal-close:hover {
   color: var(--text);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
 }
 
 .modal-body {
@@ -480,7 +598,7 @@ main {
 .about-banner {
   position: relative;
   padding: 1.75rem 1.75rem 1.5rem;
-  border-radius: 12px 12px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   background:
     radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
     linear-gradient(160deg, var(--panel) 0%, var(--bg) 130%);
@@ -576,7 +694,7 @@ main {
   font-weight: 700;
   letter-spacing: 0.02em;
   color: white;
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #7a4fff));
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
 }
 
 .about-people-text p {
@@ -608,35 +726,161 @@ main {
   margin-top: 0.5rem;
 }
 
-/* Planner role (R2) - map view */
+/* Planner role (R2-R5) - map view */
 
+/* Header + map/sidebar row are sized to fit one viewport (no page scroll
+   for the "always visible" part - map, sensor detail, status). The
+   per-sensor timeline panel below is the one thing allowed to extend past
+   the fold: it only appears once a sensor is selected, and at that point
+   scrolling down to it is expected, not a layout failure. */
 .planner-shell {
-  max-width: 1400px;
+  min-height: 100vh;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 1.5rem 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.planner-shell header {
+  flex: none;
+}
+
+/* Compact status summary, folded into the header instead of its own
+   full-width row of cards - minimalist design (Nielsen #8): sensor counts
+   are secondary information and shouldn't compete with the map for space.
+   Colour alone (already load-bearing on the map pins) carries recognition
+   here too, so this reads at a glance without needing large numbers. */
+.status-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.status-bar-item {
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.status-bar-ok {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--border));
+}
+
+.status-bar-warning {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+}
+
+.status-bar-critical {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--border));
 }
 
 .planner-body {
+  flex: none;
+  height: min(58vh, 620px);
+  min-height: 420px;
+  margin-top: 1.25rem;
   display: flex;
   gap: 1.5rem;
-  align-items: flex-start;
 }
 
 .map-container {
   flex: 2;
   min-width: 0;
-  height: 640px;
-  border-radius: 12px;
+  height: 100%;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
 }
 
 .planner-sidebar {
   flex: 1;
-  min-width: 320px;
+  min-width: 340px;
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.planner-sidebar .detail-card {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Per-sensor timeline (R5) - minute/hour/day/week charts, full width. */
+
+.timeline-panel {
+  margin-top: 1rem;
+}
+
+.timeline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.2rem;
+}
+
+.timeline-heading h3 {
+  margin: 0;
+}
+
+.metric-tabs {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.metric-tab {
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.metric-tab:hover {
+  color: var(--text);
+}
+
+.metric-tab-active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-2));
+}
+
+.timeline-caption {
+  font-size: 0.76rem;
+  margin: 0 0 0.6rem;
+}
+
+.timeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1rem;
+}
+
+.timeline-chart h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
 }
 
 .sensor-marker {
@@ -650,85 +894,292 @@ main {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid var(--bg);
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+  border: 2px solid #0b0e1a;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.sensor-marker-critical span {
+  animation: marker-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes marker-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(251, 111, 132, 0.35), 0 2px 8px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(251, 111, 132, 0.12), 0 2px 8px rgba(0, 0, 0, 0.5);
+  }
 }
 
 .leaflet-container {
   background: var(--panel);
+  font-family: inherit;
 }
 
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
-  background: var(--panel);
+.leaflet-popup-content-wrapper {
+  background: var(--panel-2);
   color: var(--text);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.leaflet-popup-tip {
+  background: var(--panel-2);
+}
+
+.leaflet-popup-content {
+  margin: 0.85rem 1rem;
+  line-height: 1.5;
+  font-size: 0.85rem;
 }
 
 .popup-area {
   color: var(--muted);
-  font-size: 0.82rem;
-  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
 }
 
 .popup-reason {
   color: var(--bad);
   font-size: 0.82rem;
-  margin-top: 0.3rem;
+  margin-top: 0.35rem;
+  font-weight: 600;
 }
 
 .status-badge {
-  display: inline-block;
-  padding: 0.2rem 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 999px;
   border: 1px solid var(--border);
-  font-size: 0.82rem;
-  margin: 0.3rem 0 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
 }
 
 .status-ok {
   color: var(--good);
-  border-color: color-mix(in srgb, var(--good) 45%, var(--border));
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--border));
 }
 
 .status-warning {
   color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
 }
 
 .status-critical {
   color: var(--bad);
-  border-color: color-mix(in srgb, var(--bad) 45%, var(--border));
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--border));
 }
 
 .status-unknown {
   color: var(--muted);
 }
 
-.metric-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 0.8rem;
-  color: var(--muted);
-  font-size: 0.88rem;
-  line-height: 1.6;
+/* Remounted (via a key={device_id} on the parent) each time a different
+   pin is selected, so switching sensors slides the new detail in - but a
+   same-sensor data refresh every few seconds does not replay this. */
+.detail-enter {
+  animation: detail-enter 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.score-row {
+@keyframes detail-enter {
+  from { opacity: 0; transform: translateX(14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.detail-heading {
   display: flex;
-  gap: 1.5rem;
-  margin-bottom: 0.8rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.detail-heading h3 {
+  margin: 0;
+}
+
+.detail-heading .waiting {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+}
+
+.stat-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.stat-tile {
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.75rem;
+  background: color-mix(in srgb, var(--panel-2) 65%, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  position: relative;
 }
 
 .score-label {
   display: block;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
 }
 
 .score-value {
   display: block;
-  font-size: 1.4rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.trend-pill {
+  align-self: flex-start;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 0.06rem 0.45rem;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 0.1rem;
+}
+
+.trend-improving {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 15%, transparent);
+}
+
+.trend-worsening {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 15%, transparent);
+}
+
+.trend-stable {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 15%, transparent);
+}
+
+.gauge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.gauge {
+  padding: 0.1rem 0;
+}
+
+.gauge-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.2rem;
+}
+
+.gauge-label {
+  font-size: 0.76rem;
   font-weight: 600;
+  color: var(--text);
+}
+
+.gauge-value {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge-unit {
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.gauge-track {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-soft);
+  overflow: visible;
+}
+
+.gauge-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--good) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--good) 85%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--good) 85%, transparent);
+  border-radius: 999px;
+  transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1), width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gauge-marker {
+  position: absolute;
+  top: -2.5px;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--text);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+  transform: translateX(-50%);
+  /* Live readings poll every few seconds - this is what makes the marker
+     glide to its new position instead of jumping. */
+  transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+}
+
+.gauge-ceiling {
+  position: absolute;
+  top: -2.5px;
+  width: 2px;
+  height: 12px;
+  background: var(--bad);
+  transform: translateX(-50%);
+}
+
+.gauge-ok .gauge-marker {
+  background: var(--good);
+}
+
+.gauge-warning .gauge-marker {
+  background: var(--warn);
+}
+
+.gauge-critical .gauge-marker {
+  background: var(--bad);
+}
+
+.gauge-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.2rem;
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.gauge-limit {
+  color: var(--bad);
 }
 
 .alert-feed {
@@ -739,9 +1190,28 @@ main {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.alert-feed li {
+  padding: 0.5rem 0.65rem;
+  border-left: 2px solid var(--border);
+  background: color-mix(in srgb, var(--panel-2) 45%, transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  animation: alert-slide-in 0.35s ease both;
+}
+
+/* Plays once per item, the moment it's first added (each <li> is keyed by
+   event/alert id, so a poll that just refreshes existing rows doesn't
+   replay this - only genuinely new entries slide in). */
+@keyframes alert-slide-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .alert-time {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
 }

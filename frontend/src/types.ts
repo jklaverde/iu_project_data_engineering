@@ -144,6 +144,15 @@ export interface DeviceStatus {
   metrics: Record<string, MetricStatus>;
 }
 
+export interface MetricRange {
+  value: number;
+  unit: string;
+  normal_min: number;
+  normal_max: number;
+  ceiling: number | null;
+  status: MetricStatus;
+}
+
 export interface SensorEntry {
   device_id: string;
   name: string;
@@ -154,6 +163,7 @@ export interface SensorEntry {
   status: DeviceStatus;
   air_quality_score: number | null;
   comfort_index: number | null;
+  metric_ranges: Record<string, MetricRange>;
 }
 
 export interface SensorsResponse {
@@ -182,6 +192,25 @@ export interface SensorHistoryResponse {
   windows: AggregateWindow[];
   chronic_exposure_ratio: number | null;
   trend: "improving" | "worsening" | "stable" | null;
+}
+
+export type TimelineGranularity = "1m" | "1h" | "1d" | "1w";
+
+export interface TimelinePoint {
+  window_start: string;
+  avg: number | null;
+  min: number | null;
+  max: number | null;
+  anomaly_count: number;
+  event_count: number;
+  unhealthy: boolean;
+}
+
+export interface TimelineResponse {
+  device_id: string;
+  metric: string;
+  granularity: TimelineGranularity;
+  points: TimelinePoint[];
 }
 
 // Mirrors backend/app/routers/admin.py (R4 - infrastructure/admin role, alerting).

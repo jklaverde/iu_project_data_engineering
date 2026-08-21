@@ -15,7 +15,7 @@
         "name": "device_id",
         "type": "custom",
         "label": "Device",
-        "query": "b8:27:eb:bf:9d:51,00:0f:00:70:91:0a,1c:bf:ce:15:ec:4d",
+        "query": "Kaiserstrasse : b8:27:eb:bf:9d:51,Emsbruecke : 00:0f:00:70:91:0a,Baccum : 1c:bf:ce:15:ec:4d",
         "multi": true,
         "includeAll": true,
         "current": { "text": "All", "value": "$__all" },
@@ -93,6 +93,11 @@
       "id": 301, "type": "timeseries", "title": "Anomalies per 1-min window",
       "gridPos": { "x": 0, "y": 24, "w": 8, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "b8:27:eb:bf:9d:51" }, "properties": [{ "id": "displayName", "value": "Kaiserstrasse (b8:27:eb:bf:9d:51)" }] },
+        { "matcher": { "id": "byName", "options": "1c:bf:ce:15:ec:4d" }, "properties": [{ "id": "displayName", "value": "Baccum (1c:bf:ce:15:ec:4d)" }] },
+        { "matcher": { "id": "byName", "options": "00:0f:00:70:91:0a" }, "properties": [{ "id": "displayName", "value": "Emsbruecke (00:0f:00:70:91:0a)" }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
@@ -105,7 +110,11 @@
       "id": 302, "type": "timeseries", "title": "Anomaly rate %",
       "gridPos": { "x": 8, "y": 24, "w": 8, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
-      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [
+        { "matcher": { "id": "byName", "options": "b8:27:eb:bf:9d:51" }, "properties": [{ "id": "displayName", "value": "Kaiserstrasse (b8:27:eb:bf:9d:51)" }] },
+        { "matcher": { "id": "byName", "options": "1c:bf:ce:15:ec:4d" }, "properties": [{ "id": "displayName", "value": "Baccum (1c:bf:ce:15:ec:4d)" }] },
+        { "matcher": { "id": "byName", "options": "00:0f:00:70:91:0a" }, "properties": [{ "id": "displayName", "value": "Emsbruecke (00:0f:00:70:91:0a)" }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
@@ -122,6 +131,15 @@
       "id": 303, "type": "table", "title": "Top anomalous device (selected range)",
       "gridPos": { "x": 16, "y": 24, "w": 8, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "device_id" }, "properties": [{ "id": "mappings", "value": [
+          { "type": "value", "options": {
+            "b8:27:eb:bf:9d:51": { "text": "Kaiserstrasse (b8:27:eb:bf:9d:51)" },
+            "1c:bf:ce:15:ec:4d": { "text": "Baccum (1c:bf:ce:15:ec:4d)" },
+            "00:0f:00:70:91:0a": { "text": "Emsbruecke (00:0f:00:70:91:0a)" }
+          } }
+        ] }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
@@ -138,6 +156,15 @@
       "id": 304, "type": "table", "title": "Anomaly drill-down (raw events, UC-6)",
       "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "device_id" }, "properties": [{ "id": "mappings", "value": [
+          { "type": "value", "options": {
+            "b8:27:eb:bf:9d:51": { "text": "Kaiserstrasse (b8:27:eb:bf:9d:51)" },
+            "1c:bf:ce:15:ec:4d": { "text": "Baccum (1c:bf:ce:15:ec:4d)" },
+            "00:0f:00:70:91:0a": { "text": "Emsbruecke (00:0f:00:70:91:0a)" }
+          } }
+        ] }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
@@ -192,6 +219,11 @@
       "id": 501, "type": "timeseries", "title": "Temperature (avg / max)",
       "gridPos": { "x": 0, "y": 58, "w": 8, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "b8:27:eb:bf:9d:51" }, "properties": [{ "id": "displayName", "value": "Kaiserstrasse (b8:27:eb:bf:9d:51)" }] },
+        { "matcher": { "id": "byName", "options": "1c:bf:ce:15:ec:4d" }, "properties": [{ "id": "displayName", "value": "Baccum (1c:bf:ce:15:ec:4d)" }] },
+        { "matcher": { "id": "byName", "options": "00:0f:00:70:91:0a" }, "properties": [{ "id": "displayName", "value": "Emsbruecke (00:0f:00:70:91:0a)" }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
@@ -204,6 +236,11 @@
       "id": 502, "type": "timeseries", "title": "Humidity avg, max CO/LPG/smoke",
       "gridPos": { "x": 8, "y": 58, "w": 8, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "b8:27:eb:bf:9d:51" }, "properties": [{ "id": "displayName", "value": "Kaiserstrasse (b8:27:eb:bf:9d:51)" }] },
+        { "matcher": { "id": "byName", "options": "1c:bf:ce:15:ec:4d" }, "properties": [{ "id": "displayName", "value": "Baccum (1c:bf:ce:15:ec:4d)" }] },
+        { "matcher": { "id": "byName", "options": "00:0f:00:70:91:0a" }, "properties": [{ "id": "displayName", "value": "Emsbruecke (00:0f:00:70:91:0a)" }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
@@ -216,7 +253,11 @@
       "id": 503, "type": "timeseries", "title": "Motion & light activity ratio",
       "gridPos": { "x": 16, "y": 58, "w": 8, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
-      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [
+        { "matcher": { "id": "byName", "options": "b8:27:eb:bf:9d:51" }, "properties": [{ "id": "displayName", "value": "Kaiserstrasse (b8:27:eb:bf:9d:51)" }] },
+        { "matcher": { "id": "byName", "options": "1c:bf:ce:15:ec:4d" }, "properties": [{ "id": "displayName", "value": "Baccum (1c:bf:ce:15:ec:4d)" }] },
+        { "matcher": { "id": "byName", "options": "00:0f:00:70:91:0a" }, "properties": [{ "id": "displayName", "value": "Emsbruecke (00:0f:00:70:91:0a)" }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
@@ -230,7 +271,11 @@
       "description": "Atmospheric pressure is not present in the source dataset - simulated for every row (D23) and labeled synthetic here per REQUIREMENTS.md Sec 5.5/9.",
       "gridPos": { "x": 0, "y": 66, "w": 12, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
-      "fieldConfig": { "defaults": { "unit": "pressurehpa" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "pressurehpa" }, "overrides": [
+        { "matcher": { "id": "byName", "options": "b8:27:eb:bf:9d:51" }, "properties": [{ "id": "displayName", "value": "Kaiserstrasse (b8:27:eb:bf:9d:51)" }] },
+        { "matcher": { "id": "byName", "options": "1c:bf:ce:15:ec:4d" }, "properties": [{ "id": "displayName", "value": "Baccum (1c:bf:ce:15:ec:4d)" }] },
+        { "matcher": { "id": "byName", "options": "00:0f:00:70:91:0a" }, "properties": [{ "id": "displayName", "value": "Emsbruecke (00:0f:00:70:91:0a)" }] }
+      ] },
       "targets": [
         {
           "refId": "A", "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },

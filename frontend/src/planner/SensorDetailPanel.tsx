@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import EChartWrapper from "../charts/EChartWrapper";
 import { fetchSensorHistory } from "../api";
 import type { SensorEntry, SensorHistoryResponse } from "../types";
+import MetricGauge from "./MetricGauge";
 
 const STATUS_LABEL: Record<string, string> = {
   ok: "OK",
@@ -9,6 +9,8 @@ const STATUS_LABEL: Record<string, string> = {
   critical: "Critical",
   unknown: "No data yet",
 };
+
+const METRIC_ORDER = ["co", "lpg", "smoke", "temp", "humidity"];
 
 export default function SensorDetailPanel({ sensor }: { sensor: SensorEntry | null }) {
   const [history, setHistory] = useState<SensorHistoryResponse | null>(null);
@@ -33,65 +35,62 @@ export default function SensorDetailPanel({ sensor }: { sensor: SensorEntry | nu
 
   if (!sensor) {
     return (
-      <div className="step">
+      <div className="step detail-card">
         <h3>Sensor detail</h3>
         <p className="waiting">Select a sensor on the map to see its readings.</p>
       </div>
     );
   }
 
-  const windows = [...history?.windows ?? []].reverse();
+  const ranges = METRIC_ORDER.filter((m) => sensor.metric_ranges[m]);
 
   return (
-    <div className="step">
-      <h3>{sensor.name}</h3>
-      <p className="waiting">{sensor.area}</p>
-      <p className={`status-badge status-${sensor.status.overall}`}>
-        {STATUS_LABEL[sensor.status.overall] ?? sensor.status.overall}
-        {sensor.status.reason ? ` — ${sensor.status.reason}` : ""}
-      </p>
-
-      {sensor.reading && (
-        <ul className="metric-list">
-          <li>CO: {sensor.reading.co.toFixed(4)}</li>
-          <li>LPG: {sensor.reading.lpg.toFixed(4)}</li>
-          <li>Smoke: {sensor.reading.smoke.toFixed(4)}</li>
-          <li>Temperature: {sensor.reading.temp.toFixed(1)} °C</li>
-          <li>Humidity: {sensor.reading.humidity.toFixed(0)}%</li>
-        </ul>
-      )}
-
-      <div className="score-row">
-        <div>
-          <span className="score-label">Air quality score</span>
-          <span className="score-value">{sensor.air_quality_score?.toFixed(0) ?? "–"}</span>
-        </div>
-        <div>
-          <span className="score-label">Comfort index</span>
-          <span className="score-value">{sensor.comfort_index?.toFixed(0) ?? "–"}</span>
-        </div>
-      </div>
-
-      {history && windows.length > 0 && (
-        <>
-          <p>
-            Chronic exposure (last 24h):{" "}
-            {history.chronic_exposure_ratio !== null
-              ? `${Math.round(history.chronic_exposure_ratio * 100)}%`
-              : "n/a"}
-            {history.trend ? ` · trend: ${history.trend}` : ""}
+    <div className="step detail-card">
+      <div className="detail-enter" key={sensor.device_id}>
+        <div className="detail-heading">
+          <div>
+            <h3>{sensor.name}</h3>
+            <p className="waiting">{sensor.area}</p>
+          </div>
+          <p className={`status-badge status-${sensor.status.overall}`}>
+            {STATUS_LABEL[sensor.status.overall] ?? sensor.status.overall}
+            {sensor.status.reason ? ` — ${sensor.status.reason}` : ""}
           </p>
-          <EChartWrapper
-            height={180}
-            option={{
-              xAxis: { type: "category", data: windows.map((w) => (w.window_start ?? "").slice(11, 16)) },
-              yAxis: { type: "value", name: "CO (avg)" },
-              tooltip: { trigger: "axis" },
-              series: [{ type: "line", data: windows.map((w) => w.co_avg), smooth: true }],
-            }}
-          />
-        </>
-      )}
+        </div>
+
+        <div className="stat-tiles">
+          <div className="stat-tile">
+            <span className="score-label">Air quality score</span>
+            <span className="score-value">{sensor.air_quality_score?.toFixed(0) ?? "–"}</span>
+          </div>
+          <div className="stat-tile">
+            <span className="score-label">Comfort index</span>
+            <span className="score-value">{sensor.comfort_index?.toFixed(0) ?? "–"}</span>
+          </div>
+          {history && (
+            <div className="stat-tile">
+              <span className="score-label">Chronic exposure (24h)</span>
+              <span className="score-value">
+                {history.chronic_exposure_ratio !== null
+                  ? `${Math.round(history.chronic_exposure_ratio * 100)}%`
+                  : "–"}
+              </span>
+              {history.trend && <span className={`trend-pill trend-${history.trend}`}>{history.trend}</span>}
+            </div>
+          )}
+        </div>
+
+        {ranges.length > 0 && (
+          <>
+            <h4 className="section-title">Actual vs. acceptable range</h4>
+            <div className="gauge-list">
+              {ranges.map((metric) => (
+                <MetricGauge key={metric} metric={metric} range={sensor.metric_ranges[metric]} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,12 @@
-import type { AdminAlert, PipelineState, RawEventRow, Role, SensorsResponse, SensorHistoryResponse } from "./types";
+import type {
+  AdminAlert,
+  PipelineState,
+  Role,
+  SensorsResponse,
+  SensorHistoryResponse,
+  TimelineGranularity,
+  TimelineResponse,
+} from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -51,17 +59,12 @@ export function fetchPipelineState(): Promise<PipelineState> {
   return request("/api/pipeline-state");
 }
 
-export function fetchAnomalies(params: {
-  deviceId?: string;
-  sinceMinutes?: number;
-  limit?: number;
-}): Promise<{ anomalies: RawEventRow[] }> {
-  const search = new URLSearchParams();
-  if (params.deviceId) search.set("device_id", params.deviceId);
-  if (params.sinceMinutes) search.set("since_minutes", String(params.sinceMinutes));
-  if (params.limit) search.set("limit", String(params.limit));
-  const qs = search.toString();
-  return request(`/api/anomalies${qs ? `?${qs}` : ""}`);
+export function fetchSensorTimeline(
+  deviceId: string,
+  params: { metric: string; granularity: TimelineGranularity },
+): Promise<TimelineResponse> {
+  const search = new URLSearchParams({ metric: params.metric, granularity: params.granularity });
+  return request(`/api/sensors/${encodeURIComponent(deviceId)}/timeline?${search.toString()}`);
 }
 
 export function fetchAdminAlerts(): Promise<{ alerts: AdminAlert[] }> {

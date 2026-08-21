@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import AboutModal from "../about/AboutModal";
 import { useSensors } from "../state/useSensors";
 import type { SensorEntry } from "../types";
-import AlertFeed from "./AlertFeed";
 import SensorDetailPanel from "./SensorDetailPanel";
+import SensorTimeline from "./SensorTimeline";
 
 const LINGEN_CENTER: [number, number] = [52.523, 7.322];
 const LINGEN_ZOOM = 13;
@@ -20,7 +20,7 @@ const STATUS_COLOR: Record<string, string> = {
 function markerIcon(status: string): L.DivIcon {
   const color = STATUS_COLOR[status] ?? STATUS_COLOR.unknown;
   return L.divIcon({
-    className: "sensor-marker",
+    className: `sensor-marker sensor-marker-${status}`,
     html: `<span style="background:${color}"></span>`,
     iconSize: [18, 18],
   });
@@ -78,11 +78,27 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
   }, [sensors]);
 
   const selectedSensor = sensors.find((s) => s.device_id === selectedId) ?? null;
+  const counts = sensors.reduce(
+    (acc, s) => {
+      acc[s.status.overall] = (acc[s.status.overall] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   return (
     <div className="planner-shell">
       <header>
-        <h1>Environmental Overview — Lingen (Ems)</h1>
+        <div>
+          <p className="eyebrow">Environmental / Planner</p>
+          <h1>Lingen (Ems) — Sensor Overview</h1>
+          <div className="status-bar">
+            <span className="status-bar-item">{sensors.length} sensors</span>
+            <span className="status-bar-item status-bar-ok">{counts.ok ?? 0} OK</span>
+            <span className="status-bar-item status-bar-warning">{counts.warning ?? 0} warning</span>
+            <span className="status-bar-item status-bar-critical">{counts.critical ?? 0} critical</span>
+          </div>
+        </div>
         <div className="header-right">
           <button className="btn btn-accent" onClick={() => setShowAbout(true)}>
             About the project
@@ -99,9 +115,10 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
         <div className="map-container" ref={containerRef} />
         <div className="planner-sidebar">
           <SensorDetailPanel sensor={selectedSensor} />
-          <AlertFeed sensors={sensors} />
         </div>
       </div>
+
+      {selectedSensor && <SensorTimeline sensor={selectedSensor} />}
     </div>
   );
 }
