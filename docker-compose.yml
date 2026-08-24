@@ -187,7 +187,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    mem_limit: 1500m
+    # 3 independent applyInPandasWithState queries (raw_events, agg_1m,
+    # agg_1h) share whatever executor(s) run here, each spawning its own
+    # Python worker subprocess on top of the JVM heap - 1500m proved too
+    # tight under a real backlog catch-up burst (docs/TROUBLESHOOTING.md).
+    mem_limit: 2560m
     restart: unless-stopped
 
   spark-job-volume-init:
@@ -223,6 +227,7 @@ services:
       CASSANDRA_PORT: 9042
       CASSANDRA_KEYSPACE: iot
       SPARK_JOB_TRIGGER_INTERVAL: ${SPARK_JOB_TRIGGER_INTERVAL:-30 seconds}
+      SPARK_JOB_MAX_OFFSETS_PER_TRIGGER: ${SPARK_JOB_MAX_OFFSETS_PER_TRIGGER:-20000}
       SPARK_JOB_WATERMARK_1M: ${SPARK_JOB_WATERMARK_1M:-2 minutes}
       SPARK_JOB_WATERMARK_1H: ${SPARK_JOB_WATERMARK_1H:-10 minutes}
       SPARK_JOB_AGG_1H_WINDOW_DURATION: ${SPARK_JOB_AGG_1H_WINDOW_DURATION:-1 hour}
@@ -245,7 +250,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-    mem_limit: 1500m
+    mem_limit: 2000m
     restart: unless-stopped
 
   kafka-exporter:

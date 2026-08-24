@@ -573,3 +573,70 @@ rather than trusting a design as correct because it reads correctly.
   `docs/PROGRESS.md`'s "Resuming locally" section already recommends the bare form for
   this reason; the gotcha is remembering to fall back to it even mid-session, not just
   at the start of a new one.
+
+## P10 — `spark-job` executor OOM-killed catching up on a Kafka backlog (VPS)
+
+- **Symptom:** on a public VPS deployment, `spark-job` was found `Up N seconds (health:
+  starting)` — mid-restart-loop — while the producer had kept publishing the whole
+  time (confirmed live via the admin UI: still 100% `REPLAY` mode, event counter
+  climbing normally, not stuck). `docker compose logs spark-job` showed
+  `ERROR TaskSchedulerImpl: Lost executor 2 on <spark-worker IP>: Command exited with
+  code 137`, followed by a cascade of `FetchFailed` /
+  `MetadataFetchFailedException: Missing an output location for shuffle` errors as the
+  driver discovered the dead executor's shuffle outputs were gone — that cascade is
+  what eventually took the whole streaming query, and then the driver container
+  itself, down.
+- **Cause:** `spark_job/spark_job/schema.py`'s `read_kafka()` had no
+  `maxOffsetsPerTrigger` cap, so each 30-second micro-batch trigger
+  (`SPARK_JOB_TRIGGER_INTERVAL`) pulled as much Kafka backlog as existed, with no
+  ceiling. Since the producer never stops publishing even while `spark-job` is down,
+  any prior interruption (the exact original trigger wasn't captured, but the
+  mechanism doesn't require one specific cause) leaves a backlog that grows for as
+  long as the outage lasts. The very next catch-up trigger then tries to process that
+  entire backlog in one oversized batch — a memory spike far larger than steady-state
+  100 msg/s traffic ever produces. `spark-worker`'s `mem_limit` (1500m at the time)
+  couldn't absorb that spike, so Docker's cgroup OOM-killed the executor process
+  (`docker inspect`'s `OOMKilled` flag reflects this at the *container* level only
+  when the main process dies — an executor subprocess getting killed inside a worker
+  that keeps running is invisible to that flag, which is why the container-level
+  `docker compose ps`/`docker inspect` checks from P9 didn't show anything definitive
+  here; the Spark application log itself was the only place this was visible). Once
+  killed, the query retries the batch — pulling the same now-even-larger backlog
+  again — a self-reinforcing loop: OOM → restart → bigger backlog → OOM again.
+- **How it was found:** live-diagnosed over an SSH session against a real running VPS,
+  not assumed from reading code. `docker compose ps -a` + `docker inspect
+  ...RestartCount` established the container *was* self-healing (proving `restart:
+  unless-stopped` itself worked, narrowing the question) before `docker compose logs`
+  surfaced the actual exit-code-137 executor loss. `free -h` (11 GB total, 7 GB
+  available) ruled out host-wide memory exhaustion — this was scoped to one
+  container's own `mem_limit`, not the VPS running out of RAM entirely. `docker stats
+  --no-stream` then showed `spark-worker` at 376% CPU and double-digit-GB block/network
+  I/O immediately after the restart — the signature of a backlog catch-up burst, not
+  steady-state traffic — which is what pointed at `maxOffsetsPerTrigger` (absent
+  entirely) rather than a chronic per-message sizing problem.
+- **Fix:** three changes together, not just one:
+  1. `spark_job/spark_job/schema.py`'s `read_kafka()` now sets
+     `maxOffsetsPerTrigger` (new `SPARK_JOB_MAX_OFFSETS_PER_TRIGGER` env var,
+     default 20000) — this is the actual root fix: it bounds every micro-batch to a
+     fixed size regardless of how large a backlog has grown, so a catch-up scenario
+     drains gradually over several triggers instead of spiking on the first one.
+  2. `spark-worker`'s `mem_limit` raised 1500m → 2560m and `spark-job`'s (the driver)
+     raised 1500m → 2000m in `docker-compose.yml` — headroom for the fact that this
+     job's three independent `applyInPandasWithState` queries (`raw_events`,
+     `agg_1m`, `agg_1h` — see `docs/TROUBLESHOOTING.md`'s message-lifecycle
+     discussion) each spawn their own Python worker subprocess on top of the JVM
+     heap, all sharing one worker container's cap.
+  3. Confirmed `docs/DEPLOYMENT.md`'s own documented VPS sizing table already flags
+     this: "sustained 100 msg/s, running indefinitely" calls for 16 GB RAM, not the
+     8 GB "demo only" tier — an 11 GB box (as observed here) sits between the two.
+     The `maxOffsetsPerTrigger` cap and the memory bumps reduce how often this
+     particular failure recurs, but they don't change the underlying sizing
+     recommendation; a box provisioned at the documented 16 GB tier for indefinite
+     runs shouldn't need either mitigation to matter in practice.
+- **General lesson:** a Structured Streaming source with `startingOffsets: earliest`
+  and no per-trigger cap is only safe as long as the query never falls behind for
+  long — the moment anything interrupts it while an upstream producer keeps writing,
+  the next catch-up batch is sized by however long the outage lasted, not by any
+  value anyone actually chose. Any Kafka source meant to run unattended for an
+  indefinite demo needs an explicit backlog cap from the start, not just tuned
+  container memory limits after the first incident.

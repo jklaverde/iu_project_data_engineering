@@ -28,11 +28,19 @@ _TIMESTAMP_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
 
 
 def read_kafka(spark, config):
+    """maxOffsetsPerTrigger bounds how much backlog a single micro-batch can
+    pull, regardless of how large the backlog has grown (e.g. after this job
+    was down for a while and the producer kept publishing). Without this cap,
+    the first catch-up trigger after a restart tries to consume the entire
+    backlog in one batch - a memory spike far bigger than steady-state ever
+    produces, which is exactly what OOM-killed an executor and restarted this
+    same query in a loop (see docs/TROUBLESHOOTING.md)."""
     return (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", config.kafka_bootstrap_servers)
         .option("subscribe", config.kafka_topic_name)
         .option("startingOffsets", "earliest")
+        .option("maxOffsetsPerTrigger", config.max_offsets_per_trigger)
         .option("failOnDataLoss", "false")
         .load()
     )
