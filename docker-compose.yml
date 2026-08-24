@@ -5,8 +5,16 @@ services:
     image: apache/kafka:3.7.0
     user: root
     entrypoint: ["/bin/sh", "-c"]
+    # Skips the recursive chown once the top-level dir already shows the
+    # right owner - `docker compose up` (even scoped to unrelated services)
+    # re-runs every one-shot init container, and a `chown -R` walking this
+    # whole volume while the already-running `kafka` container is actively
+    # renaming its own checkpoint files underneath it is a real race
+    # ("No such file or directory" on a live .tmp file - see
+    # docs/TROUBLESHOOTING.md). After the first real init, this becomes a
+    # no-op that never touches Kafka's live files again.
     command:
-      - "mkdir -p /var/lib/kafka/kafka_data && chown -R 1000:1000 /var/lib/kafka/kafka_data"
+      - "mkdir -p /var/lib/kafka/kafka_data && [ \"$(stat -c '%u' /var/lib/kafka/kafka_data)\" = \"1000\" ] || chown -R 1000:1000 /var/lib/kafka/kafka_data"
     volumes:
       - kafka_data:/var/lib/kafka/kafka_data
     restart: "no"
@@ -198,8 +206,12 @@ services:
     image: apache/spark:3.5.9
     user: root
     entrypoint: ["/bin/sh", "-c"]
+    # Same reasoning as kafka-volume-init above: skip the recursive chown
+    # once ownership is already correct, so a re-run while spark-job/
+    # spark-worker are already live and writing checkpoint state doesn't
+    # race a `chown -R` against their own active files.
     command:
-      - "mkdir -p /opt/spark-checkpoints && chown -R 185:185 /opt/spark-checkpoints"
+      - "mkdir -p /opt/spark-checkpoints && [ \"$(stat -c '%u' /opt/spark-checkpoints)\" = \"185\" ] || chown -R 185:185 /opt/spark-checkpoints"
     volumes:
       - spark_checkpoints:/opt/spark-checkpoints
     restart: "no"

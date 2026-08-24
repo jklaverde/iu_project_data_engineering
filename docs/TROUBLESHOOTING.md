@@ -640,3 +640,55 @@ rather than trusting a design as correct because it reads correctly.
   value anyone actually chose. Any Kafka source meant to run unattended for an
   indefinite demo needs an explicit backlog cap from the start, not just tuned
   container memory limits after the first incident.
+
+## P11 — Deploying the P10 fix itself failed: `kafka-volume-init` raced a live Kafka
+
+- **Symptom:** running `docker compose up -d --build spark-job spark-worker --wait`
+  on the VPS to deploy the P10 fix above — a command that should only have touched
+  two services — instead cascaded into `kafka-volume-init` failing with `exit 1`,
+  which blocked `kafka` from starting (`depends_on: condition:
+  service_completed_successfully`), which in turn stalled `cassandra` and everything
+  else behind it in the dependency graph.
+- **Cause:** `docker compose logs kafka-volume-init` showed the real error:
+  `chown: /var/lib/kafka/kafka_data/replication-offset-checkpoint.tmp: No such file
+  or directory`. `replication-offset-checkpoint.tmp` is one of Kafka's own internal
+  checkpoint files. `kafka-volume-init`'s command was `chown -R 1000:1000
+  /var/lib/kafka/kafka_data` — unconditional, every single time the container runs.
+  `docker compose up`, even scoped to unrelated services, still re-runs every
+  already-`Exited` one-shot init container as part of normal reconciliation (the same
+  behavior noted in P9). Here, `kafka-volume-init` re-ran while the **already-running,
+  healthy** `kafka` container was still live and actively renaming its own checkpoint
+  files in that same shared named volume — a straightforward TOCTOU race: `chown -R`
+  found the `.tmp` file while walking the directory tree, then it was gone (renamed
+  over the real file, Kafka's normal checkpoint-write pattern) by the time `chown`
+  actually tried to touch it. `spark-job-volume-init` has the byte-for-byte identical
+  pattern against `spark_checkpoints` (`chown -R 185:185`, unconditional) — it didn't
+  fail this specific time, but the exact same command that triggered this incident
+  (`up -d --build spark-job spark-worker`) is precisely the kind of command that would
+  eventually race it too, since it recreates spark-job/spark-worker while leaving
+  whichever of them stays up mid-checkpoint-write.
+- **How it was found:** `df -h` on the VPS first ruled out the obvious alternative
+  (disk full, plausible given NFR-4's unbounded growth) — 174 GB free of 193 GB, not
+  remotely close to exhausted. That narrowed it to the exit-1 log line itself, and the
+  specific `.tmp` filename immediately pointed at a live-file race rather than a
+  permissions or missing-directory problem (both of which would show a different,
+  more generic error, not "no such file" on a name that's clearly mid-write).
+- **Fix:** both `kafka-volume-init` and `spark-job-volume-init` now check the target
+  directory's current owner first and only run the recursive `chown` if it doesn't
+  already match:
+  `[ "$(stat -c '%u' <dir>)" = "<uid>" ] || chown -R <uid>:<gid> <dir>`. After the
+  genuine first-ever initialization of a fresh named volume, every subsequent
+  `docker compose up` (regardless of scope) now short-circuits before touching the
+  directory at all — it never walks into a live Kafka/Spark process's own files
+  again, so the race can't recur. Verified directly against both
+  `apache/kafka:3.7.0` and `apache/spark:3.5.9`'s shells (`stat -c` support, and both
+  the "needs chown" and "already correct, skips" branches) before deploying.
+- **General lesson:** an unconditional `chown -R` in a one-shot init container is
+  only actually safe on the container's *first* run against a fresh volume — treating
+  "one-shot" as "runs exactly once, ever" is the wrong mental model under Compose,
+  since `restart: "no"` only stops *automatic* restarts, not `docker compose up`
+  re-invoking it deliberately later. Any init command that mutates a volume another,
+  possibly-still-running service also owns needs to be idempotent and cheap to
+  re-check, not just idempotent in its *end state* — a check-then-act guard here
+  is what actually prevents the live-file race, not just the eventual chown result
+  being the same either way.
