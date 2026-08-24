@@ -406,14 +406,22 @@ containers.
   quality score, comfort index, and chronic-exposure ratio and trend direction
   (`GET /api/sensors`, `GET /api/sensors/{device_id}/history`).
 - FR-E3. Selecting a device shows a per-metric behavior-over-time view (D34): one chart
-  each at minute/hour/day/week resolution (`GET /api/sensors/{device_id}/timeline`),
-  with a shaded region over any time span where that metric was outside the acceptable
-  range — a visual answer to "was this device okay, and for how long wasn't it," which
-  replaced an earlier plain-text recent-alerts feed (superseded design, R2) that didn't
-  make chronic-vs-one-off problems legible at a glance.
+  each at minute/hour/day/week/month resolution (D35 added month;
+  `GET /api/sensors/{device_id}/timeline`), with a shaded region over any time span
+  where that metric was outside the acceptable range — a visual answer to "was this
+  device okay, and for how long wasn't it," which replaced an earlier plain-text
+  recent-alerts feed (superseded design, R2) that didn't make chronic-vs-one-off
+  problems legible at a glance.
 - FR-E4. Live updates via polling (`GET /api/sensors` — no WebSocket message type was
   added for this role in Phase 1; the backend already broadcasts alert updates over the
   existing channel for a future upgrade, see §4.2).
+- FR-E5. Below the charts, an out-of-range log (D35) lists the specific periods a
+  selected metric breached its acceptable range, scoped independently at
+  minute/hour/day/week/month resolution — newest first, each entry showing the actual
+  breaching value (the window's min or max, whichever deviated furthest, not its
+  smoothed average) against the normal band or safety ceiling it crossed, in plain
+  language. Complements FR-E3 rather than replacing it: the charts answer "how long and
+  how often," the log answers "which exact reading, and by how much."
 
 **Dashboards (FR-G)**
 - FR-G1. Grafana ships pre-provisioned (dashboards, data sources, and alert rules as code
@@ -602,6 +610,7 @@ The 48-hour run at the NFR-2 rate passes when:
 | D32 | Planner map | Leaflet (raw API, not `react-leaflet`) chosen over Mapbox GL/Google Maps for the map view — MIT-licensed, no API key/billing, minimal-footprint, consistent with NFR-10.1's dependency discipline; centered on Lingen (Ems) as the reference municipality |
 | D33 | Threshold/AQI data source | The planner role's per-metric status and air quality score reuse the exact same mean/std/ceiling values that seed Spark's own streaming anomaly detector (persisted once at Spark startup into a new `device_thresholds` table), rather than inventing a separate set of "safety limits" — one source of truth for "statistically unusual" and "environmentally in the warning/critical band" |
 | D34 | Per-sensor timeline replaces the alert feed | The citizen-facing recent-alerts text list (D32-era) was replaced by four charts (minute/hour/day/week) per selected metric, each with shaded regions over unhealthy time spans, computed from `agg_1m`/`agg_1h` — "day"/"week" are rolled up from `agg_1h` in Python rather than adding two more Cassandra tables purely for a display resolution. Chosen over a text log because the whole point is showing *how long* and *how often* a metric was bad, which a scrolling list of individual events doesn't make legible at a glance |
+| D35 | Out-of-range log, and a fifth "month" resolution | D34 argued a text log couldn't show *how long/how often* a metric was bad — still true, and the charts stay for that. But planners reviewing specific business-relevant readings (temperature, CO, LPG, humidity, ...) also need *which exact reading, when, by how much* — a question a shaded chart region answers only visually, not as a checkable number. Added `BoundaryLog.tsx` below the charts: same per-metric selector, its own independent minute/hour/day/week/month scope, newest-first, one line per breach with the actual min/max value (not the window average — a window can be flagged from a single spike its own average would smooth away) against the normal band or ceiling it crossed. Reuses the exact same `GET /api/sensors/{id}/timeline` data already fetched for the charts, no separate endpoint. "Month" was added to that same endpoint (`environment.py`'s `_rollup_bucket_key`/`rollup_metric_windows`, keyed off the 1st of the calendar month) because a log a planner checks periodically needs a coarser lens than "week" to be useful, not because the charts needed a fifth panel — the charts gained one anyway, for free, since both read the same granularity list |
 
 ---
 

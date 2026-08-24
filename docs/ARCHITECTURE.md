@@ -191,15 +191,19 @@ every connected browser over `/ws/pipeline-state`; `GET /api/pipeline-state` and
 A hand-rolled HMAC-signed session cookie (`backend/app/auth.py`) gates every data
 route, now carrying a `role` claim resolved from one of two fixed credential pairs
 (`BACKEND_ADMIN_USERNAME`/`PASSWORD`, `BACKEND_PLANNER_USERNAME`/`PASSWORD`) — still no
-user table (D29). `GET /api/anomalies` powers the anomaly drill-down (same query
-pattern as Grafana's own anomaly panel) and doubles as the planner role's citizen-alert
-feed source. `GET /api/sensors` and `GET /api/sensors/{device_id}/history`
-(`backend/app/routers/sensors.py`, `backend/app/environment.py`) serve the planner
-role's map/detail data. `POST /api/admin/alerts/webhook` (unauthenticated — Grafana has
-no session cookie) and admin-role-gated `GET /api/admin/alerts`
-(`backend/app/routers/admin.py`, `backend/app/alert_store.py`) serve the admin role's
-Alerts tab. The frontend's built static files are baked into this same image and served
-from `/` — see "One combined container" below.
+user table (D29). `GET /api/anomalies` (same query pattern as Grafana's own anomaly
+panel) remains available but is no longer called by the frontend — D34 replaced its
+only caller, the planner role's citizen-alert feed, with the timeline charts below.
+`GET /api/sensors`, `GET /api/sensors/{device_id}/history`, and
+`GET /api/sensors/{device_id}/timeline` (`backend/app/routers/sensors.py`,
+`backend/app/environment.py`) serve the planner role's map, detail panel, behavior-over-
+time charts, and out-of-range log (D34/D35) — the timeline endpoint alone feeds both the
+charts and the log, at minute/hour/day/week/month resolution. `POST
+/api/admin/alerts/webhook` (unauthenticated — Grafana has no session cookie) and
+admin-role-gated `GET /api/admin/alerts` (`backend/app/routers/admin.py`,
+`backend/app/alert_store.py`) serve the admin role's Alerts tab. The frontend's built
+static files are baked into this same image and served from `/` — see "One combined
+container" below.
 
 **`frontend`** — Own directory `frontend/` (React + TypeScript + Vite + Apache ECharts
 + Leaflet). Branches immediately after login on the session's role (no client-side
@@ -207,8 +211,11 @@ router): the **admin** role gets the original six-step guided walkthrough (Deplo
 Ingestion → Kafka → Spark → Cassandra → Summary) under a "Pipeline" tab, the live custom
 SVG pipeline-flow diagram, and a new "Alerts" tab; the **planner** role gets a raw-Leaflet
 map (`frontend/src/planner/MapView.tsx`) of Lingen (Ems) with per-sensor status pins, a
-detail panel (air quality score, comfort index, trend chart), and a citizen-facing alert
-feed. Not run as its own container in production — see below.
+detail panel (air quality score, comfort index, trend chart), five behavior-over-time
+charts per selected metric (`SensorTimeline.tsx`, D34), and below them an out-of-range
+log (`BoundaryLog.tsx`, D35) listing the specific periods that breached the acceptable
+range, independently scoped at minute/hour/day/week/month resolution. Not run as its
+own container in production — see below.
 
 **One combined container.** `backend/Dockerfile` is multi-stage: a Node stage builds
 the React app, and the final Python stage serves the built files via FastAPI's

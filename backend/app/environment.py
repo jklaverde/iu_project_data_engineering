@@ -196,18 +196,22 @@ def metric_windows(rows: list, metric: str) -> list:
 
 
 def _rollup_bucket_key(window_start_iso: str, granularity: str) -> str:
-    """"1d" -> that calendar date; "1w" -> the Monday of that ISO week -
-    both as plain date strings, used only as a grouping key."""
+    """"1d" -> that calendar date; "1w" -> the Monday of that ISO week; "1mo"
+    -> the 1st of that calendar month - all as plain date strings, used only
+    as a grouping key (sorting them ascending already sorts chronologically
+    for all three, since they're zero-padded ISO date strings)."""
     dt = datetime.fromisoformat(window_start_iso.replace("Z", "+00:00"))
     if granularity == "1d":
         return dt.date().isoformat()
+    if granularity == "1mo":
+        return dt.date().replace(day=1).isoformat()
     monday = dt.date() - timedelta(days=dt.weekday())
     return monday.isoformat()
 
 
 def rollup_metric_windows(rows: list, metric: str, granularity: str) -> list:
-    """Rolls agg_1h rows up into "1d" or "1w" buckets - there is no
-    dedicated Cassandra table at those coarser granularities (adding two
+    """Rolls agg_1h rows up into "1d", "1w", or "1mo" buckets - there is no
+    dedicated Cassandra table at those coarser granularities (adding three
     more tables purely for a chart's display resolution isn't worth it;
     re-aggregating the existing hourly rows in Python is simpler and just
     as correct). avg is event-count-weighted so a bucket built from an

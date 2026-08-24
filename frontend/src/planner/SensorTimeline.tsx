@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import EChartWrapper from "../charts/EChartWrapper";
 import { fetchSensorTimeline } from "../api";
 import type { SensorEntry, TimelineGranularity, TimelinePoint, TimelineResponse } from "../types";
+import BoundaryLog from "./BoundaryLog";
 
-const METRICS: { key: string; label: string }[] = [
+export const METRICS: { key: string; label: string }[] = [
   { key: "co", label: "CO" },
   { key: "lpg", label: "LPG" },
   { key: "smoke", label: "Smoke" },
@@ -11,11 +12,18 @@ const METRICS: { key: string; label: string }[] = [
   { key: "humidity", label: "Humidity" },
 ];
 
-const GRANULARITIES: { key: TimelineGranularity; label: string; formatLabel: (iso: string) => string }[] = [
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+export const GRANULARITIES: { key: TimelineGranularity; label: string; formatLabel: (iso: string) => string }[] = [
   { key: "1m", label: "Per minute", formatLabel: (iso) => iso.slice(11, 16) },
   { key: "1h", label: "Per hour", formatLabel: (iso) => `${iso.slice(5, 10)} ${iso.slice(11, 16)}` },
   { key: "1d", label: "Per day", formatLabel: (iso) => iso.slice(5, 10) },
   { key: "1w", label: "Per week", formatLabel: (iso) => `wk ${iso.slice(5, 10)}` },
+  {
+    key: "1mo",
+    label: "Per month",
+    formatLabel: (iso) => `${MONTH_ABBR[parseInt(iso.slice(5, 7), 10) - 1]} ${iso.slice(0, 4)}`,
+  },
 ];
 
 const EMPTY_DATA: Record<TimelineGranularity, TimelineResponse | null> = {
@@ -23,6 +31,7 @@ const EMPTY_DATA: Record<TimelineGranularity, TimelineResponse | null> = {
   "1h": null,
   "1d": null,
   "1w": null,
+  "1mo": null,
 };
 
 // Contiguous runs of unhealthy=true points, as [startIndex, endIndex] pairs
@@ -156,6 +165,13 @@ export default function SensorTimeline({ sensor }: { sensor: SensorEntry }) {
           <TimelineChart key={g.key} title={g.label} formatLabel={g.formatLabel} response={data[g.key]} />
         ))}
       </div>
+
+      <BoundaryLog
+        sensor={sensor}
+        metric={metric}
+        metricLabel={METRICS.find((m) => m.key === metric)?.label ?? metric}
+        data={data}
+      />
     </div>
   );
 }

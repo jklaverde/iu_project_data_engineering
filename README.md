@@ -3,14 +3,14 @@ Project: Data Engineering for IU Akademie
 
 A role-based environmental sensor platform for the municipality of Lingen (Ems) — Kafka →
 Spark Structured Streaming → Cassandra underneath, with two web app roles on top: an
-**environmental/planner** role (a live sensor map, air quality scoring, citizen-facing
-alerts) and an **infrastructure/admin** role (the pipeline health tour, centralized logs,
-Grafana-fired alerts with log drill-down) — plus a Grafana KPI dashboard, all running end
-to end from one `docker compose up -d`. See `REQUIREMENTS.md` for the full project scope
-and phase roadmap, `docs/ARCHITECTURE.md` for how the system is built (every module
-explained, diagrams, data flow), `docs/PROJECT_STRUCTURE.md` for what every single file in
-the repo does, `docs/DEPLOYMENT.md` for putting this on a public VPS, `docs/PROGRESS.md`
-for current status and where to pick this project back up, and
+**environmental/planner** role (a live sensor map, air quality scoring, behavior-over-time
+charts, and an out-of-range log) and an **infrastructure/admin** role (the pipeline health
+tour, centralized logs, Grafana-fired alerts with log drill-down) — plus a Grafana KPI
+dashboard, all running end to end from one `docker compose up -d`. See `REQUIREMENTS.md`
+for the full project scope and phase roadmap, `docs/ARCHITECTURE.md` for how the system is
+built (every module explained, diagrams, data flow), `docs/PROJECT_STRUCTURE.md` for what
+every single file in the repo does, `docs/DEPLOYMENT.md` for putting this on a public VPS,
+`docs/PROGRESS.md` for current status and where to pick this project back up, and
 `docs/TROUBLESHOOTING.md` for non-obvious bugs and environment gotchas found while
 building and operating the stack.
 
@@ -70,10 +70,12 @@ depends on which account you use.
 
 A live map of Lingen (Ems) with one pin per sensor, colored by current status
 (ok/warning/critical). Click a pin to see its latest reading, air quality score, comfort
-index, a 24h trend chart, and its chronic-exposure rate — and a citizen-facing feed of
-recent alerts, in plain language rather than raw sensor values. This is the surface that
-actually answers "is it safe here, and is it a persistent problem or a one-off"
-(`REQUIREMENTS.md` UC-8).
+index, and its chronic-exposure rate, plus two ways to review a selected metric's
+history: five behavior-over-time charts (minute/hour/day/week/month) with shaded regions
+over any span that fell outside the acceptable range, and below them an out-of-range log
+listing the specific breaching readings in plain language — newest first, independently
+scoped at the same five resolutions. This is the surface that actually answers "is it
+safe here, and is it a persistent problem or a one-off" (`REQUIREMENTS.md` UC-8).
 
 ### Infrastructure/admin role (`BACKEND_ADMIN_USERNAME`/`BACKEND_ADMIN_PASSWORD`)
 

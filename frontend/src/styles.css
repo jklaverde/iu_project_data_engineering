@@ -897,6 +897,69 @@ main {
   color: var(--muted);
 }
 
+.boundary-log {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.boundary-log-summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.boundary-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.boundary-entry {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border);
+  background: color-mix(in srgb, var(--panel-2) 45%, transparent);
+  font-size: 0.85rem;
+}
+
+.boundary-entry-critical {
+  border-left-color: var(--bad);
+}
+
+.boundary-entry-warning {
+  border-left-color: var(--warn);
+}
+
+.boundary-entry .status-badge {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.7rem;
+}
+
+.boundary-entry-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 5.5rem;
+}
+
+.boundary-entry-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.boundary-entry-detail {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .sensor-marker {
   display: flex;
   align-items: center;

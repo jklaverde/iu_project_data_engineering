@@ -64,9 +64,13 @@ async def sensor_history(request: Request, device_id: str, granularity: str = "1
 
 # How far back each granularity looks, and how the underlying Cassandra
 # table is queried: "1m"/"1h" read their own table directly at native
-# resolution; "1d"/"1w" have no dedicated table, so both read agg_1h over a
-# longer window and get rolled up in environment.py.
-_TIMELINE_LOOKBACK_HOURS = {"1m": 2, "1h": 48, "1d": 24 * 30, "1w": 24 * 7 * 26}
+# resolution; "1d"/"1w"/"1mo" have no dedicated table, so all three read
+# agg_1h over a longer window and get rolled up in environment.py.
+_TIMELINE_LOOKBACK_HOURS = {
+    "1m": 2, "1h": 48, "1d": 24 * 30, "1w": 24 * 7 * 26,
+    "1mo": 24 * 31 * 13,  # ~13 months, so the last full year is always available
+}
+_ROLLUP_GRANULARITIES = ("1d", "1w", "1mo")
 
 
 @router.get("/sensors/{device_id}/timeline")
@@ -77,12 +81,12 @@ async def sensor_timeline(request: Request, device_id: str, metric: str = "co", 
         granularity = "1m"
     reader = request.app.state.cassandra_reader
 
-    source_table = "1h" if granularity in ("1d", "1w") else granularity
+    source_table = "1h" if granularity in _ROLLUP_GRANULARITIES else granularity
     rows = await asyncio.to_thread(
         reader.aggregates_sync, device_id, source_table, _TIMELINE_LOOKBACK_HOURS[granularity], 20000
     )
 
-    if granularity in ("1d", "1w"):
+    if granularity in _ROLLUP_GRANULARITIES:
         points = environment.rollup_metric_windows(rows, metric, granularity)
     else:
         points = environment.metric_windows(rows, metric)
