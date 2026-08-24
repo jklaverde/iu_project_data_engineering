@@ -55,7 +55,7 @@ export default function AlertsTab({ grafanaPort }: { grafanaPort: number | null 
               <strong>{a.alertname}</strong>
               <div className="waiting">{a.summary}</div>
               {url && (
-                <a href={url} target="_blank" rel="noreferrer">
+                <a className="alert-drilldown" href={url} target="_blank" rel="noreferrer">
                   Drill into logs ↗
                 </a>
               )}

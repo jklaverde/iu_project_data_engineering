@@ -27,6 +27,20 @@
   box-sizing: border-box;
 }
 
+/* No global link style existed before this - anchors fell back to the
+   browser default (and default :visited is a dark purple), which is nearly
+   unreadable against this theme's dark panels. --accent is already tuned
+   for contrast against --panel/--panel-2 everywhere else in the app. */
+a {
+  color: var(--accent);
+}
+a:visited {
+  color: var(--accent);
+}
+a:hover {
+  color: var(--text);
+}
+
 body {
   margin: 0;
   background:
@@ -1214,4 +1228,26 @@ main {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   font-size: 0.78rem;
+}
+
+.alert-drilldown {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.alert-drilldown:visited {
+  color: var(--accent);
+}
+.alert-drilldown:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
