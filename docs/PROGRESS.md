@@ -31,7 +31,7 @@ next, ahead of everything else in this file.
 ## Resuming locally
 
 ```
-docker compose up -d
+docker compose up -d --wait
 ```
 Brings up the full stack (Kafka + kafka-exporter, Cassandra with a baked-in JMX
 exporter javaagent, Spark standalone + the streaming job, Prometheus, Grafana with the
@@ -41,6 +41,10 @@ producer starts automatically and immediately begins replaying the Kaggle datase
 to Cassandra immediately after. Grafana auto-provisions both datasources (Prometheus +
 Cassandra) and one dashboard (5 rows, one per KPI-1..5) with zero manual UI steps. See
 the root `README.md` for the verification checklist and `docker compose down` / `down -v`.
+Always use this bare, whole-project form (no service name) to resume/reconcile — a
+scoped `docker compose up -d --build <service>` only touches that one service and will
+leave any sibling that had drifted to `Exited` (host sleep, a Docker Desktop restart, a
+crash loop) dead until something names it again (`docs/TROUBLESHOOTING.md` P9).
 
 **If you edit `infra/prometheus/prometheus.yml` while the stack is already running,
 `docker compose restart prometheus` is required** — Prometheus does not hot-reload

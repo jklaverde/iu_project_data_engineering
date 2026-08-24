@@ -517,3 +517,59 @@ rather than trusting a design as correct because it reads correctly.
   correctly wired end-to-end (right device, right event, right timing) isn't the same
   as the feature actually being done — this one only surfaced by looking at real
   rendered output with real anomaly data flowing through, not by reading the code.
+
+## P9 — `spark-job`, `kafka-ui`, `promtail`, `kafka-exporter` stuck `Exited` for days
+
+- **Symptom:** `docker compose ps -a` showed four `restart: unless-stopped` services
+  sitting in `Exited` state (spark-job `137`, kafka-ui `137`, kafka-exporter `2`,
+  promtail `0`) — no crash loop visible, just quietly dead, with everything else in the
+  stack (`backend`, `cassandra`, `kafka`, `grafana`, ...) up and healthy. Looked at first
+  like the compose file had no real startup ordering, since half the stack was missing.
+- **Cause, in two parts:**
+  1. `spark-job` holds a long-lived Cassandra driver session for the whole life of its
+     Structured Streaming queries. Earlier in the same working session, `cassandra` had
+     been recreated (a scoped `docker compose up -d --build backend` cascaded into
+     recreating `cassandra` too, because `backend`'s own dependency chain touched it) —
+     that gave Cassandra a new container IP mid-stream, and `spark-job`'s driver
+     couldn't recover the in-flight queries (`Connection refused: cassandra/172.23.0.11`,
+     then queries terminating with `StreamingQueryException`). The container's own
+     `restart: unless-stopped` policy *did* keep bringing it back — confirmed via
+     `docker inspect ... .RestartCount` reading `9` — but at some point it landed back
+     in `Exited` and nothing prompted a 10th attempt.
+  2. The four dead services all share one thing: none of them were named in any
+     `docker compose up -d --build <service>` command run afterward — every follow-up
+     command in that session scoped to `backend` only. Compose's `up` only reconciles
+     the service(s) you name (plus, mid-build, the deps of image-affecting flags like
+     `--build`); it does **not** sweep the rest of the project back to their desired
+     state just because you ran `up` at all. A container that already finished exiting
+     (rather than being actively mid-restart) when nothing names it again just stays
+     `Exited` indefinitely — `restart: unless-stopped` only fires on the daemon's own
+     restart-manager loop for containers it's actively tracking as "should be running,"
+     and a container that settled to `Exited` outside that window (e.g. Docker Desktop /
+     WSL2 itself cycling, which can happen on host sleep) can fall out of that tracking.
+- **How it was found:** `docker inspect <container> --format '{{.State.OOMKilled}}
+  ...'` on all four ruled out a memory-limit kill (`OOMKilled: false` on all of them);
+  their `FinishedAt` timestamps clustered within ~2 seconds of each other, pointing at
+  one shared external event rather than four independent app-level bugs. `docker inspect
+  spark-job-1 --format '{{.RestartCount}}'` returning `9` (not `0`) proved the restart
+  policy itself was working, which narrowed the real question from "why doesn't
+  `restart: unless-stopped` work" to "why did reconciliation stop being attempted."
+  `docker compose logs spark-job` around the last restart showed the Cassandra
+  connection-refused chain that explains why it needed those 9 restarts in the first
+  place.
+- **Fix:** `docker compose up -d --wait` (no service argument — the whole project) —
+  Compose recomputes the full `depends_on` graph and brings every drifted-to-`Exited`
+  service back in correct order in one shot; `--wait` blocks until every service with a
+  healthcheck actually reports `healthy` instead of returning as soon as containers are
+  merely started, so the command's own exit code is a real verification, not a guess.
+- **General lesson:** the compose file's `depends_on`/`condition:` graph (already
+  present for every service in this project) *is* the ordering — it was never missing.
+  What actually causes a "half the stack is dead" scare is scoping `up` to one service
+  during iterative work and never following up with a bare, whole-project
+  `docker compose up -d --wait` to reconcile stragglers. Treat that bare command as the
+  canonical "make sure the whole stack matches its desired state" operation — run it
+  after any targeted rebuild, and always after anything that might have interrupted
+  Docker Desktop itself (host sleep/resume, a WSL2 restart, a Docker Desktop update).
+  `docs/PROGRESS.md`'s "Resuming locally" section already recommends the bare form for
+  this reason; the gotcha is remembering to fall back to it even mid-session, not just
+  at the start of a new one.

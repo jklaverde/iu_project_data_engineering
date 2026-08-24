@@ -30,16 +30,25 @@ cp .env.example .env
 # BACKEND_PLANNER_PASSWORD, and BACKEND_SESSION_SECRET (e.g. `openssl rand -hex 32`
 # for the last one)
 
-docker compose up -d --build
+docker compose up -d --build --wait
 ```
 
 First start builds the custom images, pre-warms Spark's dependency cache, and fetches
-the Kaggle dataset into a named volume — this takes several minutes. Watch it come up
-with `docker compose ps`: every long-running service should reach `healthy`, and the
+the Kaggle dataset into a named volume — this takes several minutes. `--wait` makes the
+command itself block until every service with a healthcheck reports `healthy`, so a
+clean exit is a real verification, not a guess; if it times out or exits non-zero, check
+with `docker compose ps` — every long-running service should reach `healthy`, and the
 `*-init`/`*-schema-init` one-shot containers should show `Exited (0)` (that's success).
 See `docs/TROUBLESHOOTING.md` if anything looks different, and `docs/PROGRESS.md`'s
 "Resuming locally" section for cold-start timing details (baseline recomputation,
 catching up on a Kafka backlog).
+
+If you ever rebuild or restart just one service by name (`docker compose up -d --build
+backend`, say), Compose only reconciles that service — anything else that had drifted to
+`Exited` (e.g. after a host sleep/resume, a Docker Desktop restart, or a sibling service
+crash-looping out) stays dead until something names it again. Run a bare `docker compose
+up -d --wait` (no service argument) afterward to sweep the whole stack back to its
+desired state — see `docs/TROUBLESHOOTING.md` P9 for a real incident this caused.
 
 Stop (keeps all data):
 ```

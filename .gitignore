@@ -7,6 +7,10 @@ development_notes/
 # Claude Code local runtime/session state (not part of the shipped repo)
 .claude/
 
+# Developer-only local HTML docs (file-structure map, message-lifecycle walkthrough) —
+# generated for local reading, not part of the shipped repo
+docs/internal/
+
 # Python build artifacts
 __pycache__/
 *.pyc
