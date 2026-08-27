@@ -54,6 +54,7 @@ already found and fixed in a given file before you go looking for new ones.
 | `app/routers/sensors.py` | `GET /api/sensors` (every known device: metadata, latest reading, status, air quality score, comfort index, per-metric actual-vs-acceptable ranges — feeds the planner role's map), `GET /api/sensors/{device_id}/history` (chronic-exposure ratio + trend for the stat tiles), and `GET /api/sensors/{device_id}/timeline` (per-metric minute/hour/day/week/month points + an `unhealthy` flag per window, for the behavior-over-time charts and the out-of-range log — same endpoint feeds both). |
 | `app/routers/admin.py` | `POST /api/admin/alerts/webhook` (unauthenticated — receives Grafana's alertmanager-style webhook payload, see `infra/grafana/provisioning/alerting/`) and `GET /api/admin/alerts` (admin-role-gated recent alert feed). Split into two `APIRouter`s so `main.py` can gate them differently. |
 | `app/alert_store.py` | `AlertStore` — small in-memory ring buffer of recent Grafana-fired alerts; Grafana itself stays the system of record, this is just a live feed for the admin UI. |
+| `app/routers/docs.py` | Admin-role-gated `GET /api/admin/docs` (catalog) and `GET /api/admin/docs/{doc_id}` (one document's title + raw Markdown) — D36. Catalog is deliberately a subset (README, `ARCHITECTURE.md`, `PROJECT_STRUCTURE.md`, `DEPLOYMENT.md`) — `REQUIREMENTS.md`/`PROGRESS.md`/`TROUBLESHOOTING.md` stay in the repository but aren't served in-app. Reads from `app/docs_bundle/`, which only exists inside the built image (see `backend/Dockerfile`'s `COPY` lines); there is nothing to read when running `app/main.py` outside Docker. |
 | `app/routers/ws.py` | `/ws/pipeline-state` — validates the session cookie *before* accepting the WebSocket handshake, sends the cached snapshot immediately, then just waits for broadcasts. |
 
 ## frontend/ — P5 role-based UI (React + TypeScript + Vite + Apache ECharts + Leaflet)
@@ -63,7 +64,7 @@ already found and fixed in a given file before you go looking for new ones.
 | `package.json` / `package-lock.json` | Explicit, minimal, exact-pinned dependency list (NFR-10.1) + committed lockfile. |
 | `.npmrc` | `ignore-scripts=true` (NFR-10.2). |
 | `tsconfig.json` / `vite.config.ts` / `index.html` | TypeScript config; Vite config (dev-mode `/api`/`/ws` proxy to the backend container); the single HTML shell. |
-| `README.md` | NFR-10.1 justifications for TypeScript and Leaflet (the two off-allowlist dependencies). |
+| `README.md` | NFR-10.1 justifications for TypeScript, Leaflet, and `marked` (the three off-allowlist dependencies). |
 | `src/main.tsx` | React root render (`createRoot(...).render(<App/>)`). |
 | `src/App.tsx` | Top-level component: checks auth (`GET /api/auth/me`, now carries `role`), shows `LoginForm`, the admin `Shell` (stepper + pipeline diagram + the active step), or the planner `MapView`. |
 | `src/api.ts` | `fetch`-based API client (credentials included), `connectPipelineStateSocket()` WebSocket helper, `fetchSensors`/`fetchSensorHistory` for the planner role. |
@@ -90,6 +91,7 @@ already found and fixed in a given file before you go looking for new ones.
 | `src/planner/BoundaryLog.tsx` | Out-of-range log (D35) below the charts — same per-metric selector, its own independent minute/hour/day/week/month scope, newest-first list of periods that breached the acceptable range. Each entry shows the window's actual min/max reading (whichever deviated furthest from the normal band or ceiling — not the averaged value the chart plots, which can look deceptively normal even in a flagged window) with a plain-language "over limit" / "above normal" / "below normal" badge. |
 | `src/planner/MetricGauge.tsx` | Actual-vs-acceptable range bar for one metric — current value, the normal band (mean ± 2σ, `backend/app/environment.py`'s `metric_ranges()`), and the hard ceiling for co/lpg/smoke, all on one scale. |
 | `src/admin/AlertsTab.tsx` | Admin role's Alerts tab (R4) — polls `GET /api/admin/alerts`, each entry links out to a client-built Grafana Explore URL (Loki query pre-filled for that alert's service) for log drill-down. |
+| `src/admin/DocsTab.tsx` | Admin role's Docs tab (D36) — fetches the catalog from `GET /api/admin/docs`, then one document's Markdown at a time from `GET /api/admin/docs/{id}`, rendered client-side with `marked` into trusted, project-authored HTML (never user input). |
 
 ## producer/ — P2 ingestion service
 

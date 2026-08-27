@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ApiError, logout, me } from "./api";
 import AboutModal from "./about/AboutModal";
 import AlertsTab from "./admin/AlertsTab";
+import DocsTab from "./admin/DocsTab";
 import LoginForm from "./auth/LoginForm";
 import ErrorBoundary from "./layout/ErrorBoundary";
 import Stepper from "./layout/Stepper";
@@ -25,7 +26,7 @@ const STEPS: { name: StepName; label: string }[] = [
   { name: "summary", label: "6. Summary" },
 ];
 
-type AdminTab = "pipeline" | "alerts";
+type AdminTab = "pipeline" | "alerts" | "docs";
 
 function Shell({ onLogout }: { onLogout: () => void }) {
   const { state, connectionMode } = usePipelineState();
@@ -68,6 +69,12 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         >
           Alerts
         </button>
+        <button
+          className={`admin-tab ${adminTab === "docs" ? "admin-tab-active" : ""}`}
+          onClick={() => setAdminTab("docs")}
+        >
+          Docs
+        </button>
       </nav>
 
       {adminTab === "pipeline" && (
@@ -91,6 +98,8 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       )}
 
       {adminTab === "alerts" && <AlertsTab grafanaPort={state.summary?.grafana_port ?? null} />}
+
+      {adminTab === "docs" && <DocsTab />}
     </div>
   );
 }

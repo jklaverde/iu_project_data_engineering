@@ -95,6 +95,12 @@ latency, elevated per-service error rate, service down), each with a one-click l
 Grafana Explore, pre-scoped to that alert's service and a recent time window
 (`REQUIREMENTS.md` UC-9).
 
+**Docs tab** — this README plus `docs/ARCHITECTURE.md`, `docs/PROJECT_STRUCTURE.md`, and
+`docs/DEPLOYMENT.md`, rendered in-app so an administrator can read how the system was
+conceived and built without a repo checkout on the host. `REQUIREMENTS.md`,
+`docs/PROGRESS.md`, and `docs/TROUBLESHOOTING.md` remain in the repository as the
+project's own record but aren't rendered in-app — see `REQUIREMENTS.md` D36.
+
 Watch for the **hand-over** (`REQUIREMENTS.md` UC-3): the producer replays the full
 Kaggle dataset (~67 minutes at the default 100 msg/s) before switching to synthetic
 generation — the Ingestion step's mode badge flips from `REPLAY` to `SYNTHETIC` when it

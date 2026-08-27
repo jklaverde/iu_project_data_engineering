@@ -1,5 +1,7 @@
 import type {
   AdminAlert,
+  AdminDoc,
+  AdminDocSummary,
   PipelineState,
   Role,
   SensorsResponse,
@@ -69,6 +71,14 @@ export function fetchSensorTimeline(
 
 export function fetchAdminAlerts(): Promise<{ alerts: AdminAlert[] }> {
   return request("/api/admin/alerts");
+}
+
+export function fetchAdminDocs(): Promise<{ docs: AdminDocSummary[] }> {
+  return request("/api/admin/docs");
+}
+
+export function fetchAdminDoc(docId: string): Promise<AdminDoc> {
+  return request(`/api/admin/docs/${encodeURIComponent(docId)}`);
 }
 
 export function connectPipelineStateSocket(

@@ -227,3 +227,14 @@ export interface AdminAlert {
   generator_url: string | null;
   received_at: string;
 }
+
+// Mirrors backend/app/routers/docs.py (admin-only "Docs" tab).
+
+export interface AdminDocSummary {
+  id: string;
+  title: string;
+}
+
+export interface AdminDoc extends AdminDocSummary {
+  content: string;
+}

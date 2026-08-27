@@ -11,7 +11,7 @@ from .cassandra_client import CassandraReader
 from .config import load_config
 from .kafka_client import KafkaReader
 from .logging_setup import configure_logging
-from .routers import admin, anomalies, auth, sensors, steps, ws
+from .routers import admin, anomalies, auth, docs, sensors, steps, ws
 from .state_poller import StatePoller
 from .ws_manager import ConnectionManager
 
@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(sensors.router, dependencies=[Depends(require_session)])
     app.include_router(admin.webhook_router)
     app.include_router(admin.alerts_router, dependencies=[Depends(require_admin)])
+    app.include_router(docs.router, dependencies=[Depends(require_admin)])
     app.include_router(ws.router)
 
     # Serves the React build (mounted last so it only catches paths no API
