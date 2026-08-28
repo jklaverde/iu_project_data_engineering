@@ -1,53 +1,34 @@
-import logging
+import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, status
-
-logger = logging.getLogger(__name__)
+from fastapi.responses import FileResponse
 
 # Admin-only surface (gated at app.include_router() in main.py, matching this
-# codebase's existing pattern - see admin.alerts_router). Serves the project's
-# own .md documentation from inside the image (backend/Dockerfile copies these
-# files in at build time - see docs_bundle/), so an administrator can read how
-# the system was conceived and built without leaving the app or needing repo
-# access on the host.
-router = APIRouter(prefix="/api/admin/docs", tags=["admin"])
+# codebase's existing pattern - see admin.alerts_router). Serves the local
+# docs/ site (backend/Dockerfile copies it in at build time - see docs_site/)
+# byte-for-byte, so an administrator sees exactly the same pages a developer
+# opens directly via file://, one authored place, two ways to read it (D36/D37).
+router = APIRouter(prefix="/api/admin/docs-site", tags=["admin"])
 
-DOCS_DIR = Path(__file__).resolve().parent.parent.parent / "docs_bundle"
+DOCS_DIR = (Path(__file__).resolve().parent.parent.parent / "docs_site").resolve()
 
-# Ordered the way a newcomer should read them: project overview first, then
-# how the system is built, then what every file does, then how to deploy it.
-# Scoped to what an administrator needs to understand the running system -
-# REQUIREMENTS.md (full decision log), PROGRESS.md (development status) and
-# TROUBLESHOOTING.md (dev-time incident notes) stay in the repository as the
-# project's own record but are deliberately not served here.
-CATALOG = [
-    {"id": "readme", "title": "README — Project Overview & Quick Start", "filename": "README.md"},
-    {"id": "architecture", "title": "Architecture — How the System Is Built", "filename": "ARCHITECTURE.md"},
-    {"id": "project-structure", "title": "Project Structure — What Every File Does", "filename": "PROJECT_STRUCTURE.md"},
-    {"id": "deployment", "title": "Deployment — Putting This on a Public VPS", "filename": "DEPLOYMENT.md"},
-]
-CATALOG_BY_ID = {entry["id"]: entry for entry in CATALOG}
+# The frontend's DocsTab.tsx hardcodes this same small set of top-level pages
+# to iframe - docs/assets/ and docs/vendor/ are fetched by those pages
+# themselves via relative paths, never listed here.
+PAGES = ["index.html", "containers.html", "deployment.html", "operations.html", "reference.html"]
 
 
 @router.get("")
-async def list_docs():
-    return {"docs": [{"id": entry["id"], "title": entry["title"]} for entry in CATALOG]}
+async def docs_site_index():
+    return await get_doc_asset("index.html")
 
 
-@router.get("/{doc_id}")
-async def get_doc(doc_id: str):
-    entry = CATALOG_BY_ID.get(doc_id)
-    if entry is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown document")
+@router.get("/{path:path}")
+async def get_doc_asset(path: str):
+    target = (DOCS_DIR / (path or "index.html")).resolve()
+    if not target.is_relative_to(DOCS_DIR) or not target.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    path = DOCS_DIR / entry["filename"]
-    try:
-        content = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        # Would mean the Dockerfile's COPY list and this CATALOG have drifted
-        # apart - a build-time problem, not a client error.
-        logger.error("doc file missing from image: %s", path)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Document unavailable")
-
-    return {"id": entry["id"], "title": entry["title"], "content": content}
+    media_type, _ = mimetypes.guess_type(str(target))
+    return FileResponse(target, media_type=media_type)

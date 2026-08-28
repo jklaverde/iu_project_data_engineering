@@ -11,7 +11,7 @@ services:
     # whole volume while the already-running `kafka` container is actively
     # renaming its own checkpoint files underneath it is a real race
     # ("No such file or directory" on a live .tmp file - see
-    # docs/TROUBLESHOOTING.md). After the first real init, this becomes a
+    # docs/operations.html#p11-1). After the first real init, this becomes a
     # no-op that never touches Kafka's live files again.
     command:
       - "mkdir -p /var/lib/kafka/kafka_data && [ \"$(stat -c '%u' /var/lib/kafka/kafka_data)\" = \"1000\" ] || chown -R 1000:1000 /var/lib/kafka/kafka_data"
@@ -198,7 +198,7 @@ services:
     # 3 independent applyInPandasWithState queries (raw_events, agg_1m,
     # agg_1h) share whatever executor(s) run here, each spawning its own
     # Python worker subprocess on top of the JVM heap - 1500m proved too
-    # tight under a real backlog catch-up burst (docs/TROUBLESHOOTING.md).
+    # tight under a real backlog catch-up burst (docs/operations.html#p10-1).
     mem_limit: 2560m
     restart: unless-stopped
 

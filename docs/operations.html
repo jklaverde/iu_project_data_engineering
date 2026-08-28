@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operations — iu-sensor-pipeline</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">Operations &<br><span class="accent">Troubleshooting</span></span>
+      <span class="brand-sub">local · v1</span>
+    </div>
+    <a class="hub-link" href="index.html">&larr; All documentation</a>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="filterInput" placeholder="Search status, decisions, bugs…" autocomplete="off">
+    </div>
+
+    <nav class="toc" id="tocNav">
+      <div data-group>
+        <p class="toc-group-label">Status &amp; history</p>
+        <div class="toc-links">
+          <a href="#status" data-name="status phase table">Status</a>
+          <a href="#resuming-locally" data-name="resuming locally docker compose up">Resuming locally</a>
+          <a href="#decisions" data-name="implementation decisions beyond requirements">Implementation decisions</a>
+          <a href="#interim-vps" data-name="interim vps deployment">Interim VPS deployment</a>
+          <a href="#next" data-name="where to pick this up next priorities">Where to pick this up next</a>
+        </div>
+      </div>
+      <div data-group>
+        <p class="toc-group-label">Troubleshooting log</p>
+        <div class="toc-links">
+          <a href="#troubleshooting" data-name="troubleshooting log all">All incidents</a>
+          <a href="#p1" data-name="p1 foundation">P1 — Foundation</a>
+          <a href="#p3" data-name="p3 processing spark">P3 — Processing</a>
+          <a href="#p4" data-name="p4 observability">P4 — Observability</a>
+          <a href="#p5" data-name="p5 web app">P5 — Web app</a>
+          <a href="#p6" data-name="p6 vps deployment">P6 — VPS deployment</a>
+          <a href="#p8" data-name="p8 role based redirect">P8 — Role-based redirect</a>
+          <a href="#p9" data-name="p9 exited containers">P9 — Exited containers</a>
+          <a href="#p10" data-name="p10 oom spark">P10 — Executor OOM</a>
+          <a href="#p11" data-name="p11 volume init race">P11 — Volume-init race</a>
+        </div>
+      </div>
+    </nav>
+
+    <p class="sidebar-foot">Status/decisions from <code>PROGRESS.md</code> + the full bug log from <code>TROUBLESHOOTING.md</code>, merged — both were "why is it built this way" documents that referenced each other constantly.</p>
+  </aside>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Status · decisions · known issues</p>
+      <h1 class="hero-title">What's done, why, and what broke.</h1>
+      <p class="hero-lede">
+        A running status doc so a future session (or a different machine) can pick
+        this project back up without re-deriving context, plus a searchable log of
+        every non-obvious bug found while building and operating the stack — symptom,
+        cause, how it was found, the fix, and the general lesson. See
+        <code>REQUIREMENTS.md</code> for the frozen spec and phase roadmap (§14) —
+        this page tracks progress <em>against</em> that roadmap, plus
+        implementation-level decisions the spec doesn't cover.
+      </p>
+    </section>
+
+    <div class="callout">
+      <strong>If you're picking this project back up</strong>, read
+      <a href="#next">"Where to pick this up next"</a> first — it's the prioritized
+      list of what's actually worth doing, ahead of everything else on this page.
+    </div>
+
+    <section class="doc-section" id="status">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ops)"></span>Status</h2></div>
+      <p class="prose-body" style="max-width:72ch;">
+        <strong>P1–P5 done, committed.</strong> Interim single-VPS deployment done and
+        live-validated on a real VPS. P8 (role-based redirect, R0–R5) implemented
+        <strong>and</strong> live-verified end to end locally (one real bug found and
+        fixed: the <code>loki</code> healthcheck — see <a href="#p8">P8 §1</a>). Full
+        P6 (3-VPS k3s) and P7 (endurance) not started.
+      </p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <tr><th>Phase</th><th>What it is</th><th>Status</th></tr>
+          <tr><td>P1 — Foundation</td><td>docker-compose stack: Kafka, Cassandra, Spark (standalone, no job), Prometheus, Grafana</td><td><span class="pill pill--done">Done</span> (commits <code>cab33ec</code>, <code>e0d4d25</code>)</td></tr>
+          <tr><td>P2 — Ingestion</td><td>Producer: Kaggle replay + synthetic hand-over</td><td><span class="pill pill--done">Done</span> (commit <code>3d141b4</code>)</td></tr>
+          <tr><td>P3 — Processing</td><td>PySpark Structured Streaming job: validation, anomalies, dual windows, Cassandra sink</td><td><span class="pill pill--done">Done</span></td></tr>
+          <tr><td>P4 — Observability</td><td>Exporters wired, Grafana dashboards provisioned (KPI-1..5)</td><td><span class="pill pill--done">Done</span></td></tr>
+          <tr><td>P5 — Web app</td><td>FastAPI read-only API + React (TypeScript) guided UI + basic login</td><td><span class="pill pill--done">Done</span></td></tr>
+          <tr><td>Interim VPS deployment</td><td><code>dataset-init</code>, reboot-safe restart policies, a real Grafana dashboard bug found and fixed on a live deploy</td><td><span class="pill pill--done">Done</span> — actually deployed and used on a real Linux VPS</td></tr>
+          <tr><td>P6 (full) — VPS deployment</td><td>3 Contabo VPS, k3s, hardening, Kafka/Cassandra replicated across nodes</td><td><span class="pill pill--todo">Not started</span></td></tr>
+          <tr><td>P7 — Endurance</td><td>48-hour run against §10 acceptance criteria</td><td><span class="pill pill--todo">Not started</span></td></tr>
+          <tr><td>P8 — Role-based redirect</td><td>Two roles, <code>device_metadata</code>/<code>device_thresholds</code>, Leaflet map, Loki+Promtail, Grafana alerting + webhook + Alerts tab, D34/D35 timeline+log</td><td><span class="pill pill--done">Done — live-verified</span> against a real <code>docker compose up</code></td></tr>
+        </table>
+      </div>
+      <p class="prose-body" style="max-width:72ch;">
+        P8 extended twice more since: <strong>D34</strong> replaced the planner's
+        citizen-alert text feed with five behavior-over-time charts per metric
+        (minute/hour/day/week/month, shaded unhealthy spans, <code>SensorTimeline.tsx</code>);
+        <strong>D35</strong> added an out-of-range log (<code>BoundaryLog.tsx</code>) below
+        those charts. Both live-verified in the browser with real anomaly data.
+      </p>
+    </section>
+
+    <section class="doc-section" id="resuming-locally">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ops)"></span>Resuming locally</h2></div>
+      <div class="prose-body">
+        <pre><code>docker compose up -d --wait</code></pre>
+        <p>Brings up the full stack — the producer starts automatically and immediately
+          begins replaying the Kaggle dataset at 100 msg/s into topic
+          <code>sensor-readings</code>, and the Spark job starts consuming and writing
+          to Cassandra right after. Grafana auto-provisions both datasources and the
+          KPI dashboard with zero manual steps. See the root <code>README.md</code> for
+          the verification checklist.</p>
+        <p><strong>Always use this bare, whole-project form</strong> (no service name)
+          to resume/reconcile — a scoped <code>docker compose up -d --build &lt;service&gt;</code>
+          only touches that one service and leaves any sibling that had drifted to
+          <code>Exited</code> (host sleep, a Docker Desktop restart, a crash loop) dead
+          until something names it again (<a href="#p9">P9</a>).</p>
+        <div class="callout warn">
+          If you edit <code>infra/prometheus/prometheus.yml</code> while the stack is
+          already running, <code>docker compose restart prometheus</code> is required
+          — it does not hot-reload scrape config from a running container.
+        </div>
+        <p><strong>Heads up on cold start:</strong> on first launch (or after a full
+          <code>down -v</code>), the Spark job recomputes its anomaly-detection
+          baseline from the CSV (~30–60s) before it starts consuming, and if Kafka
+          already has a large backlog, the first micro-batch can take several minutes
+          to catch up — expected, not a hang (see <a href="#p3">P3</a>).</p>
+        <p>The Kaggle dataset is fetched automatically by the <code>dataset-init</code>
+          one-shot service into a named volume — no manual step, and a no-op on
+          restarts once the volume has the file (see <a href="#p6">P6</a> for the bug
+          this replaced). To fetch it by hand instead, run
+          <code>python kaggle_repository/download_repository.py</code>.</p>
+      </div>
+    </section>
+
+    <section class="doc-section" id="decisions">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ops)"></span>Implementation decisions beyond the spec</h2></div>
+      <p class="subhead-note"><code>REQUIREMENTS.md</code> is frozen and deliberately doesn't cover
+        implementation details. These were decided while building and matter for anything downstream
+        that touches the same surfaces.</p>
+
+      <div class="prose-body">
+        <h4 class="doc-h4">Kafka / Cassandra (P1)</h4>
+        <ul>
+          <li>Compose project is named <code>iu-sensor-pipeline</code> and no service sets an
+            explicit <code>container_name:</code> — namespaces every container to avoid clashing
+            with unrelated Docker projects on a shared dev machine (<a href="#p1">P1 §3</a>).</li>
+          <li>Kafka's actual KRaft log directory had to be pinned via <code>KAFKA_LOG_DIRS</code> to
+            match the mounted volume (<a href="#p1">P1 §2</a>) — do not drop that env var without
+            re-verifying persistence across a real <code>down && up -d</code> cycle.</li>
+          <li><code>raw_events</code> is partitioned by <code>(device_id, bucket_start)</code> where
+            <code>bucket_start</code> is a <strong>15-minute</strong> bucket, sized for the NFR-2
+            endurance rate. <code>agg_1m</code> / <code>agg_1h</code> are partitioned by
+            <code>(device_id, day)</code> / <code>(device_id, month)</code>.</li>
+          <li>The <code>raw_events</code> table has a few columns beyond the literal §5.2 field list:
+            <code>write_ts</code> (Spark sink write time, feeds KPI-2), <code>is_synthetic</code>,
+            <code>is_anomaly</code>, <code>anomaly_reason</code>. The producer only ever populates
+            <code>is_synthetic</code> — the rest are Spark-job-owned.</li>
+          <li>Grafana gets no default credential — <code>GF_SECURITY_ADMIN_PASSWORD</code> is required
+            with no fallback.</li>
+        </ul>
+
+        <h4 class="doc-h4">Producer (P2) — the wire contract P3 must consume</h4>
+        <ul>
+          <li>Kafka message value is JSON with exactly: <code>event_id, device_id, event_ts,
+            ingest_ts, co, humidity, lpg, smoke, temp, light, motion, pressure, is_synthetic</code>.
+            No <code>is_anomaly</code>/<code>anomaly_reason</code>/<code>write_ts</code>/<code>bucket_start</code>
+            — those are Spark/Cassandra-sink-owned.</li>
+          <li><code>event_ts</code>/<code>ingest_ts</code> are <strong>ISO-8601 UTC strings with
+            millisecond precision</strong>, e.g. <code>"2026-08-18T10:00:00.000Z"</code> — not epoch
+            millis, so Spark's <code>to_timestamp()</code> parses natively.</li>
+          <li>Kafka message key = <code>device_id</code> (UTF-8) — matches FR-K1's partitioning
+            intent.</li>
+          <li>The producer runs <strong>always-on</strong> with plain <code>docker compose up -d</code>
+            (no <code>profiles:</code> gating) — every restart re-starts ingestion from the beginning
+            of the CSV unless <code>PRODUCER_REPLAY_ROW_LIMIT</code> is set.</li>
+          <li>Producer state is exposed at <code>GET http://localhost:${PRODUCER_STATE_PORT}/state</code>
+            — read-only telemetry (FR-I4), not a control surface. UC-7 (UI control panel) remains an
+            explicitly later phase.</li>
+          <li>Anomaly injection (synthetic mode only) can spike <strong>multiple metrics per event</strong>
+            simultaneously (weighted 1/2/3 metrics: 70/25/5%), each offset by
+            <code>PRODUCER_ANOMALY_SIGMA_MULTIPLIER</code> (default 4.0, deliberately above §5.4's 3σ
+            threshold to survive baseline drift). P3's detector expects this.</li>
+        </ul>
+
+        <h4 class="doc-h4">Spark job (P3)</h4>
+        <ul>
+          <li>Anomaly detection uses an <strong>adaptive EWMA</strong> per (device, metric) — not a
+            static one-time baseline — seeded from a batch read of the CSV at startup, then
+            continuously updated (decay <code>SPARK_JOB_ANOMALY_EWMA_ALPHA</code>, default 0.001, ≈
+            2000-event/12–60s effective window). Checked <strong>before</strong> updating with the
+            current event's own value.</li>
+          <li>A separate <strong>static per-device absolute ceiling</strong> exists for
+            <code>co</code>/<code>smoke</code>/<code>lpg</code> only (<code>max(observed_max, p999) × 1.5</code>).
+            <code>temp</code>/<code>humidity</code> rely on the sigma rule alone.</li>
+          <li><code>anomaly_reason</code> is a semicolon-joined <code>metric:kind(detail)</code> string
+            and can reflect multiple simultaneously-triggering metrics on one event. Confirmed working
+            for both real historical-data outliers during replay and injected synthetic anomalies.</li>
+          <li>Three fully independent Structured Streaming queries (<code>raw_events</code>,
+            <code>agg_1m</code>, <code>agg_1h</code>), each with its own Kafka read and own checkpoint
+            (state-store data is written by executors — <a href="#p3">P3 §5</a>).</li>
+          <li><code>write_ts</code> exists only on <code>raw_events</code> — do not add it to
+            <code>agg_1m</code>/<code>agg_1h</code> writes, their schemas don't have that column
+            (<a href="#p3">P3 §8</a>).</li>
+          <li>FR-S4: same pattern as the producer — a stdlib HTTP <code>/state</code> endpoint fed by a
+            custom <code>StreamingQueryListener</code> (Spark's own REST API on :4040 doesn't expose
+            Structured Streaming query progress).</li>
+          <li><code>spark-worker</code> builds a custom image instead of pulling
+            <code>apache/spark:3.5.9</code> directly, and mounts both the dataset and checkpoint
+            volumes — required because executors run there, not the driver (<a href="#p3">P3</a>,
+            entirely about this driver/executor distinction).</li>
+        </ul>
+
+        <h4 class="doc-h4">Observability (P4) — wire contract for P5</h4>
+        <ul>
+          <li>Producer and Spark job both gained <code>GET /metrics</code> (hand-formatted Prometheus
+            text, no <code>prometheus_client</code> dependency) alongside <code>/state</code> — same
+            port, same HTTP server.</li>
+          <li><strong>KPI-1 lag is genuinely 3 separate numbers</strong> — the three queries are
+            independent Kafka consumers (Structured Streaming doesn't use classic consumer-group
+            offsets); lag is broker offset minus Spark's self-reported offset, by query — don't
+            collapse to one number.</li>
+          <li><strong>KPI-2 latency is a per-micro-batch snapshot</strong> (p50/p95/max of
+            <code>write_ts − event_ts</code>, plus a hop breakdown), computed only where all 3
+            timestamps exist on one row (<code>raw_events</code>). Refreshed every trigger interval,
+            not a true cross-batch streaming quantile.</li>
+          <li><strong>Grafana needs two datasources</strong> — Prometheus (KPI-1/2/4) and a baked-in
+            Cassandra plugin (KPI-3/5), installed at a path <strong>outside</strong> the pre-existing
+            <code>grafana_data</code> volume (would otherwise be silently shadowed forever).</li>
+          <li><strong>Cassandra builds a custom image too</strong>, baking in a jmx_exporter javaagent.
+            The exporter config is fetched verbatim from jmx_exporter's own official example — if KPI-4
+            metrics ever need to change, re-diff against upstream rather than guessing MBean names
+            (<a href="#p4">P4 §12</a>).</li>
+          <li>The dashboard's <code>$device_id</code> variable is a <strong>static list</strong> (the 3
+            real device MAC IDs), not CQL-driven — <code>SELECT DISTINCT</code> isn't valid on a
+            partial partition-key column in Cassandra.</li>
+        </ul>
+
+        <h4 class="doc-h4">Web app (P5)</h4>
+        <ul>
+          <li><strong>One combined container.</strong> <code>backend</code>'s Dockerfile is
+            multi-stage: a Node stage builds React, a Python stage serves the built <code>dist/</code>
+            via <code>StaticFiles</code> at <code>/</code>, alongside <code>/api/*</code> and
+            <code>/ws/*</code>.</li>
+          <li><strong>Auth:</strong> two fixed credential pairs (admin/planner, both required env
+            vars, no defaults) plus a hand-rolled HMAC-SHA256-signed session cookie — no
+            session-management dependency, deliberately, since there's no user table.</li>
+          <li><strong>Live updates:</strong> WebSocket is primary; the frontend falls back to polling
+            if the socket doesn't open within 3s or drops. The backend's own background loops poll
+            regardless of which transport reaches the browser.</li>
+          <li><strong>Upstream-outage resilience:</strong> the state poller caches the last-known-good
+            producer/spark-job state and merges fresh data on top of that cache rather than
+            <code>{}</code> — a transient restart no longer changes the response <em>shape</em>. Added
+            after a real crash was found live (<a href="#p5">P5 §2</a>) — do not remove this caching
+            without re-verifying survival of a mid-session <code>restart producer</code>.</li>
+          <li><strong>Cassandra "recent rows" bucket selection is event-time-based, not wall-clock</strong>
+            — derives which partitions to point-read from real timestamps sampled off Kafka, required
+            because REPLAY-mode <code>event_ts</code> used to be historical (<a href="#p5">P5 §1</a>).</li>
+          <li><strong>No Docker socket</strong> is used for the deployment-status step — every service
+            is probed over its own HTTP/TCP port instead.</li>
+          <li><strong>Known, accepted limitation:</strong> <code>/api/anomalies</code> can hit
+            <code>READ_TOO_MANY_TOMBSTONES</code> under high data volume, shared with the P4 Grafana
+            panel it mirrors (<a href="#p5">P5 §3</a>).</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc-section" id="interim-vps">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ops)"></span>Interim VPS deployment</h2></div>
+      <div class="prose-body">
+        <p>Not the full <code>REQUIREMENTS.md</code> §4.1 target (3-VPS k3s — that's "full P6," not
+          started). This is smaller, real work: making the existing single-host Compose stack actually
+          deployable on a public VPS — and <strong>it has genuinely been deployed to and exercised on a
+          real Linux VPS</strong> (dataset fetch tested cold, Grafana login reconfigured, a real
+          dashboard bug found and fixed against the live instance).</p>
+        <ul>
+          <li><strong><code>dataset-init</code></strong> — a one-shot service, same idiom as
+            <code>kafka-topic-init</code>/<code>cassandra-schema-init</code>, downloads the Kaggle
+            dataset into a named volume before <code>producer</code>/<code>spark-job</code>/<code>spark-worker</code>
+            start. Replaces a manual host-side step that was easy to forget and failed outright on
+            modern Debian/Ubuntu (PEP 668). Confirmed needs no Kaggle credentials. Full story:
+            <a href="#p6">P6 §1</a>.</li>
+          <li><strong>Every long-running service got <code>restart: unless-stopped</code></strong> —
+            without this, an unattended VPS reboot leaves most of the stack down.</li>
+          <li>This documentation site is new — the "how it's built" and "how to deploy it" docs are
+            written to be read by a newcomer, not just future-Claude.</li>
+          <li>A real bug was found and fixed against the <strong>live</strong> VPS deployment: four
+            KPI-5 Grafana panels used bare <code>$granularity</code> in a table-name position instead
+            of <code>${granularity}</code>. Full story: <a href="#p4">P4 §14</a>.</li>
+          <li>The live VPS deployment's IP/credentials are intentionally not recorded anywhere in this
+            repo.</li>
+        </ul>
+        <h4 class="doc-h4">What full P6 (k3s) needs to know</h4>
+        <ul>
+          <li>The whole web app is <strong>one container</strong> — P6's k3s manifests need exactly one
+            Deployment/Service for it, not two. No Docker socket dependency to port.</li>
+          <li><code>BACKEND_ADMIN_PASSWORD</code> and <code>BACKEND_SESSION_SECRET</code> are required
+            env vars with no defaults — P6's secrets management needs to supply both.
+            <code>BACKEND_COOKIE_SECURE=false</code> is local-dev-only; P6 must set it <code>true</code>.</li>
+          <li>All three Python services' lockfiles are hash-pinned and installed with
+            <code>--require-hashes</code> — regenerate via <code>pip-compile --generate-hashes</code>
+            (see <code>backend/README.md</code>), don't hand-edit.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="doc-section" id="next">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ops)"></span>Where to pick this up next</h2></div>
+      <div class="prose-body">
+        <ol>
+          <li><strong>P8 is now live-verified locally</strong> — what's not yet confirmed: a
+            sustained/restart-cycled run (Promtail's Docker-socket bind-mount on a different host OS,
+            Loki/Grafana behavior across a <code>down && up</code> cycle). Low priority unless P7 or a
+            real VPS deployment surfaces something.</li>
+          <li><strong>Full P6 (3-VPS k3s cluster)</strong> — the actual next roadmap phase. Needs: k3s
+            manifests (StatefulSets for Kafka/Cassandra, D19 — no operators), Traefik ingress +
+            self-signed TLS (D25), flannel WireGuard inter-node traffic, NFR-11 firewall rules, NFR-12
+            node sizing. <a href="#interim-vps">"What full P6 needs to know"</a> above has the
+            wire-contract details already confirmed.</li>
+          <li><strong>P7 — 48-hour endurance run</strong> (§10) — can be attempted against the current
+            single-VPS or local deployment even before full P6 exists. Worth checking with the user
+            whether they want this run now or want to wait for full P6.</li>
+          <li><strong>UC-7 — web app control panel</strong> (start/stop producer, trigger hand-over) —
+            explicitly deferred since Phase 1's inception. The backend already reserves
+            <code>/api/control/*</code> as the intended seam. Self-contained, medium-sized addition.</li>
+          <li><strong>Known technical debt, not yet fixed:</strong>
+            <ul>
+              <li><code>/api/anomalies</code> and its mirrored Grafana panel can hit
+                <code>READ_TOO_MANY_TOMBSTONES</code> under sustained data volume
+                (<a href="#p5">P5 §3</a>) — likely needs a Spark-sink-level fix (write <code>unset</code>
+                instead of <code>null</code>) or Cassandra compaction tuning.</li>
+              <li>The frontend's production JS bundle is a single ~1.45 MB chunk — code-splitting
+                (lazy-load ECharts/Leaflet per role) would help initial load but wasn't judged worth
+                the complexity at this scale.</li>
+            </ul>
+          </li>
+          <li><strong>Anything not listed here</strong> — this page should cover essentially every
+            non-obvious decision and gotcha in the codebase. If a question isn't answered here, it's
+            genuinely new ground — treat it with the same rigor: verify against the real running
+            system, don't assume, surface real trade-offs rather than silently deciding them.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============================= TROUBLESHOOTING LOG ============================= -->
+    <section class="doc-section" id="troubleshooting">
+      <div class="category-head">
+        <h2><span class="swatch" style="background:var(--cat-ops)"></span>Troubleshooting log</h2>
+        <p class="category-desc">Non-obvious bugs, gotchas, and environment quirks — ordered by phase. Kept so a future debugging session doesn't rediscover the same root cause from scratch.</p>
+      </div>
+
+      <div class="phase-group" id="p1">
+        <div class="phase-head"><h3>P1 — Foundation (local docker-compose stack)</h3><span class="phase-tag">3 incidents</span></div>
+
+        <details class="incident" id="p1-1" data-name="cassandra crash loop snitch class GossipPropertyFileSnitch">
+          <summary><span class="incident-num">#1</span> Cassandra crash-loops on boot: unable to find snitch class</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>cassandra</code> exits immediately (exit code 3) on every start;
+              <code>docker compose logs cassandra</code> shows
+              <code>ConfigurationException: Unable to find snitch class
+              'org.apache.cassandra.locator.GossipPropertyFileSnitch'</code>.</p>
+            <h5>Cause</h5>
+            <p>Typo. The real class is <code>GossipingPropertyFileSnitch</code> (with "-ing") — there
+              is no <code>GossipPropertyFileSnitch</code> in Cassandra.</p>
+            <h5>Fix</h5>
+            <p><code>CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch</code> in
+              <code>docker-compose.yml</code>.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p1-2" data-name="kafka data does not survive restart KAFKA_LOG_DIRS volume">
+          <summary><span class="incident-num">#2</span> Kafka data silently does not survive a restart (breaks NFR-8)</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>No error at all — the stack looks healthy after every restart. But the topic's
+              <code>TopicId</code> is different every time, meaning the whole KRaft cluster was
+              silently recreated from scratch.</p>
+            <h5>Cause</h5>
+            <p>The volume was mounted at <code>/var/lib/kafka/kafka_data</code>, but the
+              <code>apache/kafka:3.7.0</code> image's actual KRaft log directory is
+              <code>/tmp/kafka-logs</code> — visible only in the JVM's own runtime log line, not in
+              the config file that looks effective but is just a template. The mounted volume was
+              therefore never actually written to.</p>
+            <h5>How it was found</h5>
+            <p>Inserted a probe row / recorded a <code>TopicId</code>, ran a real
+              <code>down</code> + <code>up -d</code> cycle, and diffed before/after — config
+              validation alone does not catch this class of bug.</p>
+            <h5>Fix</h5>
+            <p>Two parts: (1) <code>KAFKA_LOG_DIRS: /var/lib/kafka/kafka_data</code> explicitly set.
+              (2) A new one-shot <code>kafka-volume-init</code> service (runs as root, chowns the
+              volume) that <code>kafka</code> depends on via <code>service_completed_successfully</code>
+              — needed because a fresh named volume mounts root-owned by default, but the image runs
+              as non-root uid 1000.</p>
+            <h5>General lesson</h5>
+            <p>Don't trust a config file found via <code>find</code>/<code>cat</code> inside an image
+              to be the effective runtime config — confirm the actual data directory from the
+              process's own startup log, and confirm persistence by actually cycling the stack and
+              diffing an identifier, not just checking the container starts.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p1-3" data-name="port collisions container name collisions kafka-ui container_name">
+          <summary><span class="incident-num">#3</span> Host port / container-name collisions are with unrelated things on this machine</summary>
+          <div class="incident-body">
+            <h5>Symptom &amp; cause</h5>
+            <p><code>kafka-ui</code>'s default host port 8080 collided with an unrelated pre-existing
+              process on this dev machine — worked around by remapping <code>KAFKA_UI_PORT</code> in
+              the local, gitignored <code>.env</code> (deliberately not changed in
+              <code>.env.example</code>). Separately, stopped leftover containers already existed
+              named <code>kafka</code>/<code>kafka-ui</code>/<code>spark-master</code> from unrelated
+              old projects.</p>
+            <h5>Fix</h5>
+            <p>Fixed at the project level, not by touching those containers: added
+              <code>name: iu-sensor-pipeline</code> at the top of <code>docker-compose.yml</code> and
+              removed every explicit <code>container_name:</code> override, so Compose namespaces
+              everything as <code>iu-sensor-pipeline-&lt;service&gt;-1</code>.</p>
+            <h5>General lesson</h5>
+            <p>Don't hardcode <code>container_name:</code> in a compose file meant to run on a shared
+              dev machine — let Compose's project-prefixed default naming do its job.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="phase-group" id="p3">
+        <div class="phase-head"><h3>P3 — Processing (PySpark Structured Streaming job)</h3><span class="phase-tag">5 incidents</span></div>
+        <p class="prose-body" style="max-width:72ch; font-size:0.86rem; color:var(--muted);">
+          The unifying theme of every bug below: <strong>this is a real distributed cluster</strong> (a
+          <code>spark-job</code> driver container plus a separate <code>spark-worker</code> executor
+          container), not a single-process local Spark session. Anything that "obviously" only needs
+          to exist on the driver can silently fail on the executor instead. Every fix is a variant of
+          "make sure executors have it too, not just the driver."
+        </p>
+
+        <details class="incident" id="p3-4" data-name="batch csv read fails executor file does not exist mount">
+          <summary><span class="incident-num">#4</span> Batch CSV read fails on the executor: file does not exist</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>The job's one-time baseline-seed read fails with <code>SparkFileNotFoundException</code>,
+              reported by a task running on the <strong>worker's</strong> IP, not the driver.</p>
+            <h5>Cause</h5>
+            <p><code>spark.read.csv(...)</code> is a distributed batch read — Spark schedules the
+              actual read task on an executor, not the driver. Only <code>spark-job</code>'s compose
+              service had the volume mounted.</p>
+            <h5>Fix</h5>
+            <p>Mount the same volume into <code>spark-worker</code> too.</p>
+            <h5>General lesson</h5>
+            <p>Any local file path a Spark job reads or writes must be mounted identically on every
+              node that can run a task for that job, not just the driver — true even for a
+              single-worker "cluster."</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p3-5" data-name="checkpoint mkdir fails state store spark-job-volume-init chown">
+          <summary><span class="incident-num">#5</span> Checkpoint mkdir fails for state-store paths</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>java.io.IOException: mkdir of file:/opt/spark-checkpoints/agg_1m/state/1/0/_metadata failed</code>.</p>
+            <h5>Cause</h5>
+            <p>Two layered issues: a fresh named volume mounts root-owned (same lesson as
+              <a href="#p1-2">P1 §2</a>), fixed with a <code>spark-job-volume-init</code> one-shot
+              <code>chown -R 185:185</code>. Less obviously: Structured Streaming's state-store data
+              (for <code>applyInPandasWithState</code> and windowed aggregations) is written by
+              <strong>executors</strong>, not the driver — so <code>spark_checkpoints</code> also
+              needed mounting into <code>spark-worker</code>.</p>
+            <h5>Fix</h5>
+            <p>Mount <code>spark_checkpoints</code> into both <code>spark-job</code> and
+              <code>spark-worker</code>; chown via <code>spark-job-volume-init</code> before either
+              starts.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p3-6" data-name="ModuleNotFoundError pandas pyarrow executor worker.Dockerfile">
+          <summary><span class="incident-num">#6</span> ModuleNotFoundError: pandas / pyarrow on the executor</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>The driver starts fine, but the first micro-batch that runs
+              <code>applyInPandasWithState</code> fails on the executor with
+              <code>ModuleNotFoundError</code>, deep in PySpark's Arrow serialization code.</p>
+            <h5>Cause</h5>
+            <p><code>applyInPandasWithState</code> is a pandas UDF under the hood — needs
+              pandas/pyarrow wherever it actually executes, which is the executor. The base
+              <code>apache/spark:3.5.9</code> image ships neither; <code>spark_job/Dockerfile</code>
+              correctly installs both, but <code>spark-worker</code> was still using the plain
+              upstream image.</p>
+            <h5>Fix</h5>
+            <p>A new <code>spark_job/worker.Dockerfile</code> (base image + the same
+              <code>requirements.txt</code>), and <code>spark-worker</code> switched from a pulled
+              <code>image:</code> to a <code>build:</code> using it.</p>
+            <h5>General lesson</h5>
+            <p>PySpark auto-distributes <code>--packages</code> JARs to executors, but does
+              <strong>not</strong> auto-distribute pip-installed Python packages — those need to be
+              baked into whatever image the executors actually run.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p3-7" data-name="ModuleNotFoundError spark_job cloudpickle py-files zip">
+          <summary><span class="incident-num">#7</span> ModuleNotFoundError: spark_job, unpickling a closure</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>Different from #6 — this is the job's <em>own</em> package failing to import on the
+              executor while deserializing the <code>applyInPandasWithState</code> function via
+              <code>cloudpickle.loads</code>.</p>
+            <h5>Cause</h5>
+            <p>A wrong assumption: cloudpickle pickles functions defined in an <strong>importable
+              module</strong> (as opposed to <code>__main__</code>) <strong>by reference</strong>, not
+              fully "by value" — it expects the receiving side to <code>import</code> it. Since
+              <code>spark_job</code> was never shipped to the executor, unpickling fails there.</p>
+            <h5>Fix</h5>
+            <p>Zip the <code>spark_job/</code> package at build time and add
+              <code>--py-files /opt/app/spark_job.zip</code> to the <code>spark-submit</code> command.</p>
+            <h5>General lesson</h5>
+            <p>Don't assume PySpark UDF closures are executor-independent just because they're passed
+              as plain Python callables — if the function lives in a real package, ship it via
+              <code>--py-files</code> regardless.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p3-8" data-name="cassandra connector rejects columns write_ts agg_1m agg_1h NoSuchElementException">
+          <summary><span class="incident-num">#8</span> Cassandra connector rejects a write with columns the table doesn't have</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>NoSuchElementException: Columns not found in table iot.agg_1h: write_ts</code> —
+              the connector aborts outright rather than silently dropping the column.</p>
+            <h5>Cause</h5>
+            <p>The shared <code>foreachBatch</code> writer helper unconditionally added a
+              <code>write_ts</code> column to every DataFrame, but only <code>raw_events</code>
+              actually has that column — a window's aggregate has no single meaningful "row write
+              time."</p>
+            <h5>Fix</h5>
+            <p>Made <code>stamp_write_ts</code> a parameter of the writer factory, <code>True</code>
+              only for the <code>raw_events</code> query.</p>
+            <h5>General lesson</h5>
+            <p>A generic "one writer for every table" helper is a trap the moment the tables' schemas
+              actually differ — verify against each target table's real column list.</p>
+          </div>
+        </details>
+
+        <p class="prose-body" style="max-width:72ch; font-size:0.86rem; color:var(--muted); margin-top:0.8rem;">
+          <strong>General P3 lesson:</strong> all five bugs above were caught by actually running the
+          job against the live stack — including a stack that already had ~9 hours of real producer
+          traffic queued in Kafka. None would have surfaced from a syntax check or code review alone —
+          they're all specifically about the driver/executor split in a genuine (if small) cluster.
+        </p>
+      </div>
+
+      <div class="phase-group" id="p4">
+        <div class="phase-head"><h3>P4 — Observability (Prometheus exporters, Grafana dashboards)</h3><span class="phase-tag">6 incidents</span></div>
+
+        <details class="incident" id="p4-9" data-name="node-exporter rslave mount fails docker desktop">
+          <summary><span class="incident-num">#9</span> node-exporter's recommended rslave mount fails on Docker Desktop</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>docker compose up</code> fails immediately: <code>path / is mounted on / but it
+              is not a shared or slave mount</code>.</p>
+            <h5>Cause</h5>
+            <p><code>rslave</code> mount propagation needs the source mount to already be a
+              shared/slave mount — not guaranteed by Docker Desktop's Linux VM on Windows.</p>
+            <h5>Fix</h5>
+            <p>Drop the propagation flag, mount as plain <code>/:/host:ro</code>.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p4-10" data-name="cassandra curl certificate ca-certificates https build">
+          <summary><span class="incident-num">#10</span> Cassandra's base image can't download over HTTPS at build time</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>RUN curl -fsSL ... jmx_prometheus_javaagent.jar</code> fails during
+              <code>docker build</code> with <code>error setting certificate file</code>, even after
+              installing curl.</p>
+            <h5>Cause</h5>
+            <p>The base image has neither <code>curl</code> nor <code>ca-certificates</code>. curl
+              alone isn't enough for HTTPS — without a CA bundle it can't verify any TLS certificate.</p>
+            <h5>Fix</h5>
+            <p><code>apt-get install -y curl ca-certificates</code> together.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p4-11" data-name="grafana-cli not found grafana cli subcommand chown group">
+          <summary><span class="incident-num">#11</span> Modern Grafana images don't have grafana-cli</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>grafana-cli: not found</code>.</p>
+            <h5>Cause</h5>
+            <p>Grafana consolidated its CLI into the main binary — it's <code>grafana cli ...</code> (a
+              subcommand), not a separate executable. Confirmed by running <code>grafana --help</code>
+              inside the image.</p>
+            <h5>Fix</h5>
+            <p><code>grafana cli --pluginsDir "$DIR" plugins install &lt;id&gt; &lt;version&gt;</code> —
+              <code>--pluginsDir</code> is a flag on <code>cli</code> itself, before the subcommand.</p>
+            <h5>Related gotcha, same step</h5>
+            <p>The image's <code>grafana</code> user has no matching <code>grafana</code> group — its
+              actual group is <code>root</code> (gid 0). Use <code>chown -R grafana:root</code>, not
+              <code>grafana:grafana</code>.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p4-12" data-name="jmx_exporter metric names storage load count gc collection">
+          <summary><span class="incident-num">#12</span> jmx_exporter: actual metric names differ from assumption</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>Dashboard panels for disk usage and GC pauses show no data even though the exporter is
+              scraping fine.</p>
+            <h5>Cause, two issues</h5>
+            <p>(1) The <code>Storage/Load</code> MBean exposes its value via a <code>Count</code>
+              attribute in this Cassandra version, not <code>Value</code> — producing
+              <code>cassandra_storage_load_count</code>, not the assumed <code>cassandra_storage_load</code>.
+              (2) jmx_exporter's javaagent auto-exports <code>jvm_gc_collection_seconds_{count,sum}</code>
+              from its own built-in JVM collector, independent of the custom rules config — a custom
+              GC rule was silently never used.</p>
+            <h5>How it was found</h5>
+            <p>Curling the exporter's raw <code>/metrics</code> output directly and grepping for the
+              expected names, rather than trusting the dashboard JSON was correct because the config
+              "looked right."</p>
+            <h5>Fix</h5>
+            <p>Dashboard queries updated to <code>cassandra_storage_load_count</code> and
+              <code>jvm_gc_collection_seconds_sum</code> (unit s, not ms); the redundant custom GC rule
+              deleted entirely.</p>
+            <h5>General lesson</h5>
+            <p>Don't trust an exporter config's <em>intended</em> metric names without checking the
+              exporter's actual <code>/metrics</code> output.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p4-13" data-name="CQL LIMIT ALLOW FILTERING clause order">
+          <summary><span class="incident-num">#13</span> CQL clause order: LIMIT before ALLOW FILTERING</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>A Grafana panel query fails with <code>mismatched input 'LIMIT' expecting EOF</code>
+              when the query ends in <code>... ALLOW FILTERING LIMIT 100</code>.</p>
+            <h5>Cause</h5>
+            <p>CQL requires <code>LIMIT</code> to appear <em>before</em> <code>ALLOW FILTERING</code> —
+              the reverse of what reads naturally in English.</p>
+            <h5>How it was found</h5>
+            <p>Testing the dashboard's exact query strings directly against Grafana's
+              <code>/api/ds/query</code> endpoint with real parameters, not just visually reviewing the
+              JSON.</p>
+            <h5>Fix</h5>
+            <p><code>... LIMIT 100 ALLOW FILTERING</code>.</p>
+            <h5>General lesson</h5>
+            <p>For any datasource where the "query" is an opaque string inside dashboard JSON, verify
+              it by actually executing it through the real API before trusting it provisions cleanly.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p4-14" data-name="KPI-5 granularity variable interpolation dollar sign no data replay">
+          <summary><span class="incident-num">#14</span> KPI-5 panels fail: bare $granularity isn't interpolated in a table-name position</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>All four KPI-5 panels error with a CQL parser complaint pointing right after a
+              <code>$</code> character.</p>
+            <h5>Cause</h5>
+            <p>The panel queries used bare <code>$granularity</code> in the <code>FROM</code> clause,
+              while a working variable elsewhere in the same queries used the curly-brace form. The
+              bare form was never substituted — Cassandra's CQL grammar treats a bare <code>$</code> as
+              the start of a dollar-quoted string literal.</p>
+            <h5>How it was found</h5>
+            <p>Reproduced the exact error directly against the real Cassandra container via
+              <code>cqlsh</code>, using the literal unsubstituted query text — then confirmed the fix
+              works with a real value substituted in.</p>
+            <h5>Fix</h5>
+            <p><code>FROM iot.${granularity} WHERE ...</code> in all four KPI-5 panel queries.</p>
+            <h5>Update (D28) — root cause since fixed, kept for history</h5>
+            <p>The "No data during REPLAY" behavior this note originally also covered no longer
+              happens — the producer now stamps <code>event_ts = now()</code> at publish time (same
+              as synthetic mode), so <code>window_start</code> tracks real wall-clock time throughout
+              REPLAY mode too. Same root cause as <a href="#p5-1">P5 §1</a>, just surfacing in a
+              Grafana panel instead of the web app's backend.</p>
+            <h5>General lesson</h5>
+            <p>Don't assume Grafana's bare <code>$var</code> and <code>${var}</code> interpolation are
+              interchangeable in every position — prefer <code>${var}</code> everywhere for raw-query
+              datasources to remove the ambiguity entirely.</p>
+          </div>
+        </details>
+
+        <p class="prose-body" style="max-width:72ch; font-size:0.86rem; color:var(--muted); margin-top:0.8rem;">
+          <strong>General P4 lesson:</strong> every finding above was caught by reading an official
+          upstream example/tool's output directly, or actually executing the exact query/command a
+          dashboard or Dockerfile would run, rather than treating "the config looks right" as
+          sufficient.
+        </p>
+      </div>
+
+      <div class="phase-group" id="p5">
+        <div class="phase-head"><h3>P5 — Web app (FastAPI backend + React frontend)</h3><span class="phase-tag">3 incidents</span></div>
+
+        <details class="incident" id="p5-1" data-name="recent cassandra rows replay mode event_ts bucket wall clock">
+          <summary><span class="incident-num">#1</span> "Recent Cassandra rows" returns nothing during REPLAY mode</summary>
+          <div class="incident-body">
+            <h5>Update (D28)</h5>
+            <p>Root cause now fixed at the producer (<code>event_ts = now()</code>, see
+              <a href="#p4-14">P4 §14</a>). The workaround below is no longer strictly necessary but is
+              harmless and hasn't been ripped out.</p>
+            <h5>Symptom</h5>
+            <p>The Cassandra step's "recent rows" panel showed old/unrelated rows (or none) for most of
+              a fresh session, only correct once the producer handed over to synthetic generation.</p>
+            <h5>Cause</h5>
+            <p><code>raw_events</code>' partition key is <code>(device_id, bucket_start)</code>, derived
+              from each row's own <code>event_ts</code> — NOT wall-clock time. During REPLAY, that was
+              a historical Kaggle date, so a query guessing "the current bucket" from
+              <code>datetime.now()</code> queried buckets replay rows never land in.</p>
+            <h5>How it was found</h5>
+            <p>Watching the live UI show a fixed set of rows with a stale <code>write_ts</code>, then
+              cross-checking real event/bucket timestamps against what the Cassandra step was querying
+              for.</p>
+            <h5>Fix</h5>
+            <p><code>recent_raw_events_sync</code> now takes <code>reference_timestamps</code> sampled
+              from real Kafka messages and derives buckets from those, falling back to wall-clock only
+              on cold start.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p5-2" data-name="frontend crash blank page toLocaleString ErrorBoundary producer restart">
+          <summary><span class="incident-num">#2</span> One transient upstream hiccup crashed the entire frontend</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>Restarting <code>producer</code> mid-session sometimes left the whole web app frozen on
+              "Loading..." requiring a manual reload. Console:
+              <code>TypeError: Cannot read properties of undefined (reading 'toLocaleString')</code>.</p>
+            <h5>Cause</h5>
+            <p><code>state_poller.py</code> spread <code>producer_state</code> directly into the
+              response; when the poll failed, it was <code>None</code>, silently dropping fields —
+              and <code>IngestionStep.tsx</code> called <code>.toLocaleString()</code> unconditionally.
+              React 18 unmounts the entire root on an uncaught render error with no
+              <code>ErrorBoundary</code> in place.</p>
+            <h5>How it was found</h5>
+            <p>Actually restarting <code>producer</code> mid-session in a live browser tab while
+              watching the console — a static code read looked fine.</p>
+            <h5>Fix, two layers</h5>
+            <p>(1) The state poller now caches the last-known-good state and merges fresh data on top
+              of that cache instead of <code>{}</code>. (2) <code>IngestionStep.tsx</code> got
+              defensive fallbacks, and every step is now wrapped in a small
+              <code>ErrorBoundary</code> keyed by the current step.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p5-3" data-name="anomalies tombstones READ_TOO_MANY_TOMBSTONES not fixed">
+          <summary><span class="incident-num">#3</span> /api/anomalies risks READ_TOO_MANY_TOMBSTONES as data grows — not fixed, flagged</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>Cross-checking an anomaly row via <code>cqlsh</code> with the same
+              <code>ALLOW FILTERING</code> shape (no <code>bucket_start</code>) failed outright with
+              <code>ReadFailure: ... READ_TOO_MANY_TOMBSTONES</code>; the same shape narrowed to one
+              partition succeeded but logged a tombstone warning (~6,800 tombstone cells alongside
+              ~7,150 live rows in one 15-minute bucket).</p>
+            <h5>Likely cause (not confirmed further)</h5>
+            <p>The spark-cassandra-connector writes <code>NULL</code> row fields as per-column
+              tombstones by default; <code>raw_events</code> has several usually-null columns
+              (<code>anomaly_reason</code> on ~95% of non-anomalous rows), so tombstones accumulate
+              quickly with no TTL/compaction pressure to clear them.</p>
+            <h5>Why not fixed now</h5>
+            <p><code>/api/anomalies</code> reuses the exact CQL shape already provisioned for the P4
+              Grafana panel, scoped by <code>since_minutes</code>/<code>LIMIT</code> so it stayed under
+              the failure threshold in this session's testing — but the underlying risk grows with data
+              volume, not with anything P5 added. A real fix is a P3/Cassandra-schema-level change.</p>
+          </div>
+        </details>
+
+        <p class="prose-body" style="max-width:72ch; font-size:0.86rem; color:var(--muted); margin-top:0.8rem;">
+          <strong>General P5 lesson:</strong> both real bugs (#1 and #2) were invisible from reading the
+          code or the JSON contract alone — they only showed up when actually watching live REPLAY-mode
+          traffic and actually killing a container mid-session in a real browser tab.
+        </p>
+      </div>
+
+      <div class="phase-group" id="p6">
+        <div class="phase-head"><h3>P6 — VPS deployment (interim single-host Compose)</h3><span class="phase-tag">1 incident</span></div>
+
+        <details class="incident" id="p6-1" data-name="producer crash loop FileNotFoundError csv missing manual step dataset-init pep668">
+          <summary><span class="incident-num">#1</span> producer crash-loops on a fresh VPS deploy: CSV not found</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>producer</code> restarts forever with
+              <code>FileNotFoundError: /data/iot_telemetry_data.csv</code>, immediately after
+              startup.</p>
+            <h5>Cause</h5>
+            <p>The Kaggle dataset isn't committed (~62 MB, gitignored) and the only way to get it in
+              place was a manual host-side step, easy to skip on a fresh VPS clone. Compounding this:
+              even once noticed, <code>pip install --user kagglehub</code> fails outright on modern
+              Debian/Ubuntu with <code>externally-managed-environment</code> (PEP 668).</p>
+            <h5>Fix</h5>
+            <p>Removed the manual step entirely — a new one-shot <code>dataset-init</code> service
+              downloads the dataset into a named volume automatically as part of
+              <code>docker compose up -d</code>, same idiom as <code>kafka-topic-init</code>/<code>cassandra-schema-init</code>.
+              Idempotent by design.</p>
+            <h5>A pleasant surprise while fixing this</h5>
+            <p>The dataset needs <strong>no Kaggle credentials at all</strong> for an anonymous
+              download via <code>kagglehub</code> — confirmed by actually running the fetch with none
+              configured, not assumed from the library's docs.</p>
+            <h5>General lesson</h5>
+            <p>A "prerequisite" that lives outside <code>docker compose up -d</code> in a README step
+              is a deployment footgun waiting to happen — if a real container can do the fetch/setup
+              step itself, that's more robust than documenting a manual step well.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="phase-group" id="p8">
+        <div class="phase-head"><h3>P8 — Role-based redirect (Loki/Promtail, alerting, planner map)</h3><span class="phase-tag">2 incidents</span></div>
+
+        <details class="incident" id="p8-1" data-name="loki healthcheck never healthy blocks promtail wget shell distroless">
+          <summary><span class="incident-num">#1</span> loki never reaches healthy, which blocks promtail from starting at all</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>On the first real deploy after adding Loki, <code>loki</code> stuck at
+              <code>Up ... (unhealthy)</code> indefinitely, and <code>promtail</code> never started —
+              the overall <code>docker compose up -d</code> command exited non-zero.</p>
+            <h5>Cause</h5>
+            <p>The healthcheck (<code>wget --spider http://localhost:3100/ready</code>) assumed the
+              same tooling the Prometheus/exporter images ship with. The official <code>grafana/loki</code>
+              image does not: <code>docker compose exec loki sh</code> returns
+              <code>exec: "sh": executable file not found</code> — this image ships nothing but the
+              <code>loki</code> binary and CA certs. A <code>CMD-SHELL</code> healthcheck can never
+              work against it, regardless of which tool it tries to invoke.</p>
+            <h5>How it was found</h5>
+            <p>Live-verified against a real <code>docker compose up</code> — logs showed Loki itself
+              starting and serving real queries successfully, ruling out an application-level failure
+              and pointing at the healthcheck mechanism itself.</p>
+            <h5>Fix</h5>
+            <p>Removed the <code>healthcheck:</code> block from <code>loki</code> entirely, and changed
+              <code>promtail</code>'s dependency from <code>service_healthy</code> to
+              <code>service_started</code> — Promtail already retries its own push requests.</p>
+            <h5>General lesson</h5>
+            <p>Don't assume a Docker Hub image includes the same debugging toolbox as unrelated images
+              already in the stack, even official ones from the same vendor. Verify what's actually
+              executable inside a new image before picking a healthcheck strategy.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p8-2" data-name="citizen alert feed raw spark diagnostic strings friendlyReason plain language">
+          <summary><span class="incident-num">#2</span> Citizen-facing alert feed showed raw Spark diagnostic strings, not plain language</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>During live verification, the planner role's "Recent alerts" panel showed entries like
+              <code>temp:sigma(-4.23sigma) near Emsbruecke</code> — technically correct, but not
+              remotely citizen-friendly.</p>
+            <h5>Cause</h5>
+            <p><code>AlertFeed.tsx</code> passed <code>anomaly_reason</code> straight through from the
+              API, which returns Spark's own internal diagnostic format verbatim — appropriate for the
+              admin's anomaly log, not a citizen reading the map.</p>
+            <h5>Fix</h5>
+            <p>Added <code>friendlyReason()</code> — parses the metric tokens and renders e.g.
+              "elevated smoke" or "unusual temperature" per metric, joined with commas.</p>
+            <h5>General lesson</h5>
+            <p>An internal diagnostic string being technically present and correctly wired end-to-end
+              isn't the same as the feature actually being done — this only surfaced by looking at real
+              rendered output with real anomaly data flowing through.</p>
+            <p style="color:var(--muted); font-size:0.85em;">(Superseded by D34/D35 — the citizen-alert
+              text feed described here was later replaced entirely by the behavior-over-time charts and
+              out-of-range log; kept for history.)</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="phase-group" id="p9">
+        <div class="phase-head"><h3>P9 — Several containers stuck Exited for days</h3><span class="phase-tag">1 incident</span></div>
+
+        <details class="incident" id="p9-1" data-name="spark-job kafka-ui promtail kafka-exporter exited scoped up reconcile whole project">
+          <summary><span class="incident-num">Incident</span> spark-job, kafka-ui, promtail, kafka-exporter stuck Exited for days</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>docker compose ps -a</code> showed four <code>restart: unless-stopped</code>
+              services sitting in <code>Exited</code> — no crash loop visible, everything else in the
+              stack up and healthy. Looked at first like the compose file had no real startup ordering.</p>
+            <h5>Cause, two parts</h5>
+            <p>(1) <code>spark-job</code> holds a long-lived Cassandra driver session. Earlier in the
+              same session, a scoped <code>up -d --build backend</code> had cascaded into recreating
+              <code>cassandra</code> too (its own dependency chain touched it), giving it a new
+              container IP mid-stream — <code>spark-job</code> couldn't recover the in-flight queries.
+              <code>restart: unless-stopped</code> <em>did</em> keep bringing it back
+              (<code>RestartCount: 9</code>), but eventually landed back in <code>Exited</code> with
+              nothing prompting a 10th attempt. (2) The four dead services shared one thing: none were
+              named in any follow-up <code>docker compose up -d --build &lt;service&gt;</code> — every
+              command that session scoped to <code>backend</code> only. Compose's <code>up</code> only
+              reconciles the service(s) you name; it does not sweep the rest of the project back to its
+              desired state.</p>
+            <h5>How it was found</h5>
+            <p><code>docker inspect ... OOMKilled</code> ruled out a memory kill on all four;
+              <code>FinishedAt</code> timestamps clustered within ~2 seconds, pointing at one shared
+              external event. <code>RestartCount: 9</code> (not 0) proved the restart policy was
+              working, narrowing the question from "why doesn't restart work" to "why did reconciliation
+              stop being attempted."</p>
+            <h5>Fix</h5>
+            <p><code>docker compose up -d --wait</code> — no service argument, the whole project.
+              Compose recomputes the full dependency graph and brings every drifted service back in
+              correct order in one shot; <code>--wait</code> blocks until every healthchecked service
+              actually reports healthy.</p>
+            <h5>General lesson</h5>
+            <p>The compose file's <code>depends_on</code>/<code>condition:</code> graph was never
+              missing — what causes a "half the stack is dead" scare is scoping <code>up</code> to one
+              service during iterative work and never following up with a bare, whole-project
+              <code>docker compose up -d --wait</code> to reconcile stragglers. Run it after any
+              targeted rebuild, and after anything that might have interrupted Docker Desktop itself
+              (host sleep/resume, a WSL2 restart, a Docker Desktop update).</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="phase-group" id="p10">
+        <div class="phase-head"><h3>P10 — spark-job executor OOM-killed catching up on a Kafka backlog (VPS)</h3><span class="phase-tag">1 incident</span></div>
+
+        <details class="incident" id="p10-1" data-name="executor OOM backlog maxOffsetsPerTrigger shuffle FetchFailed memory">
+          <summary><span class="incident-num">Incident</span> Executor OOM-killed catching up a Kafka backlog</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>On a public VPS, <code>spark-job</code> was found mid-restart-loop while the producer
+              kept publishing the whole time. Logs showed
+              <code>Lost executor 2 ... Command exited with code 137</code>, followed by a cascade of
+              <code>FetchFailed</code>/<code>MetadataFetchFailedException</code> errors as the driver
+              discovered the dead executor's shuffle outputs were gone — that cascade eventually took
+              the whole streaming query, and then the driver container itself, down.</p>
+            <h5>Cause</h5>
+            <p><code>read_kafka()</code> had no <code>maxOffsetsPerTrigger</code> cap, so each 30-second
+              trigger pulled as much Kafka backlog as existed, with no ceiling. Since the producer never
+              stops publishing even while <code>spark-job</code> is down, any prior interruption leaves
+              a backlog that grows for as long as the outage lasted — the next catch-up trigger then
+              tries to process the entire backlog in one oversized batch. <code>spark-worker</code>'s
+              <code>mem_limit</code> (1500m at the time) couldn't absorb the spike, so Docker's cgroup
+              OOM-killed the executor process. Once killed, the query retries the batch — pulling the
+              same, now-even-larger backlog again: a self-reinforcing loop.</p>
+            <h5>How it was found</h5>
+            <p>Live-diagnosed over SSH against the real VPS. <code>docker inspect ... RestartCount</code>
+              proved the container was self-healing (narrowing the question) before
+              <code>docker compose logs</code> surfaced the actual exit-code-137 executor loss.
+              <code>free -h</code> ruled out host-wide memory exhaustion. <code>docker stats --no-stream</code>
+              then showed <code>spark-worker</code> at 376% CPU and double-digit-GB I/O immediately
+              after the restart — the signature of a backlog catch-up burst, which is what pointed at
+              the missing <code>maxOffsetsPerTrigger</code>.</p>
+            <h5>Fix, three changes together</h5>
+            <p>(1) <code>read_kafka()</code> now sets <code>maxOffsetsPerTrigger</code> (new
+              <code>SPARK_JOB_MAX_OFFSETS_PER_TRIGGER</code> env var, default 20000) — the actual root
+              fix, bounding every micro-batch regardless of backlog size. (2) <code>spark-worker</code>'s
+              <code>mem_limit</code> raised 1500m → 2560m, <code>spark-job</code>'s 1500m → 2000m —
+              headroom for three independent <code>applyInPandasWithState</code> queries each spawning
+              their own Python subprocess on top of the JVM heap. (3) Confirmed the deployment guide's
+              VPS sizing table already flags this: "sustained 100 msg/s, indefinitely" calls for 16 GB
+              RAM, not the 8 GB "demo only" tier — the observed 11 GB box sat between the two.</p>
+            <h5>General lesson</h5>
+            <p>A Structured Streaming source with <code>startingOffsets: earliest</code> and no
+              per-trigger cap is only safe as long as the query never falls behind for long. Any Kafka
+              source meant to run unattended for an indefinite demo needs an explicit backlog cap from
+              the start, not just tuned container memory limits after the first incident.</p>
+          </div>
+        </details>
+      </div>
+
+      <div class="phase-group" id="p11">
+        <div class="phase-head"><h3>P11 — Deploying the P10 fix itself failed: kafka-volume-init raced a live Kafka</h3><span class="phase-tag">1 incident</span></div>
+
+        <details class="incident" id="p11-1" data-name="kafka-volume-init race chown live file TOCTOU checkpoint tmp idempotent">
+          <summary><span class="incident-num">Incident</span> kafka-volume-init raced a live, running Kafka on the same volume</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>Running <code>docker compose up -d --build spark-job spark-worker --wait</code> to
+              deploy the P10 fix — a command that should only have touched two services — instead
+              cascaded into <code>kafka-volume-init</code> failing with exit 1, which blocked
+              <code>kafka</code> from starting, which in turn stalled <code>cassandra</code> and
+              everything behind it.</p>
+            <h5>Cause</h5>
+            <p><code>chown: /var/lib/kafka/kafka_data/replication-offset-checkpoint.tmp: No such file
+              or directory</code>. <code>kafka-volume-init</code>'s command was an unconditional
+              <code>chown -R</code>, every single time it runs — and <code>docker compose up</code>,
+              even scoped to unrelated services, still re-runs every already-<code>Exited</code>
+              one-shot init container (the same behavior as <a href="#p9-1">P9</a>). Here it re-ran
+              while the already-running, healthy <code>kafka</code> container was actively renaming its
+              own checkpoint files in that same shared volume — a straightforward TOCTOU race:
+              <code>chown -R</code> found the <code>.tmp</code> file while walking the tree, then it was
+              gone (renamed over the real file, Kafka's normal checkpoint-write pattern) by the time
+              chown tried to touch it.</p>
+            <h5>How it was found</h5>
+            <p><code>df -h</code> on the VPS first ruled out disk-full (174 GB free of 193 GB), which
+              narrowed it to the exit-1 log line itself — the specific <code>.tmp</code> filename
+              immediately pointed at a live-file race rather than a permissions or missing-directory
+              problem.</p>
+            <h5>Fix</h5>
+            <p>Both <code>kafka-volume-init</code> and <code>spark-job-volume-init</code> now check the
+              target directory's current owner first and only run the recursive chown if it doesn't
+              already match:
+              <code>[ "$(stat -c '%u' &lt;dir&gt;)" = "&lt;uid&gt;" ] || chown -R &lt;uid&gt;:&lt;gid&gt; &lt;dir&gt;</code>.
+              After the genuine first-ever init of a fresh volume, every subsequent
+              <code>docker compose up</code> now short-circuits before touching the directory at all.</p>
+            <h5>General lesson</h5>
+            <p>An unconditional <code>chown -R</code> in a one-shot init container is only actually safe
+              on the container's <em>first</em> run against a fresh volume — <code>restart: "no"</code>
+              only stops automatic restarts, not Compose re-invoking it deliberately later. Any init
+              command that mutates a volume another, possibly-still-running service also owns needs to
+              be idempotent and cheap to re-check, not just idempotent in its end state.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      <span>Status, decisions, and 23 logged incidents across 9 phases.</span>
+      <span><a href="index.html">&larr; Back to documentation hub</a></span>
+    </footer>
+  </main>
+</div>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>

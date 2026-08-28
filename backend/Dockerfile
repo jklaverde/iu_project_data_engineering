@@ -18,14 +18,18 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY backend/app/ ./app/
 COPY --from=frontend-build /app/dist ./static
 
-# Bundled for the admin-only "Docs" tab (backend/app/routers/docs.py) so an
-# administrator can read how the system was conceived and built from inside
-# the running app, with no repo checkout on the host required. Kept in sync
-# with docs.py's CATALOG by hand - deliberately excludes REQUIREMENTS.md,
-# docs/PROGRESS.md and docs/TROUBLESHOOTING.md (repository-only project
-# record, not served in-app) and docs/internal/ (gitignored, local-only).
-COPY README.md ./docs_bundle/
-COPY docs/ARCHITECTURE.md docs/DEPLOYMENT.md docs/PROJECT_STRUCTURE.md ./docs_bundle/
+# Bundles the local docs/ site (see docs/index.html) into the image so the
+# admin-only "Docs" tab (backend/app/routers/docs.py) can serve it in-app,
+# byte-for-byte the same pages a developer opens directly via file://. Listed
+# explicitly, one file/dir at a time - never `COPY docs/`, which would also
+# pick up docs/internal/ from the host filesystem (.gitignore doesn't stop a
+# Docker build context from seeing it; only listing exactly what's wanted
+# does). REQUIREMENTS.md and root README.md stay repository-only, kept in
+# sync with docs/index.html's own "Outside this site" links.
+COPY docs/index.html docs/containers.html docs/containers-data.js docs/containers-charts.js \
+     docs/deployment.html docs/operations.html docs/reference.html ./docs_site/
+COPY docs/assets/ ./docs_site/assets/
+COPY docs/vendor/ ./docs_site/vendor/
 
 ENV PYTHONUNBUFFERED=1
 

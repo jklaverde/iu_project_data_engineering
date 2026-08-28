@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentation — iu-sensor-pipeline</title>
+<link rel="stylesheet" href="assets/docs.css">
+<style>
+  .sidebar-desc { font-size: 0.84rem; color: var(--ink-soft); line-height: 1.55; }
+  .sidebar-desc code { font-size: 0.85em; }
+  .ext-links { display: flex; flex-direction: column; gap: 0.4rem; }
+  .ext-links a { font-size: 0.82rem; color: var(--ink-soft); text-decoration: none; display: flex; align-items: center; gap: 0.4rem; }
+  .ext-links a:hover { color: var(--accent-2); }
+  .ext-links .tag { font-family: var(--font-mono); font-size: 0.66rem; color: var(--muted); background: var(--panel-2); border-radius: 999px; padding: 0.06rem 0.45rem; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">iu-sensor<br><span class="accent">-pipeline</span></span>
+      <span class="brand-sub">docs</span>
+    </div>
+
+    <p class="sidebar-desc">
+      Everything a developer needs to build on, deploy, or debug this project — one
+      set of pages, meant to be opened locally (<code>file://</code>, no server) or
+      viewed from the running app's admin <strong>Docs</strong> tab.
+    </p>
+
+    <nav class="toc">
+      <div data-group>
+        <p class="toc-group-label">This site</p>
+        <div class="toc-links">
+          <a href="containers.html">→ Architecture &amp; Containers</a>
+          <a href="deployment.html">→ Deployment</a>
+          <a href="operations.html">→ Operations &amp; Troubleshooting</a>
+          <a href="reference.html">→ File Reference</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="ext-links" style="margin-top: 0.6rem;">
+      <p class="toc-group-label">Outside this site</p>
+      <a href="../README.md"><span class="tag">repo</span> README.md — clone &amp; quick start</a>
+      <a href="../REQUIREMENTS.md"><span class="tag">spec</span> REQUIREMENTS.md — formal spec + decision log</a>
+    </div>
+
+    <p class="sidebar-foot">5 pages · fully local, no build step · shared design in <code style="font-size:0.9em">assets/docs.css</code></p>
+  </aside>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Documentation hub</p>
+      <h1 class="hero-title">Start here.</h1>
+      <p class="hero-lede">
+        This project is a role-based environmental sensor platform for the
+        municipality of Lingen (Ems): a Python producer replays a public IoT dataset
+        into Kafka, Spark Structured Streaming validates and scores it, Cassandra
+        stores it, and a role-based web app plus a Grafana KPI deck put it in front of
+        two audiences — city planners and infrastructure operators. Nineteen Docker
+        containers, one <code>docker compose up -d</code>.
+      </p>
+      <p class="hero-lede">
+        This documentation set explains how it's built and how to run, deploy, and
+        maintain it. Pick a page below, or use the sidebar link on any page to come
+        back here.
+      </p>
+    </section>
+
+    <div class="hub-grid">
+      <a class="hub-card" href="containers.html" style="border-top-color: var(--accent)">
+        <p class="hub-card-eyebrow">Big picture → detail</p>
+        <h3>Architecture &amp; Containers</h3>
+        <p>
+          Interactive, animated diagrams of how data flows through the system and how
+          the stack boots itself, plus a full reference card for every one of the 19
+          containers — image, ports, volumes, environment variables, and the
+          non-obvious "why" behind each one.
+        </p>
+      </a>
+
+      <a class="hub-card" href="deployment.html" style="border-top-color: var(--cat-deploy)">
+        <p class="hub-card-eyebrow">Runbook</p>
+        <h3>Deployment</h3>
+        <p>
+          Putting this on a real, public Linux VPS: sizing, hardening, secrets, the
+          firewall/TLS decision, backups, updates, and tearing it down again — the
+          exact guide used for the project's own live VPS deploy.
+        </p>
+      </a>
+
+      <a class="hub-card" href="operations.html" style="border-top-color: var(--cat-ops)">
+        <p class="hub-card-eyebrow">Status · History · Known issues</p>
+        <h3>Operations &amp; Troubleshooting</h3>
+        <p>
+          What's actually done vs. not yet started, implementation decisions beyond
+          what the formal spec covers, and a searchable log of every non-obvious bug
+          found while building and running this stack — symptom, cause, fix, general
+          lesson.
+        </p>
+      </a>
+
+      <a class="hub-card" href="reference.html" style="border-top-color: var(--cat-ref)">
+        <p class="hub-card-eyebrow">Lookup table</p>
+        <h3>File Reference</h3>
+        <p>
+          Every tracked file in the repository, one line each: what it does, and where
+          to look first for a given piece of behavior — the fastest way from "which
+          file owns this" to the actual code.
+        </p>
+      </a>
+    </div>
+
+    <footer class="page-foot">
+      <span>Part of <code>iu_project_data_engineering</code> — DLBDSEDE02.</span>
+      <span>Source of truth is always the repo; this site explains it, not replaces it.</span>
+    </footer>
+  </main>
+</div>
+
+</body>
+</html>

@@ -7,12 +7,12 @@ Spark Structured Streaming → Cassandra underneath, with two web app roles on t
 charts, and an out-of-range log) and an **infrastructure/admin** role (the pipeline health
 tour, centralized logs, Grafana-fired alerts with log drill-down) — plus a Grafana KPI
 dashboard, all running end to end from one `docker compose up -d`. See `REQUIREMENTS.md`
-for the full project scope and phase roadmap, `docs/ARCHITECTURE.md` for how the system is
-built (every module explained, diagrams, data flow), `docs/PROJECT_STRUCTURE.md` for what
-every single file in the repo does, `docs/DEPLOYMENT.md` for putting this on a public VPS,
-`docs/PROGRESS.md` for current status and where to pick this project back up, and
-`docs/TROUBLESHOOTING.md` for non-obvious bugs and environment gotchas found while
-building and operating the stack.
+for the full project scope and phase roadmap, and **`docs/index.html`** for everything
+else — open it directly in a browser (no server needed) for the full documentation site:
+how the system is built (every module explained, animated data-flow/boot-order diagrams,
+a per-container reference), how to deploy it on a public VPS, current status and
+non-obvious bugs/gotchas found while building and operating the stack, and a
+file-by-file reference for the whole repo.
 
 ## Prerequisites
 
@@ -39,16 +39,17 @@ command itself block until every service with a healthcheck reports `healthy`, s
 clean exit is a real verification, not a guess; if it times out or exits non-zero, check
 with `docker compose ps` — every long-running service should reach `healthy`, and the
 `*-init`/`*-schema-init` one-shot containers should show `Exited (0)` (that's success).
-See `docs/TROUBLESHOOTING.md` if anything looks different, and `docs/PROGRESS.md`'s
-"Resuming locally" section for cold-start timing details (baseline recomputation,
-catching up on a Kafka backlog).
+See `docs/operations.html` if anything looks different — its "Resuming locally" section
+covers cold-start timing details (baseline recomputation, catching up on a Kafka
+backlog), and its troubleshooting log covers non-obvious bugs found while operating
+this stack.
 
 If you ever rebuild or restart just one service by name (`docker compose up -d --build
 backend`, say), Compose only reconciles that service — anything else that had drifted to
 `Exited` (e.g. after a host sleep/resume, a Docker Desktop restart, or a sibling service
 crash-looping out) stays dead until something names it again. Run a bare `docker compose
 up -d --wait` (no service argument) afterward to sweep the whole stack back to its
-desired state — see `docs/TROUBLESHOOTING.md` P9 for a real incident this caused.
+desired state — see `docs/operations.html#p9` for a real incident this caused.
 
 Stop (keeps all data):
 ```
@@ -95,11 +96,12 @@ latency, elevated per-service error rate, service down), each with a one-click l
 Grafana Explore, pre-scoped to that alert's service and a recent time window
 (`REQUIREMENTS.md` UC-9).
 
-**Docs tab** — this README plus `docs/ARCHITECTURE.md`, `docs/PROJECT_STRUCTURE.md`, and
-`docs/DEPLOYMENT.md`, rendered in-app so an administrator can read how the system was
-conceived and built without a repo checkout on the host. `REQUIREMENTS.md`,
-`docs/PROGRESS.md`, and `docs/TROUBLESHOOTING.md` remain in the repository as the
-project's own record but aren't rendered in-app — see `REQUIREMENTS.md` D36.
+**Docs tab** — the full local documentation site (`docs/index.html` and everything it
+links to), embedded in-app so an administrator can read how the system was conceived and
+built without a repo checkout on the host — the exact same pages a developer opens
+directly via `file://`, one authored place. `REQUIREMENTS.md` and this README stay
+repository-only, cross-linked from the docs site instead of duplicated into it — see
+`REQUIREMENTS.md` D37.
 
 Watch for the **hand-over** (`REQUIREMENTS.md` UC-3): the producer replays the full
 Kaggle dataset (~67 minutes at the default 100 msg/s) before switching to synthetic
@@ -149,4 +151,4 @@ To run the fetch by hand outside Docker (e.g. to inspect the CSV locally), see
 ## Deploying for real users
 
 For putting this on a public VPS instead of running it locally — server hardening,
-firewall rules, TLS, backups, and updates — see `docs/DEPLOYMENT.md`.
+firewall rules, TLS, backups, and updates — see `docs/deployment.html`.

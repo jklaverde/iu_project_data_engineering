@@ -27,18 +27,14 @@ server, no API key or billing account required (unlike Mapbox GL JS or the Googl
 version pinned (`1.9.4`, released 2023 — well past NFR-10.3's 14-day cooldown), `.npmrc`'s
 `ignore-scripts=true` and the committed `package-lock.json` apply to it like every other dependency.
 
-## NFR-10.1 justification: marked
+## Docs tab
 
-`marked` is not on the original allowlist either, but is added for the admin-only "Docs" tab
-(`src/admin/DocsTab.tsx`), which renders the project's own bundled `.md` files
-(`backend/app/routers/docs.py`) so an administrator can read how the system was conceived and built
-from inside the app. Chosen over hand-rolling a markdown parser because the source documents
-(`REQUIREMENTS.md` in particular) contain real tables, nested lists, and code fences that a small
-regex-based converter is likely to mis-render; `marked` is zero-runtime-dependency, ~40 KB, and one of
-the most widely audited Markdown parsers on npm. Only ever parses this project's own committed
-documentation, never user input. Exact version pinned (`18.0.9`, released 2026-08-04 — past NFR-10.3's
-14-day cooldown as of this addition), `.npmrc`'s `ignore-scripts=true` and the committed
-`package-lock.json` apply to it like every other dependency.
+`src/admin/DocsTab.tsx` embeds the local `docs/` site (see the root `docs/index.html`) via an
+`<iframe>` pointed at `backend/app/routers/docs.py`'s admin-gated static file route — no markdown
+rendering happens in the frontend at all; the same static HTML a developer opens directly from the
+repo is what's shown in-app (D36/D37). This replaced an earlier version that fetched `.md` files and
+rendered them client-side with `marked` — that dependency has since been removed
+(`npm uninstall marked`) since nothing in this app parses markdown anymore.
 
 ## Dev workflow
 

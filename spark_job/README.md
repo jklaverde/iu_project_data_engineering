@@ -4,7 +4,7 @@ PySpark Structured Streaming job: consumes `sensor-readings` from Kafka,
 flags anomalies against an adaptive per-device rolling baseline (§5.4,
 FR-S3), writes raw events plus 1-minute/1-hour windowed aggregates to
 Cassandra (FR-S1/S2). See the root `REQUIREMENTS.md` and
-`docs/PROGRESS.md` for the full pipeline context — normally this runs as
+`docs/operations.html` for the full pipeline context — normally this runs as
 the `spark-job` service in `docker-compose.yml`.
 
 ## Architecture

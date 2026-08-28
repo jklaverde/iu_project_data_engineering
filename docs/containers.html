@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Container Manifest — iu-sensor-pipeline</title>
+<link rel="stylesheet" href="assets/docs.css">
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">Container<br><span class="accent">Manifest</span></span>
+      <span class="brand-sub">local · v2.1</span>
+    </div>
+    <a class="hub-link" href="index.html">&larr; All documentation</a>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="filterInput" placeholder="Filter containers…" autocomplete="off">
+    </div>
+
+    <nav class="toc" id="tocNav">
+      <div class="toc-links">
+        <a href="#big-picture" class="toc-top" data-name="big picture overview data flow charts">Big picture</a>
+      </div>
+      <div data-group>
+        <p class="toc-group-label"><span class="swatch" style="background:var(--cat-ingest)"></span>Ingestion</p>
+        <div class="toc-links">
+          <a href="#dataset-init" data-name="dataset-init"><span class="dot"></span>dataset-init</a>
+          <a href="#producer" data-name="producer"><span class="dot"></span>producer</a>
+        </div>
+      </div>
+      <div data-group>
+        <p class="toc-group-label"><span class="swatch" style="background:var(--cat-broker)"></span>Message broker</p>
+        <div class="toc-links">
+          <a href="#kafka-volume-init" data-name="kafka-volume-init"><span class="dot"></span>kafka-volume-init</a>
+          <a href="#kafka" data-name="kafka"><span class="dot"></span>kafka</a>
+          <a href="#kafka-topic-init" data-name="kafka-topic-init"><span class="dot"></span>kafka-topic-init</a>
+          <a href="#kafka-ui" data-name="kafka-ui"><span class="dot"></span>kafka-ui</a>
+        </div>
+      </div>
+      <div data-group>
+        <p class="toc-group-label"><span class="swatch" style="background:var(--cat-stream)"></span>Stream processing</p>
+        <div class="toc-links">
+          <a href="#spark-master" data-name="spark-master"><span class="dot"></span>spark-master</a>
+          <a href="#spark-job-volume-init" data-name="spark-job-volume-init"><span class="dot"></span>spark-job-volume-init</a>
+          <a href="#spark-worker" data-name="spark-worker"><span class="dot"></span>spark-worker</a>
+          <a href="#spark-job" data-name="spark-job"><span class="dot"></span>spark-job</a>
+        </div>
+      </div>
+      <div data-group>
+        <p class="toc-group-label"><span class="swatch" style="background:var(--cat-storage)"></span>Storage</p>
+        <div class="toc-links">
+          <a href="#cassandra" data-name="cassandra"><span class="dot"></span>cassandra</a>
+          <a href="#cassandra-schema-init" data-name="cassandra-schema-init"><span class="dot"></span>cassandra-schema-init</a>
+        </div>
+      </div>
+      <div data-group>
+        <p class="toc-group-label"><span class="swatch" style="background:var(--cat-web)"></span>Web application</p>
+        <div class="toc-links">
+          <a href="#backend" data-name="backend frontend web app"><span class="dot"></span>backend</a>
+        </div>
+      </div>
+      <div data-group>
+        <p class="toc-group-label"><span class="swatch" style="background:var(--cat-observe)"></span>Observability</p>
+        <div class="toc-links">
+          <a href="#prometheus" data-name="prometheus"><span class="dot"></span>prometheus</a>
+          <a href="#kafka-exporter" data-name="kafka-exporter"><span class="dot"></span>kafka-exporter</a>
+          <a href="#node-exporter" data-name="node-exporter"><span class="dot"></span>node-exporter</a>
+          <a href="#loki" data-name="loki"><span class="dot"></span>loki</a>
+          <a href="#promtail" data-name="promtail"><span class="dot"></span>promtail</a>
+          <a href="#grafana" data-name="grafana"><span class="dot"></span>grafana</a>
+        </div>
+      </div>
+    </nav>
+
+    <p class="sidebar-foot">19 services · fully local file — open <code style="font-size:0.9em">docs/containers.html</code> directly, no server needed.</p>
+  </aside>
+
+  <main>
+    <section class="hero" id="big-picture">
+      <p class="eyebrow">Docker Compose · iu-sensor-pipeline</p>
+      <h1 class="hero-title">Every container, what it's for, and how it's wired.</h1>
+      <p class="hero-lede">
+        A Kaggle sensor CSV becomes a live Kafka stream, gets validated and scored by Spark,
+        lands in Cassandra, and surfaces through a role-based web app and a Grafana KPI deck —
+        nineteen containers, one <code>docker compose up -d</code>. The diagrams below are live
+        and interactive: drag a node, scroll/pinch to zoom, click a service to see what it's
+        directly connected to and jump straight to its detail card.
+      </p>
+      <div class="hero-stats" id="statChips"></div>
+    </section>
+
+    <!-- ============================= DIAGRAM 1: DATA FLOW ============================= -->
+    <div class="diagram-section">
+      <h2 class="subhead">How data moves</h2>
+      <p class="subhead-note">
+        The path a sensor reading actually takes, end to end — drawn to scale, not decoration.
+        <span style="color:var(--accent-2);font-weight:600">Teal</span> edges carry pipeline data and
+        animate in the direction data actually travels; grey dashed edges are read-only observation.
+        Click any container to isolate its direct connections; click it again (or the background) to
+        release.
+      </p>
+      <figure class="diagram-frame">
+        <div class="diagram-toolbar">
+          <div class="hint"><span>drag nodes</span><span>scroll to zoom</span><span>click to isolate + jump to detail</span></div>
+          <button type="button" data-reset="flow">Reset view</button>
+        </div>
+        <div class="diagram-svg-wrap"><svg id="flowDiagram" viewBox="0 0 1360 480" role="img" aria-label="Data flow diagram from Kaggle CSV through producer, Kafka, Spark, Cassandra, the backend, both UIs, and the observability stack"></svg></div>
+        <figcaption>
+          Only <code>producer</code> and <code>spark-job</code> ever write pipeline data (Kafka, Cassandra).
+          Everything downstream of Cassandra — backend, Prometheus, Loki, Grafana — only reads. The one
+          exception is Grafana's alert webhook (red dashed), which writes into the backend's small
+          in-memory alert buffer, not the pipeline itself.
+        </figcaption>
+      </figure>
+      <div class="legend-row">
+        <span><span class="legend-line" style="border-color:var(--accent-2)"></span>data path (animated)</span>
+        <span><span class="legend-line dashed"></span>read-only observation</span>
+        <span><span class="legend-line dashed" style="border-color:var(--bad)"></span>alert webhook (writes an in-memory buffer only)</span>
+        <span><span class="legend-dot"></span>click any solid node to isolate it</span>
+      </div>
+    </div>
+
+    <ol class="flow-steps">
+      <li><p><strong>Replay, then invent.</strong> <code>producer</code> reads the Kaggle CSV top-to-bottom and publishes one JSON event per row to Kafka at a configurable rate. When the file runs out it switches instantly to a synthetic generator using the same schema, forever.</p></li>
+      <li><p><strong>Partition by device.</strong> Kafka spreads events across 3 partitions keyed by <code>device_id</code>, so per-device ordering holds even under concurrent processing.</p></li>
+      <li><p><strong>Validate, score, window.</strong> <code>spark-job</code> consumes in 30-second micro-batches: validates and enriches each event, runs rule-based + adaptive-EWMA anomaly detection, and computes 1-minute and 1-hour rollups per device and metric.</p></li>
+      <li><p><strong>Land in Cassandra.</strong> Raw events and both aggregate tables are written to the <code>iot</code> keyspace — the only two writers to storage in the whole stack.</p></li>
+      <li><p><strong>Backend observes, doesn't own.</strong> The FastAPI backend polls the producer's and Spark's state endpoints plus Kafka and Cassandra directly, and streams a combined snapshot to the browser over WebSocket — this is the admin role's pipeline tour.</p></li>
+      <li><p><strong>Planner reads Cassandra directly.</strong> In parallel, the same backend serves the planner role's map from Cassandra alone — latest reading + <code>device_thresholds</code> → status, air quality score, comfort index — independent of the WebSocket snapshot or Grafana.</p></li>
+      <li><p><strong>Metrics and logs converge on Grafana.</strong> Prometheus scrapes the exporters; promtail ships every container's stdout to Loki; Grafana renders operational KPIs from Prometheus, business KPIs straight from Cassandra, and logs from Loki — then evaluates its own alert rules against all three.</p></li>
+      <li><p><strong>Alerts loop back.</strong> When a Grafana rule fires or resolves, it POSTs to the backend's webhook. The backend keeps a short in-memory buffer and pushes the update over the same WebSocket channel; the admin UI's Alerts tab links each one straight to a scoped Grafana Explore query.</p></li>
+    </ol>
+
+    <!-- ============================= DIAGRAM 2: BOOT ORDER ============================= -->
+    <div class="diagram-section">
+      <h2 class="subhead">How the stack boots itself</h2>
+      <p class="subhead-note">
+        A different mechanism from the data flow above — which containers <code>docker compose</code>
+        makes wait for which, and on what condition. <strong>This layout isn't hand-drawn</strong> —
+        it's computed live from the same <code>depends_on</code> data as <code>docker-compose.yml</code>,
+        laid out by topological depth (column = how many hops from a free-standing root).
+      </p>
+      <figure class="diagram-frame">
+        <div class="diagram-toolbar">
+          <div class="hint"><span>drag nodes</span><span>scroll to zoom</span><span>click to isolate + jump to detail</span></div>
+          <button type="button" data-reset="boot">Reset view</button>
+        </div>
+        <div class="diagram-svg-wrap"><svg id="bootDiagram" viewBox="0 0 1360 720" role="img" aria-label="Startup dependency graph computed from docker-compose.yml depends_on relationships, laid out by topological depth"></svg></div>
+        <figcaption>
+          Nine containers declare no <code>depends_on</code> at all and start immediately — including
+          <code>grafana</code>, which provisions its Prometheus/Cassandra/Loki datasources by retrying
+          internally rather than blocking startup. This graph only governs <em>first</em>-up ordering:
+          <code>docker compose up -d --build backend</code> reconciles just that one service, so anything
+          else that had drifted to <code>Exited</code> stays dead until a bare <code>docker compose up -d</code>
+          sweeps the whole stack again.
+        </figcaption>
+      </figure>
+      <div class="legend-row">
+        <span><span class="legend-line"></span><code style="font-size:0.9em">healthy</code> / <code style="font-size:0.9em">completed</code> / <code style="font-size:0.9em">started</code> — the wait condition, labeled on the arrow</span>
+        <span><span class="legend-dot"></span>column = topological depth, computed from the edges</span>
+      </div>
+    </div>
+
+    <!-- ============================= CHARTS ============================= -->
+    <div class="diagram-section">
+      <h2 class="subhead">Stack composition, by the numbers</h2>
+      <p class="subhead-note">Real static values pulled from <code>docker-compose.yml</code> and <code>.env.example</code> — not live metrics, since this page has no running backend to query.</p>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Memory ceiling per container</h3>
+          <p class="chart-note">The <code>mem_limit</code> Compose enforces on each container. Sorted descending; colored by category.</p>
+          <svg id="memChart" viewBox="0 0 620 560"></svg>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:1.1rem;">
+          <div class="chart-card">
+            <h3>Most depended-upon</h3>
+            <p class="chart-note">How many other services declare <code>depends_on</code> directly against this one — a proxy for "how much starting-order pain if this is slow to become healthy."</p>
+            <svg id="faninChart" viewBox="0 0 480 300"></svg>
+          </div>
+          <div class="chart-card">
+            <h3>Composition</h3>
+            <p class="chart-note">19 containers, two ways.</p>
+            <div class="twin-donuts">
+              <div class="twin-donut">
+                <h4>Lifecycle</h4>
+                <svg id="donutLifecycle" viewBox="0 0 160 160"></svg>
+                <div class="donut-legend" id="legendLifecycle"></div>
+              </div>
+              <div class="twin-donut">
+                <h4>Image origin</h4>
+                <svg id="donutBuild" viewBox="0 0 160 160"></svg>
+                <div class="donut-legend" id="legendBuild"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="chart-note" style="margin-top:0.9rem; font-size:0.82rem;" id="memTotalNote"></p>
+    </div>
+
+    <!-- ============================= INGESTION ============================= -->
+    <section class="category" id="ingestion-section">
+      <div class="category-head">
+        <h2><span class="swatch" style="background:var(--cat-ingest)"></span>Ingestion</h2>
+        <p class="category-desc">Gets real data into the system, then keeps generating more of it forever.</p>
+      </div>
+      <div class="unit-grid">
+
+        <article class="unit" id="dataset-init">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--oneshot">one-shot</span><span class="pill pill--custom">custom build</span></div>
+            <h3>dataset-init</h3>
+            <p class="unit-role">Downloads the public Kaggle dataset once, into a volume every downstream service reads from.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd><code>./kaggle_repository</code> → <code>python:3.11.9-slim-bookworm</code></dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Volumes</dt><dd><code>kaggle_dataset</code> → <code>/data</code> (read-write)</dd></div>
+              <div><dt>Ports</dt><dd>none</dd></div>
+              <div><dt>Health check</dt><dd>none — one-shot</dd></div>
+              <div><dt>Limits</dt><dd>384m · restart: no</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment</span>
+              <table class="env-table">
+                <tr><td class="k">KAGGLE_DATASET_OUTPUT_DIR</td><td class="v">/data</td></tr>
+                <tr><td class="k">KAGGLE_USERNAME</td><td class="v">— (blank; optional fallback)</td></tr>
+                <tr><td class="k">KAGGLE_KEY</td><td class="v">— (blank; optional fallback)</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              <strong>Idempotent by design:</strong> skips the download entirely if the volume already
+              has the CSV, so it costs nothing on restarts. The dataset
+              (<code>garystafford/environmental-sensor-data-132k</code>, ~62 MB) is public — the Kaggle
+              credentials are only a fallback for if that ever changes. Runs as <strong>root</strong>
+              deliberately: it's the sole writer to a fresh, root-owned named volume, and a bounded
+              one-shot task rather than a persistent service.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="producer">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span><span class="pill pill--custom">custom build</span></div>
+            <h3>producer</h3>
+            <p class="unit-role">The only thing that writes to Kafka. Replays the CSV, then invents statistically plausible data forever.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd><code>./producer</code> → <code>python:3.11.9-slim-bookworm</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>kafka-topic-init</code> completed · <code>dataset-init</code> completed</dd></div>
+              <div><dt>Ports</dt><dd><code>8001</code> host → <code>8000</code> (state + metrics)</dd></div>
+              <div><dt>Volumes</dt><dd><code>kaggle_dataset</code> → <code>/data</code> (read-only)</dd></div>
+              <div><dt>Health check</dt><dd><code>GET /healthz</code> · every 10s, 5 retries</dd></div>
+              <div><dt>Limits</dt><dd>384m · restart: unless-stopped · runs as uid 1000</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment</span>
+              <table class="env-table">
+                <tr><td class="k">KAFKA_BOOTSTRAP_SERVERS</td><td class="v">kafka:19092</td></tr>
+                <tr><td class="k">KAFKA_TOPIC_NAME</td><td class="v">sensor-readings</td></tr>
+                <tr><td class="k">PRODUCER_RATE_MSGS_PER_SEC</td><td class="v">100</td></tr>
+                <tr><td class="k">PRODUCER_ANOMALY_PROBABILITY</td><td class="v">0.05</td></tr>
+                <tr><td class="k">PRODUCER_ANOMALY_SIGMA_MULTIPLIER</td><td class="v">4.0</td></tr>
+                <tr><td class="k">PRODUCER_DATASET_CSV_PATH</td><td class="v">/data/iot_telemetry_data.csv</td></tr>
+                <tr><td class="k">PRODUCER_REPLAY_ROW_LIMIT</td><td class="v">0 (full dataset; e.g. 2000 for a fast dev hand-over)</td></tr>
+                <tr><td class="k">PRODUCER_STATE_HTTP_PORT</td><td class="v">8000</td></tr>
+                <tr><td class="k">PRODUCER_LOG_LEVEL</td><td class="v">INFO</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              Publishes with an <strong>idempotent Kafka producer</strong> (<code>acks=all</code>) — a
+              publish either lands durably or the script knows it didn't. Once the CSV is exhausted,
+              hands over to a synthetic generator seeded from each device's own statistical baseline
+              (Welford's online algorithm over the same CSV), with deliberately injected anomalies so
+              downstream detection has real material to catch. <code>GET /state</code> exposes
+              mode/counters/hand-over timestamp; <code>GET /metrics</code> is Prometheus text.
+            </p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ============================= MESSAGE BROKER ============================= -->
+    <section class="category" id="broker-section">
+      <div class="category-head">
+        <h2><span class="swatch" style="background:var(--cat-broker)"></span>Message broker</h2>
+        <p class="category-desc">Kafka in KRaft mode — no ZooKeeper — plus the jobs that prepare and inspect it.</p>
+      </div>
+      <div class="unit-grid">
+
+        <article class="unit" id="kafka-volume-init">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--oneshot">one-shot</span></div>
+            <h3>kafka-volume-init</h3>
+            <p class="unit-role">Fixes ownership on Kafka's data volume before the broker starts — and knows when not to.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>apache/kafka:3.7.0</code> · runs as root</dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Volumes</dt><dd><code>kafka_data</code> → <code>/var/lib/kafka/kafka_data</code></dd></div>
+              <div><dt>Health check</dt><dd>none — one-shot</dd></div>
+              <div><dt>Limits</dt><dd>128m · restart: no</dd></div>
+            </dl>
+            <p class="unit-note warn">
+              <strong>Idempotent on purpose:</strong> skips the recursive <code>chown</code> once the
+              directory already shows the right owner. <code>docker compose up</code> re-runs every
+              one-shot init container even when scoped to unrelated services — a <code>chown -R</code>
+              walking this volume while the live <code>kafka</code> container is actively renaming its
+              own checkpoint files underneath it is a real race that has actually happened
+              (<code>ENOENT</code> on a live <code>.tmp</code> file). After the first real init, this
+              becomes a no-op forever.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="kafka">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>kafka</h3>
+            <p class="unit-role">Apache Kafka, KRaft mode, single broker acting as its own controller — the durable, replayable buffer between producer and Spark.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>apache/kafka:3.7.0</code> (official)</dd></div>
+              <div><dt>Depends on</dt><dd><code>kafka-volume-init</code> completed</dd></div>
+              <div><dt>Ports</dt><dd><code>9092</code> host → <code>9092</code> (external listener only)</dd></div>
+              <div><dt>Volumes</dt><dd><code>kafka_data</code> → <code>/var/lib/kafka/kafka_data</code></dd></div>
+              <div><dt>Health check</dt><dd><code>kafka-broker-api-versions.sh</code> · every 10s</dd></div>
+              <div><dt>Limits</dt><dd>1500m · restart: unless-stopped</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment (selected)</span>
+              <table class="env-table">
+                <tr><td class="k">KAFKA_PROCESS_ROLES</td><td class="v">broker,controller</td></tr>
+                <tr><td class="k">KAFKA_LISTENERS</td><td class="v">PLAINTEXT :19092 · CONTROLLER :9093 · EXTERNAL :9092</td></tr>
+                <tr><td class="k">KAFKA_ADVERTISED_LISTENERS</td><td class="v">PLAINTEXT kafka:19092 (containers) · EXTERNAL localhost:9092 (host tools)</td></tr>
+                <tr><td class="k">KAFKA_AUTO_CREATE_TOPICS_ENABLE</td><td class="v">false</td></tr>
+                <tr><td class="k">KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR</td><td class="v">1</td></tr>
+                <tr><td class="k">KAFKA_HEAP_OPTS</td><td class="v">-Xmx1G -Xms1G</td></tr>
+                <tr><td class="k">KAFKA_LOG_DIRS</td><td class="v">/var/lib/kafka/kafka_data</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              Two listeners matter: <strong>19092</strong> is what every other container uses (Docker's
+              internal DNS resolves <code>kafka</code>), never published to the host; <strong>9092</strong>
+              is published for tools running outside Docker (an IDE, a local CQL client). Topic
+              auto-creation is off deliberately — <code>kafka-topic-init</code> creates
+              <code>sensor-readings</code> explicitly with controlled partitioning instead.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="kafka-topic-init">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--oneshot">one-shot</span></div>
+            <h3>kafka-topic-init</h3>
+            <p class="unit-role">Creates the <code>sensor-readings</code> topic with the exact partition count and replication factor the rest of the stack assumes.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>apache/kafka:3.7.0</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>kafka</code> healthy</dd></div>
+              <div><dt>Health check</dt><dd>none — one-shot</dd></div>
+              <div><dt>Limits</dt><dd>256m · restart: no</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment</span>
+              <table class="env-table">
+                <tr><td class="k">TOPIC_NAME</td><td class="v">sensor-readings</td></tr>
+                <tr><td class="k">TOPIC_PARTITIONS</td><td class="v">3</td></tr>
+                <tr><td class="k">TOPIC_REPLICATION_FACTOR</td><td class="v">1</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">Runs <code>--create --if-not-exists</code>, then <code>--describe</code> so the partition layout is visible in <code>docker compose logs</code> without a manual step.</p>
+          </div>
+        </article>
+
+        <article class="unit" id="kafka-ui">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>kafka-ui</h3>
+            <p class="unit-role">A dev-convenience browser UI for topics and messages. Not part of the data or observation path.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>provectuslabs/kafka-ui:v0.7.2</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>kafka</code> healthy</dd></div>
+              <div><dt>Ports</dt><dd><code>8080</code> host → <code>8080</code></dd></div>
+              <div><dt>Limits</dt><dd>512m · restart: unless-stopped</dd></div>
+            </dl>
+            <p class="unit-note">Safe to leave out of a production deployment entirely — nothing else depends on it.</p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ============================= STREAM PROCESSING ============================= -->
+    <section class="category" id="stream-section">
+      <div class="category-head">
+        <h2><span class="swatch" style="background:var(--cat-stream)"></span>Stream processing</h2>
+        <p class="category-desc">A minimal Spark standalone cluster: one master, one worker, three concurrent streaming queries.</p>
+      </div>
+      <div class="unit-grid">
+
+        <article class="unit" id="spark-master">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>spark-master</h3>
+            <p class="unit-role">Spark's own cluster coordinator. Unmodified official image.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>apache/spark:3.5.9</code> (official)</dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Ports</dt><dd><code>7077</code> cluster protocol · <code>8090</code> host → <code>8080</code> web UI</dd></div>
+              <div><dt>Health check</dt><dd>TCP probe on :8080 · every 10s</dd></div>
+              <div><dt>Limits</dt><dd>1g · restart: unless-stopped</dd></div>
+            </dl>
+          </div>
+        </article>
+
+        <article class="unit" id="spark-job-volume-init">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--oneshot">one-shot</span></div>
+            <h3>spark-job-volume-init</h3>
+            <p class="unit-role">Same idempotent-ownership pattern as kafka-volume-init, for Spark's checkpoint volume.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>apache/spark:3.5.9</code> · runs as root</dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Volumes</dt><dd><code>spark_checkpoints</code> → <code>/opt/spark-checkpoints</code></dd></div>
+              <div><dt>Limits</dt><dd>128m · restart: no</dd></div>
+            </dl>
+            <p class="unit-note warn">
+              Chowns to uid <strong>185</strong> (the <code>spark</code> user) only if it isn't already —
+              the same race avoided elsewhere: a blind <code>chown -R</code> here while
+              <code>spark-job</code>/<code>spark-worker</code> are live and writing checkpoint state
+              would fight their own file writes.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="spark-worker">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span><span class="pill pill--custom">custom build</span></div>
+            <h3>spark-worker</h3>
+            <p class="unit-role">Where the executors actually run — including the pandas UDF that powers adaptive anomaly detection.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd><code>./spark_job/worker.Dockerfile</code> → <code>apache/spark:3.5.9</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>spark-master</code> healthy · <code>spark-job-volume-init</code> completed · <code>dataset-init</code> completed</dd></div>
+              <div><dt>Ports</dt><dd><code>8091</code> host → <code>8081</code> web UI</dd></div>
+              <div><dt>Volumes</dt><dd><code>kaggle_dataset</code> → <code>/data</code> (ro) · <code>spark_checkpoints</code> → <code>/opt/spark-checkpoints</code></dd></div>
+              <div><dt>Health check</dt><dd>TCP probe on :8081 · every 10s</dd></div>
+              <div><dt>Limits</dt><dd><strong>2560m</strong> · restart: unless-stopped</dd></div>
+            </dl>
+            <p class="unit-note">
+              Needs its own copy of the CSV and its own checkpoint mount because
+              <strong>executors, not the driver, run <code>applyInPandasWithState</code></strong> —
+              PySpark doesn't auto-distribute pip packages to executors the way it distributes
+              <code>--packages</code> JARs, so this image installs the identical pandas/pyarrow set as
+              the driver. Confirmed by a real <code>ModuleNotFoundError</code> before this file
+              existed, not assumed upfront. The memory limit was raised from an original 1500m after
+              three concurrent stateful queries sharing one worker OOM'd under a genuine backlog
+              catch-up.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="spark-job">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span><span class="pill pill--custom">custom build</span></div>
+            <h3>spark-job</h3>
+            <p class="unit-role">The driver. Three independent Structured Streaming queries, one Kafka topic, one Cassandra keyspace.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd><code>./spark_job/Dockerfile</code> → <code>apache/spark:3.5.9</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>kafka-topic-init</code>, <code>cassandra-schema-init</code> completed · <code>spark-master</code>, <code>spark-job-volume-init</code> ready · <code>dataset-init</code> completed <span style="color:var(--muted)">(the most-dependent service in the stack)</span></dd></div>
+              <div><dt>Ports</dt><dd><code>8002</code> host → <code>8000</code> state · <code>4040</code> Spark driver UI</dd></div>
+              <div><dt>Volumes</dt><dd><code>kaggle_dataset</code> (ro) · <code>spark_checkpoints</code></dd></div>
+              <div><dt>Health check</dt><dd><code>GET /healthz</code> · every 10s, 10 retries, 30s grace</dd></div>
+              <div><dt>Limits</dt><dd>2000m · restart: unless-stopped</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment (selected)</span>
+              <table class="env-table">
+                <tr><td class="k">SPARK_JOB_TRIGGER_INTERVAL</td><td class="v">30 seconds</td></tr>
+                <tr><td class="k">SPARK_JOB_MAX_OFFSETS_PER_TRIGGER</td><td class="v">20000</td></tr>
+                <tr><td class="k">SPARK_JOB_WATERMARK_1M / _1H</td><td class="v">2 minutes / 10 minutes</td></tr>
+                <tr><td class="k">SPARK_JOB_AGG_1H_WINDOW_DURATION</td><td class="v">1 hour</td></tr>
+                <tr><td class="k">SPARK_JOB_ANOMALY_SIGMA_N</td><td class="v">3.0</td></tr>
+                <tr><td class="k">SPARK_JOB_ANOMALY_EWMA_ALPHA</td><td class="v">0.001</td></tr>
+                <tr><td class="k">SPARK_JOB_ANOMALY_CEILING_SAFETY_MULTIPLIER</td><td class="v">1.5</td></tr>
+                <tr><td class="k">SPARK_JOB_CHECKPOINT_ROOT</td><td class="v">/opt/spark-checkpoints</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              Runs three fully independent queries — <code>raw_events</code> (validate, flag anomalies,
+              write every row), <code>agg_1m</code> and <code>agg_1h</code> (tumbling windows) — each
+              with its own checkpoint directory. The Dockerfile pre-warms the Ivy cache at
+              <strong>build time</strong> for the Kafka and Cassandra connector JARs, so no Maven
+              download happens on every <code>docker compose up</code>; it also zips the
+              <code>spark_job</code> package for <code>--py-files</code> distribution, since cloudpickle
+              needs it importable on executors too. <code>SPARK_JOB_MAX_OFFSETS_PER_TRIGGER</code>
+              exists specifically because an unbounded backlog catch-up once OOM'd an executor — it
+              now drains gradually instead. Spark's own REST API doesn't expose Structured Streaming
+              progress as JSON, so a custom <code>StreamingQueryListener</code> feeds <code>/state</code>.
+            </p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ============================= STORAGE ============================= -->
+    <section class="category" id="storage-section">
+      <div class="category-head">
+        <h2><span class="swatch" style="background:var(--cat-storage)"></span>Storage</h2>
+        <p class="category-desc">Cassandra, single node locally, five tables, no retention TTL by design.</p>
+      </div>
+      <div class="unit-grid">
+
+        <article class="unit" id="cassandra">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span><span class="pill pill--custom">custom build</span></div>
+            <h3>cassandra</h3>
+            <p class="unit-role">The system of record. Keyspace <code>iot</code>, five tables, everything kept forever.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd><code>./infra/cassandra</code> → <code>cassandra:4.1.12</code> + baked-in JMX exporter</dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Ports</dt><dd><code>9042</code> CQL · <code>7070</code> JMX/Prometheus metrics</dd></div>
+              <div><dt>Volumes</dt><dd><code>cassandra_data</code> → <code>/var/lib/cassandra</code></dd></div>
+              <div><dt>Health check</dt><dd><code>cqlsh -e 'describe keyspaces'</code> · every 15s, 60s grace</dd></div>
+              <div><dt>Limits</dt><dd>2g · restart: unless-stopped</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment</span>
+              <table class="env-table">
+                <tr><td class="k">CASSANDRA_CLUSTER_NAME</td><td class="v">iot-cluster-dev</td></tr>
+                <tr><td class="k">CASSANDRA_ENDPOINT_SNITCH</td><td class="v">GossipingPropertyFileSnitch</td></tr>
+                <tr><td class="k">MAX_HEAP_SIZE / HEAP_NEWSIZE</td><td class="v">1G / 256M</td></tr>
+                <tr><td class="k">JVM_EXTRA_OPTS</td><td class="v">jmx_prometheus_javaagent on :7070</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              <code>raw_events</code> is partitioned by <code>(device_id, 15-minute bucket)</code> to
+              bound partition size under sustained writes. <code>agg_1m</code>/<code>agg_1h</code> feed
+              Grafana's business KPIs and the planner role's trend/chronic-exposure metrics.
+              <code>device_metadata</code> and <code>device_thresholds</code> are small static lookups
+              seeded once by schema-init — the latter from the exact same baseline that drives Spark's
+              own anomaly detector, not a separately invented set of limits. No authentication is
+              configured (default <code>AllowAllAuthenticator</code>) and there's no TTL anywhere by
+              design — disk-growth monitoring in Grafana exists specifically because of that choice.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="cassandra-schema-init">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--oneshot">one-shot</span></div>
+            <h3>cassandra-schema-init</h3>
+            <p class="unit-role">Applies the six versioned CQL scripts that create the keyspace and every table, in order, exactly once.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>cassandra:4.1.12</code> (plain, not the JMX build)</dd></div>
+              <div><dt>Depends on</dt><dd><code>cassandra</code> healthy</dd></div>
+              <div><dt>Volumes</dt><dd><code>./infra/cassandra/schema</code> → <code>/schema</code> (read-only bind mount)</dd></div>
+              <div><dt>Health check</dt><dd>none — one-shot</dd></div>
+              <div><dt>Limits</dt><dd>256m · restart: no</dd></div>
+            </dl>
+            <p class="unit-note">
+              Retries <code>001_keyspace.cql</code> up to 30 times, 5 seconds apart, before giving up —
+              the healthcheck saying "healthy" and CQL truly being ready to accept schema changes
+              aren't always the same instant. Then runs <code>002</code>–<code>006</code>
+              (<code>raw_events</code>, <code>agg_1m</code>, <code>agg_1h</code>,
+              <code>device_metadata</code>, <code>device_thresholds</code>) in strict order.
+            </p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ============================= WEB APPLICATION ============================= -->
+    <section class="category" id="webapp-section">
+      <div class="category-head">
+        <h2><span class="swatch" style="background:var(--cat-web)"></span>Web application</h2>
+        <p class="category-desc">One container serves both the API and the built frontend — there's no separate frontend service.</p>
+      </div>
+      <div class="unit-grid">
+
+        <article class="unit" id="backend">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span><span class="pill pill--custom">custom build</span></div>
+            <h3>backend</h3>
+            <p class="unit-role">Read-only FastAPI API + WebSocket server, with the built React app baked into the same image and served from <code>/</code>.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd>context: <strong>repo root</strong> → <code>backend/Dockerfile</code> (multi-stage: <code>node:24-slim</code> builds React, final stage is <code>python:3.11.9-slim-bookworm</code>)</dd></div>
+              <div><dt>Depends on</dt><dd><code>kafka</code> healthy · <code>cassandra-schema-init</code> completed · <code>producer</code> healthy</dd></div>
+              <div><dt>Ports</dt><dd><code>8000</code> host → <code>8000</code></dd></div>
+              <div><dt>Health check</dt><dd><code>GET /healthz</code> · every 10s</dd></div>
+              <div><dt>Limits</dt><dd>384m · restart: unless-stopped</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment (selected)</span>
+              <table class="env-table">
+                <tr><td class="k">PRODUCER_STATE_URL</td><td class="v">http://producer:8000</td></tr>
+                <tr><td class="k">SPARK_JOB_STATE_URL</td><td class="v">http://spark-job:8000</td></tr>
+                <tr><td class="k">BACKEND_KNOWN_DEVICE_IDS</td><td class="v">3 fixed MAC addresses (the dataset's real devices)</td></tr>
+                <tr><td class="k">BACKEND_POLL_INTERVAL_SECONDS</td><td class="v">2</td></tr>
+                <tr><td class="k">BACKEND_ADMIN_USERNAME / PASSWORD</td><td class="v">admin / <em>required, no default</em></td></tr>
+                <tr><td class="k">BACKEND_PLANNER_USERNAME / PASSWORD</td><td class="v">planner / <em>required, no default</em></td></tr>
+                <tr><td class="k">BACKEND_SESSION_SECRET</td><td class="v"><em>required, no default</em> — e.g. <code>openssl rand -hex 32</code></td></tr>
+                <tr><td class="k">BACKEND_SESSION_TTL_SECONDS</td><td class="v">43200 (12h)</td></tr>
+                <tr><td class="k">BACKEND_COOKIE_SECURE</td><td class="v">false (local dev)</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              The build <code>context</code> is the repo root, not <code>./backend</code> like every
+              other service — the Dockerfile needs to <code>COPY frontend/…</code> from a sibling
+              directory. Its <strong>only</strong> write path is an in-memory alert buffer fed by
+              Grafana's webhook; everything else — Kafka offsets via its own commit-free consumer,
+              Cassandra point reads, polling the producer's/Spark's <code>/state</code> — is read-only.
+              A hand-rolled HMAC-signed session cookie gates every route with a <code>role</code> claim
+              (admin/planner) resolved from the two fixed credential pairs above — there's still no
+              user table.
+            </p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ============================= OBSERVABILITY ============================= -->
+    <section class="category" id="observability-section">
+      <div class="category-head">
+        <h2><span class="swatch" style="background:var(--cat-observe)"></span>Observability</h2>
+        <p class="category-desc">Metrics, logs, dashboards, and alerting — all provisioned as code, none of it holding write credentials to the pipeline.</p>
+      </div>
+      <div class="unit-grid">
+
+        <article class="unit" id="prometheus">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>prometheus</h3>
+            <p class="unit-role">Scrapes every metrics endpoint in the stack on a timer; stores it in its own TSDB.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>prom/prometheus:v3.14.0</code></dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Ports</dt><dd><code>9090</code> host → <code>9090</code></dd></div>
+              <div><dt>Volumes</dt><dd><code>infra/prometheus/prometheus.yml</code> (ro, bind) · <code>prometheus_data</code></dd></div>
+              <div><dt>Health check</dt><dd><code>GET /-/healthy</code> · every 10s</dd></div>
+              <div><dt>Limits</dt><dd>512m · restart: unless-stopped</dd></div>
+            </dl>
+            <p class="unit-note">Scrapes <code>kafka-exporter</code>, Cassandra's baked-in JMX exporter, <code>node-exporter</code>, and the producer's/spark-job's own <code>/metrics</code>. Config changes need <code>docker compose restart prometheus</code> — no hot reload.</p>
+          </div>
+        </article>
+
+        <article class="unit" id="kafka-exporter">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>kafka-exporter</h3>
+            <p class="unit-role">Turns broker-side partition offsets into Prometheus metrics — the raw material for consumer-lag panels.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>danielqsj/kafka-exporter:v1.9.0</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>kafka</code> healthy</dd></div>
+              <div><dt>Ports</dt><dd><code>9308</code> host → <code>9308</code></dd></div>
+              <div><dt>Health check</dt><dd><code>wget --spider /metrics</code> · every 15s</dd></div>
+              <div><dt>Limits</dt><dd>256m · restart: unless-stopped</dd></div>
+            </dl>
+            <p class="unit-note">Filtered to just <code>^sensor-readings$</code> via <code>--topic.filter</code> — no noise from Kafka's internal topics.</p>
+          </div>
+        </article>
+
+        <article class="unit" id="node-exporter">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>node-exporter</h3>
+            <p class="unit-role">Host-level disk/CPU/memory — the cross-check for a pipeline with no data retention TTL.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>prom/node-exporter:v1.12.1</code></dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Ports</dt><dd><code>9100</code> host → <code>9100</code></dd></div>
+              <div><dt>Volumes</dt><dd><code>/proc</code>, <code>/sys</code>, <code>/</code> — read-only from the <strong>host</strong>, not a named volume</dd></div>
+              <div><dt>Health check</dt><dd>none defined</dd></div>
+              <div><dt>Limits</dt><dd>128m · restart: unless-stopped</dd></div>
+            </dl>
+            <p class="unit-note">Exists specifically so Grafana can chart disk growth against the "keep everything, no TTL" retention policy — the risk that unbounded growth eventually fills the disk.</p>
+          </div>
+        </article>
+
+        <article class="unit" id="loki">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>loki</h3>
+            <p class="unit-role">Centralized log store for the admin role — single-binary, filesystem-backed, 7-day retention.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>grafana/loki:3.6.11</code></dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
+              <div><dt>Ports</dt><dd><code>3100</code> host → <code>3100</code></dd></div>
+              <div><dt>Volumes</dt><dd><code>infra/loki/loki-config.yml</code> (ro, bind) · <code>loki_data</code></dd></div>
+              <div><dt>Health check</dt><dd><strong>none</strong> — see note</dd></div>
+              <div><dt>Limits</dt><dd>512m · restart: unless-stopped</dd></div>
+            </dl>
+            <p class="unit-note warn">
+              Deliberately has no healthcheck: the official image is distroless-style — no shell, no
+              <code>wget</code>/<code>curl</code>/<code>nc</code> — confirmed by
+              <code>docker compose exec loki sh</code> itself failing with "executable file not found."
+              There is nothing a <code>CMD-SHELL</code> healthcheck could run inside this container.
+              <code>promtail</code> depends on <code>service_started</code> instead of
+              <code>service_healthy</code> because of exactly this. 7-day retention here is independent
+              of Cassandra's "keep everything" policy — it governs operational logs, not sensor data.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="promtail">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span></div>
+            <h3>promtail</h3>
+            <p class="unit-role">Tails every container's stdout via the Docker socket and ships it to Loki — no per-service logging change required.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Image</dt><dd><code>grafana/promtail:3.6.11</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>loki</code> started</dd></div>
+              <div><dt>Volumes</dt><dd>config (ro) · <code>/var/run/docker.sock</code> (ro) · <code>/var/lib/docker/containers</code> (ro)</dd></div>
+              <div><dt>Ports</dt><dd>none published</dd></div>
+              <div><dt>Limits</dt><dd>256m · restart: unless-stopped</dd></div>
+            </dl>
+            <p class="unit-note">Uses Docker service discovery, not a config change per service — every service already emits JSON-line logs. Only <code>container</code>/<code>stream</code>/<code>level</code> become indexed Loki labels; everything else stays queryable via LogQL's <code>| json</code>, to avoid label-cardinality blowup.</p>
+          </div>
+        </article>
+
+        <article class="unit" id="grafana">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--running">long-running</span><span class="pill pill--custom">custom build</span></div>
+            <h3>grafana</h3>
+            <p class="unit-role">Dashboards, three datasources, and alert rules — all provisioned as code, zero manual clicking after first start.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd><code>./infra/grafana</code> → <code>grafana/grafana:13.1.4</code> + Cassandra datasource plugin</dd></div>
+              <div><dt>Depends on</dt><dd>— (starts immediately; provisioning retries internally)</dd></div>
+              <div><dt>Ports</dt><dd><code>3000</code> host → <code>3000</code></dd></div>
+              <div><dt>Volumes</dt><dd><code>grafana_data</code> · <code>infra/grafana/provisioning</code> (ro, bind)</dd></div>
+              <div><dt>Health check</dt><dd><code>GET /api/health</code> · every 10s</dd></div>
+              <div><dt>Limits</dt><dd>512m · restart: unless-stopped</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment</span>
+              <table class="env-table">
+                <tr><td class="k">GF_SECURITY_ADMIN_USER</td><td class="v">admin</td></tr>
+                <tr><td class="k">GF_SECURITY_ADMIN_PASSWORD</td><td class="v"><em>required, no default</em></td></tr>
+                <tr><td class="k">GF_USERS_ALLOW_SIGN_UP</td><td class="v">false</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              The Cassandra plugin is installed to <code>/usr/local/grafana-plugins</code> —
+              deliberately <strong>outside</strong> the <code>grafana_data</code> volume mount. Docker
+              only auto-populates a named volume from the image on its first creation, so baking a
+              plugin into the default plugin path (which lives inside that volume) would be silently
+              shadowed forever by the pre-existing, plugin-less volume. Datasources (Prometheus,
+              Cassandra via this plugin, Loki built-in), dashboards, and alert rules (consumer lag,
+              Cassandra write latency, elevated per-service ERROR rate, service down) all
+              auto-provision. Alerts route to a webhook contact point that POSTs into
+              <code>backend</code>'s <code>/api/admin/alerts/webhook</code>.
+            </p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      <span>Reflects <code>docker-compose.yml</code>, every service Dockerfile, and <code>.env.example</code> at the time of writing.</span>
+      <span>Source of truth is always the repo — this page explains it, not replaces it.</span>
+    </footer>
+
+  </main>
+</div>
+
+<div class="d3-tooltip" id="tooltip"></div>
+
+<script src="vendor/d3.v7.9.0.min.js"></script>
+<script src="assets/docs.js"></script>
+<script src="containers-data.js"></script>
+<script src="containers-charts.js"></script>
+</body>
+</html>

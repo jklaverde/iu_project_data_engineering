@@ -34,7 +34,7 @@ def read_kafka(spark, config):
     the first catch-up trigger after a restart tries to consume the entire
     backlog in one batch - a memory spike far bigger than steady-state ever
     produces, which is exactly what OOM-killed an executor and restarted this
-    same query in a loop (see docs/TROUBLESHOOTING.md)."""
+    same query in a loop (see docs/operations.html#p10-1)."""
     return (
         spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", config.kafka_bootstrap_servers)

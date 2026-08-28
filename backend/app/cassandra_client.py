@@ -157,7 +157,7 @@ class CassandraReader:
     def anomalies_sync(self, device_id: str | None, since_minutes: int, limit: int) -> list:
         """Reuses the exact CQL shape already tested in
         infra/grafana/provisioning/dashboards/json/kpi-dashboard.json
-        (LIMIT before ALLOW FILTERING - see docs/TROUBLESHOOTING.md), just
+        (LIMIT before ALLOW FILTERING - see docs/operations.html#p4-13), just
         selecting the full row so this response is the drill-down target
         directly, no second round trip."""
         since = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)

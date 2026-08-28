@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Reference — iu-sensor-pipeline</title>
+<link rel="stylesheet" href="assets/docs.css">
+<style>
+  table.data-table td:first-child { font-family: var(--font-mono); font-size: 0.83rem; white-space: nowrap; color: var(--accent-2); }
+  table.data-table td:last-child { font-size: 0.85rem; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">File<br><span class="accent">Reference</span></span>
+      <span class="brand-sub">local · v1</span>
+    </div>
+    <a class="hub-link" href="index.html">&larr; All documentation</a>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="filterInput" placeholder="Filter files…" autocomplete="off">
+    </div>
+
+    <nav class="toc" id="tocNav">
+      <div data-group>
+        <p class="toc-group-label">Directories</p>
+        <div class="toc-links">
+          <a href="#root" data-name="root directory">Root</a>
+          <a href="#docs" data-name="docs directory">docs/</a>
+          <a href="#backend" data-name="backend directory fastapi">backend/</a>
+          <a href="#frontend" data-name="frontend directory react">frontend/</a>
+          <a href="#producer" data-name="producer directory ingestion">producer/</a>
+          <a href="#spark-job" data-name="spark_job directory processing">spark_job/</a>
+          <a href="#kaggle-repository" data-name="kaggle_repository directory dataset">kaggle_repository/</a>
+          <a href="#infra" data-name="infra directory cassandra grafana prometheus">infra/</a>
+        </div>
+      </div>
+    </nav>
+
+    <p class="sidebar-foot">Every tracked file, one line each. The fastest way from "which file owns this" to the actual code.</p>
+  </aside>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Lookup table</p>
+      <h1 class="hero-title">Which file does that?</h1>
+      <p class="hero-lede">
+        Every tracked file in the repository, grouped by directory, with what it does.
+        This is the finest-grained companion to
+        <a href="containers.html">Architecture &amp; Containers</a> (which explains
+        things at the module/container level) — use that one to understand
+        <em>how the system works</em>, use this one to find <em>which file to open</em>
+        for a given piece of behavior. See <a href="operations.html">Operations</a> for
+        <em>why</em> things are built the way they are, and for bugs already found and
+        fixed in a given file before you go looking for new ones.
+      </p>
+    </section>
+
+    <section class="doc-section" id="root">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ref)"></span>Root</h2></div>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="README.md"><td>README.md</td><td>User-facing quick start: prerequisites, one-command start, walkthrough guide, endurance-run procedure.</td></tr>
+          <tr data-name="REQUIREMENTS.md"><td>REQUIREMENTS.md</td><td>The specification — scope, architecture, decision log, phase roadmap. Do not edit casually; see its own changelog header.</td></tr>
+          <tr data-name="docker-compose.yml"><td>docker-compose.yml</td><td>The entire stack: every service, port mapping, volume, healthcheck, and dependency ordering. Start here to see how any two services actually connect.</td></tr>
+          <tr data-name=".env.example"><td>.env.example</td><td>Every runtime config variable, documented inline, with safe placeholder values. Copy to <code>.env</code> and fill in real secrets.</td></tr>
+          <tr data-name=".gitignore"><td>.gitignore</td><td>Excludes <code>.env</code>, <code>__pycache__</code>, the Kaggle CSV, frontend build artifacts, and the local-only <code>development_notes/</code> and <code>.claude/</code>.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="docs">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ref)"></span>docs/</h2></div>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="index.html"><td>index.html</td><td>This documentation site's hub — links to every page below.</td></tr>
+          <tr data-name="containers.html containers-data.js containers-charts.js"><td>containers.html (+ *-data.js, *-charts.js)</td><td>Every module explained, interactive animated data-flow/boot-order diagrams, per-container reference, security model, supply-chain policy.</td></tr>
+          <tr data-name="deployment.html"><td>deployment.html</td><td>Step-by-step guide to deploying the stack on a single public VPS — hardening, firewall, optional TLS reverse proxy, backups, updates.</td></tr>
+          <tr data-name="operations.html"><td>operations.html</td><td>Status/continuation notes (what's done, implementation decisions beyond the spec, where to pick this up next) plus the full troubleshooting log, by phase.</td></tr>
+          <tr data-name="reference.html"><td>reference.html</td><td>This file.</td></tr>
+          <tr data-name="assets docs.css docs.js"><td>assets/docs.css, assets/docs.js</td><td>The shared design system and sidebar filter/scroll-spy behavior every page above uses — change the look or the nav logic once, here.</td></tr>
+          <tr data-name="vendor d3"><td>vendor/d3.v7.9.0.min.js</td><td>D3, vendored locally (verified byte-identical to the official npm package) so containers.html's diagrams work fully offline.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="backend">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-web)"></span>backend/</h2></div>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">P5 web app API (FastAPI; built together with <code>frontend/</code> into one container).</p>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="Dockerfile"><td>Dockerfile</td><td>Multi-stage build: a Node stage builds <code>frontend/</code>, then a Python stage installs hash-pinned deps and serves the built React app via <code>StaticFiles</code> alongside the API. Build context is the <strong>repo root</strong>, not <code>./backend</code> — the only service that deviates from the per-service context convention, because it needs to <code>COPY frontend/...</code>.</td></tr>
+          <tr data-name="README.md"><td>README.md</td><td>Auth model, the reserved <code>/api/control/*</code> seam for UC-7, hash-pinning regeneration command.</td></tr>
+          <tr data-name="requirements.in requirements.txt"><td>requirements.in / requirements.txt</td><td>Direct deps / hash-locked lockfile (<code>pip-compile --generate-hashes</code>, generated inside a matching base-image container — see the README).</td></tr>
+          <tr data-name="app/__init__.py"><td>app/__init__.py</td><td>Empty package marker.</td></tr>
+          <tr data-name="app/main.py"><td>app/main.py</td><td><code>create_app()</code>: builds the <code>Config</code>, the Kafka/Cassandra readers, the <code>StatePoller</code>, wires the lifespan, registers every router, mounts the built frontend at <code>/</code>. The actual entrypoint.</td></tr>
+          <tr data-name="app/config.py"><td>app/config.py</td><td><code>Config</code> dataclass + <code>load_config()</code> — every <code>BACKEND_*</code>/<code>KAFKA_*</code>/<code>CASSANDRA_*</code> env var, "required, no silent default" for secrets.</td></tr>
+          <tr data-name="app/logging_setup.py"><td>app/logging_setup.py</td><td>JSON-line log formatter, identical pattern to <code>producer</code>/<code>spark_job</code>'s own.</td></tr>
+          <tr data-name="app/auth.py"><td>app/auth.py</td><td>Hand-rolled HMAC-SHA256-signed session cookie: <code>create_session_token</code>/<code>verify_session_token</code>/<code>check_credentials</code>, and the <code>require_session</code> dependency every protected route uses.</td></tr>
+          <tr data-name="app/kafka_client.py"><td>app/kafka_client.py</td><td><code>KafkaReader</code> — a read-only observer Kafka consumer (manual partition assignment, <code>OFFSET_END</code> at startup, no consumer-group commits). Never to be confused with the real Spark consumer.</td></tr>
+          <tr data-name="app/cassandra_client.py"><td>app/cassandra_client.py</td><td><code>CassandraReader</code> — single-partition point reads for "recent rows" and <code>/api/anomalies</code>; also <code>device_metadata_sync</code>/<code>device_thresholds_sync</code>/<code>latest_reading_sync</code>/<code>aggregates_sync</code> for the planner role.</td></tr>
+          <tr data-name="app/environment.py"><td>app/environment.py</td><td>Pure functions turning a device's latest reading + threshold stats into role-appropriate signals: status, <code>metric_ranges</code>, air quality score, comfort index, chronic-exposure ratio, trend, and the timeline/out-of-range-log rollups (D34/D35).</td></tr>
+          <tr data-name="app/upstream_http.py"><td>app/upstream_http.py</td><td>Stdlib <code>urllib</code> helpers to poll producer's/spark-job's <code>/state</code>/<code>/healthz</code> and probe deployment status.</td></tr>
+          <tr data-name="app/state_poller.py"><td>app/state_poller.py</td><td><code>StatePoller</code> — the two background asyncio loops that assemble the combined snapshot and broadcast it over WebSocket. Caches last-known-good upstream state.</td></tr>
+          <tr data-name="app/ws_manager.py"><td>app/ws_manager.py</td><td><code>ConnectionManager</code> — tracks connected WebSocket clients, broadcasts to all of them.</td></tr>
+          <tr data-name="app/routers/__init__.py"><td>app/routers/__init__.py</td><td>Empty package marker.</td></tr>
+          <tr data-name="app/routers/auth.py"><td>app/routers/auth.py</td><td><code>POST /api/auth/login</code>, <code>POST /api/auth/logout</code>, <code>GET /api/auth/me</code>.</td></tr>
+          <tr data-name="app/routers/steps.py"><td>app/routers/steps.py</td><td><code>GET /api/pipeline-state</code> (full snapshot) and <code>GET /api/steps/{name}</code> (one step).</td></tr>
+          <tr data-name="app/routers/anomalies.py"><td>app/routers/anomalies.py</td><td><code>GET /api/anomalies?device_id=&amp;since_minutes=&amp;limit=</code>.</td></tr>
+          <tr data-name="app/routers/sensors.py"><td>app/routers/sensors.py</td><td><code>GET /api/sensors</code>, <code>/api/sensors/{device_id}/history</code>, <code>/api/sensors/{device_id}/timeline</code> — feeds the planner role's map, detail panel, charts and out-of-range log.</td></tr>
+          <tr data-name="app/routers/admin.py"><td>app/routers/admin.py</td><td><code>POST /api/admin/alerts/webhook</code> (unauthenticated) and <code>GET /api/admin/alerts</code> (admin-gated). Split into two routers so <code>main.py</code> can gate them differently.</td></tr>
+          <tr data-name="app/alert_store.py"><td>app/alert_store.py</td><td><code>AlertStore</code> — small in-memory ring buffer of recent Grafana-fired alerts; Grafana stays the system of record.</td></tr>
+          <tr data-name="app/routers/docs.py"><td>app/routers/docs.py</td><td>Admin-gated <code>GET /api/admin/docs</code> (catalog) and <code>/api/admin/docs/{doc_id}</code> — serves this documentation site's static files from inside the running app (D36/D37).</td></tr>
+          <tr data-name="app/routers/ws.py"><td>app/routers/ws.py</td><td><code>/ws/pipeline-state</code> — validates the session cookie before accepting the handshake, sends the cached snapshot immediately, then waits for broadcasts.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="frontend">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-web)"></span>frontend/</h2></div>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">P5 role-based UI (React + TypeScript + Vite + Apache ECharts + Leaflet).</p>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="package.json package-lock.json"><td>package.json / package-lock.json</td><td>Explicit, minimal, exact-pinned dependency list (NFR-10.1) + committed lockfile.</td></tr>
+          <tr data-name=".npmrc"><td>.npmrc</td><td><code>ignore-scripts=true</code> (NFR-10.2).</td></tr>
+          <tr data-name="tsconfig.json vite.config.ts index.html"><td>tsconfig.json / vite.config.ts / index.html</td><td>TypeScript config; Vite config (dev-mode <code>/api</code>/<code>/ws</code> proxy to the backend container); the single HTML shell.</td></tr>
+          <tr data-name="README.md"><td>README.md</td><td>NFR-10.1 justifications for TypeScript and Leaflet — the off-allowlist dependencies — plus how the Docs tab embeds the local docs/ site.</td></tr>
+          <tr data-name="src/main.tsx"><td>src/main.tsx</td><td>React root render.</td></tr>
+          <tr data-name="src/App.tsx"><td>src/App.tsx</td><td>Top-level component: checks auth, shows <code>LoginForm</code>, the admin <code>Shell</code>, or the planner <code>MapView</code>.</td></tr>
+          <tr data-name="src/api.ts"><td>src/api.ts</td><td><code>fetch</code>-based API client, WebSocket helper, sensor-fetching functions.</td></tr>
+          <tr data-name="src/types.ts"><td>src/types.ts</td><td>TypeScript interfaces mirroring every backend response shape — the frontend/backend JSON contract's single source of truth.</td></tr>
+          <tr data-name="src/vite-env.d.ts"><td>src/vite-env.d.ts</td><td>Vite's ambient type declarations.</td></tr>
+          <tr data-name="src/styles.css"><td>src/styles.css</td><td>All app styling — dark theme, layout, the SVG pipeline-flow animation, planner map/status-badge styles.</td></tr>
+          <tr data-name="src/auth/LoginForm.tsx"><td>src/auth/LoginForm.tsx</td><td>The login screen, shared by both roles.</td></tr>
+          <tr data-name="src/layout/Stepper.tsx"><td>src/layout/Stepper.tsx</td><td>The six-step side navigation.</td></tr>
+          <tr data-name="src/layout/StepShell.tsx"><td>src/layout/StepShell.tsx</td><td>Shared "waiting for data..." wrapper.</td></tr>
+          <tr data-name="src/layout/ErrorBoundary.tsx"><td>src/layout/ErrorBoundary.tsx</td><td>Per-step React error boundary (added after a real crash) so one step's bad data can't freeze the whole app.</td></tr>
+          <tr data-name="src/pipeline/PipelineFlowDiagram.tsx"><td>src/pipeline/PipelineFlowDiagram.tsx</td><td>The custom SVG pipeline animation (D26) — 4 boxes, CSS motion-path particles, REPLAY/SYNTHETIC hand-over badge.</td></tr>
+          <tr data-name="src/charts/EChartWrapper.tsx"><td>src/charts/EChartWrapper.tsx</td><td>Reusable ECharts wrapper used by every chart.</td></tr>
+          <tr data-name="src/state/usePipelineState.ts"><td>src/state/usePipelineState.ts</td><td>WebSocket-primary/polling-fallback hook every admin step reads live data from.</td></tr>
+          <tr data-name="src/state/useSensors.ts"><td>src/state/useSensors.ts</td><td>Polling hook the planner map view reads live sensor data from.</td></tr>
+          <tr data-name="src/steps/DeploymentStep.tsx"><td>src/steps/DeploymentStep.tsx</td><td>Step 1 — service health grid.</td></tr>
+          <tr data-name="src/steps/IngestionStep.tsx"><td>src/steps/IngestionStep.tsx</td><td>Step 2 — producer mode/counters/recent events.</td></tr>
+          <tr data-name="src/steps/KafkaStep.tsx"><td>src/steps/KafkaStep.tsx</td><td>Step 3 — live throughput chart + per-query lag.</td></tr>
+          <tr data-name="src/steps/SparkStep.tsx"><td>src/steps/SparkStep.tsx</td><td>Step 4 — per-query batch progress + end-to-end latency.</td></tr>
+          <tr data-name="src/steps/CassandraStep.tsx"><td>src/steps/CassandraStep.tsx</td><td>Step 5 — most recently written rows.</td></tr>
+          <tr data-name="src/steps/SummaryStep.tsx"><td>src/steps/SummaryStep.tsx</td><td>Step 6 — totals + the Grafana link.</td></tr>
+          <tr data-name="src/planner/MapView.tsx"><td>src/planner/MapView.tsx</td><td>Environmental/planner role's top-level view — raw Leaflet map centered on Lingen (Ems), status-colored markers.</td></tr>
+          <tr data-name="src/planner/SensorDetailPanel.tsx"><td>src/planner/SensorDetailPanel.tsx</td><td>Selected sensor's readings, status badge, stat tiles with a <code>MetricGauge</code> per metric.</td></tr>
+          <tr data-name="src/planner/SensorTimeline.tsx"><td>src/planner/SensorTimeline.tsx</td><td>Behavior-over-time panel (D34) — five charts with shaded unhealthy spans; renders <code>BoundaryLog</code> below using the same fetched data.</td></tr>
+          <tr data-name="src/planner/BoundaryLog.tsx"><td>src/planner/BoundaryLog.tsx</td><td>Out-of-range log (D35) — newest-first list of periods that breached the acceptable range, actual min/max value, plain-language badge.</td></tr>
+          <tr data-name="src/planner/MetricGauge.tsx"><td>src/planner/MetricGauge.tsx</td><td>Actual-vs-acceptable range bar for one metric.</td></tr>
+          <tr data-name="src/admin/AlertsTab.tsx"><td>src/admin/AlertsTab.tsx</td><td>Admin role's Alerts tab — polls <code>/api/admin/alerts</code>, links to a scoped Grafana Explore URL.</td></tr>
+          <tr data-name="src/admin/DocsTab.tsx"><td>src/admin/DocsTab.tsx</td><td>Admin role's Docs tab — lists and embeds this documentation site from inside the running app (D36/D37).</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="producer">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ingest)"></span>producer/</h2></div>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">P2 ingestion service.</p>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="Dockerfile"><td>Dockerfile</td><td><code>python:3.11.9-slim-bookworm</code>, hash-pinned install.</td></tr>
+          <tr data-name="README.md"><td>README.md</td><td>Standalone-run instructions, the <code>PRODUCER_REPLAY_ROW_LIMIT</code> dev fast-forward knob, the <code>/state</code> endpoint contract.</td></tr>
+          <tr data-name="requirements.in requirements.txt"><td>requirements.in / requirements.txt</td><td><code>confluent-kafka</code> direct dep / hash-locked lockfile.</td></tr>
+          <tr data-name="producer/__init__.py"><td>producer/__init__.py</td><td>Empty package marker.</td></tr>
+          <tr data-name="producer/main.py"><td>producer/main.py</td><td>Entrypoint: loads config, computes baseline stats, starts the state server, runs replay then synthetic generation.</td></tr>
+          <tr data-name="producer/config.py"><td>producer/config.py</td><td><code>Config</code> dataclass + <code>load_config()</code> for every <code>PRODUCER_*</code>/<code>KAFKA_*</code> env var.</td></tr>
+          <tr data-name="producer/schema.py"><td>producer/schema.py</td><td><code>build_event()</code> — the single canonical JSON event shape every downstream consumer depends on.</td></tr>
+          <tr data-name="producer/device_stats.py"><td>producer/device_stats.py</td><td><code>compute_baseline_stats()</code> — one streaming pass over the CSV via Welford's online algorithm.</td></tr>
+          <tr data-name="producer/replay.py"><td>producer/replay.py</td><td><code>run_replay()</code> — streams the CSV top-to-bottom, publishing one event per row, then triggers hand-over.</td></tr>
+          <tr data-name="producer/synthetic.py"><td>producer/synthetic.py</td><td><code>SyntheticGenerator</code>/<code>run_synthetic()</code> — samples events from the baseline forever, including anomaly injection.</td></tr>
+          <tr data-name="producer/rate_limiter.py"><td>producer/rate_limiter.py</td><td><code>RateLimiter</code> — fixed-cadence pacing on the monotonic clock; resyncs instead of bursting.</td></tr>
+          <tr data-name="producer/kafka_client.py"><td>producer/kafka_client.py</td><td><code>KafkaEventPublisher</code> — thin wrapper around <code>confluent_kafka.Producer</code> (idempotent, <code>acks=all</code>).</td></tr>
+          <tr data-name="producer/state.py"><td>producer/state.py</td><td><code>ProducerState</code> — thread-safe counters shared between the publish loop and the HTTP server.</td></tr>
+          <tr data-name="producer/state_server.py"><td>producer/state_server.py</td><td><code>GET /state</code>, <code>/metrics</code>, <code>/healthz</code> — the stdlib <code>ThreadingHTTPServer</code>.</td></tr>
+          <tr data-name="producer/metrics.py"><td>producer/metrics.py</td><td>Hand-formatted Prometheus text exposition.</td></tr>
+          <tr data-name="producer/logging_setup.py"><td>producer/logging_setup.py</td><td>JSON-line log formatter.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="spark-job">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-stream)"></span>spark_job/</h2></div>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">P3 stream processing service.</p>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="Dockerfile"><td>Dockerfile</td><td>The driver image: pre-warms the Ivy cache for the Kafka/Cassandra connector jars at build time, zips <code>spark_job/</code> for <code>--py-files</code> distribution.</td></tr>
+          <tr data-name="worker.Dockerfile"><td>worker.Dockerfile</td><td>The executor image — needs the identical pandas/pyarrow install as the driver, since <code>applyInPandasWithState</code> runs on the worker.</td></tr>
+          <tr data-name="entrypoint.sh"><td>entrypoint.sh</td><td>The <code>spark-submit</code> invocation (master URL, <code>--packages</code>, <code>--py-files</code>, Cassandra connection conf).</td></tr>
+          <tr data-name="run.py"><td>run.py</td><td>Thin top-level script that just calls <code>spark_job.main.main()</code> — exists so <code>spark-submit</code> doesn't break the package's relative imports.</td></tr>
+          <tr data-name="README.md"><td>README.md</td><td>Architecture summary, the <code>run.py</code> rationale, the Ivy-cache-at-build-time rationale.</td></tr>
+          <tr data-name="requirements.in requirements.txt"><td>requirements.in / requirements.txt</td><td>pandas/pyarrow direct deps / hash-locked lockfile (PySpark ships in the base image).</td></tr>
+          <tr data-name="spark_job/__init__.py"><td>spark_job/__init__.py</td><td>Empty package marker.</td></tr>
+          <tr data-name="spark_job/main.py"><td>spark_job/main.py</td><td>Entrypoint: builds the <code>SparkSession</code>, computes the seed baseline, starts all three streaming queries.</td></tr>
+          <tr data-name="spark_job/config.py"><td>spark_job/config.py</td><td><code>Config</code> dataclass + <code>load_config()</code> for every <code>SPARK_JOB_*</code>/<code>KAFKA_*</code>/<code>CASSANDRA_*</code> env var.</td></tr>
+          <tr data-name="spark_job/schema.py"><td>spark_job/schema.py</td><td><code>EVENT_SCHEMA</code> (matches the producer's JSON exactly) + <code>read_kafka()</code>/<code>parse_and_cast()</code>.</td></tr>
+          <tr data-name="spark_job/baseline.py"><td>spark_job/baseline.py</td><td><code>compute_seed_baseline()</code> — one-time batch read computing the EWMA seed and absolute ceilings for co/smoke/lpg.</td></tr>
+          <tr data-name="spark_job/device_thresholds_sink.py"><td>spark_job/device_thresholds_sink.py</td><td><code>write_device_thresholds()</code> — persists the seeded baseline into <code>iot.device_thresholds</code> once at startup.</td></tr>
+          <tr data-name="spark_job/anomaly_state.py"><td>spark_job/anomaly_state.py</td><td><code>flag_anomalies()</code> — the adaptive per-device EWMA anomaly detector, checked before the state updates.</td></tr>
+          <tr data-name="spark_job/raw_query.py"><td>spark_job/raw_query.py</td><td><code>build_raw_query()</code> — the <code>raw_events</code> streaming query.</td></tr>
+          <tr data-name="spark_job/agg_query.py"><td>spark_job/agg_query.py</td><td><code>build_agg_query()</code> — the shared builder both <code>agg_1m</code> and <code>agg_1h</code> use.</td></tr>
+          <tr data-name="spark_job/cassandra_sink.py"><td>spark_job/cassandra_sink.py</td><td><code>make_foreach_batch_writer()</code> — the shared <code>foreachBatch</code> Cassandra writer.</td></tr>
+          <tr data-name="spark_job/time_buckets.py"><td>spark_job/time_buckets.py</td><td>The partition-key-column helpers matching each Cassandra table's schema exactly.</td></tr>
+          <tr data-name="spark_job/query_progress.py"><td>spark_job/query_progress.py</td><td><code>QueryProgressTracker</code> + the <code>StreamingQueryListener</code> that feeds it.</td></tr>
+          <tr data-name="spark_job/latency_tracker.py"><td>spark_job/latency_tracker.py</td><td><code>LatencyTracker</code> — the latest-micro-batch KPI-2 latency snapshot.</td></tr>
+          <tr data-name="spark_job/state_server.py"><td>spark_job/state_server.py</td><td><code>GET /state</code>, <code>/metrics</code>, <code>/healthz</code>.</td></tr>
+          <tr data-name="spark_job/metrics.py"><td>spark_job/metrics.py</td><td>Hand-formatted Prometheus text exposition.</td></tr>
+          <tr data-name="spark_job/logging_setup.py"><td>spark_job/logging_setup.py</td><td>JSON-line log formatter.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="kaggle-repository">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ingest)"></span>kaggle_repository/</h2></div>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">Dataset fetch (interim VPS deployment work).</p>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="Dockerfile"><td>Dockerfile</td><td>The <code>dataset-init</code> one-shot container image — installs <code>kagglehub</code>, runs as root (sole writer to a fresh named volume).</td></tr>
+          <tr data-name="requirements.in requirements.txt"><td>requirements.in / requirements.txt</td><td><code>kagglehub</code> direct dep / hash-locked lockfile.</td></tr>
+          <tr data-name="download_repository.py"><td>download_repository.py</td><td>Idempotent dataset fetch — skips the download if the target CSV already exists; works both inside the container and run by hand locally. No credentials needed for this public dataset.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="infra">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-observe)"></span>infra/</h2></div>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">Cassandra, Grafana, Prometheus config and custom images.</p>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="cassandra/Dockerfile"><td>cassandra/Dockerfile</td><td>Bakes the jmx_exporter javaagent into the Cassandra image (needs curl+ca-certificates added first).</td></tr>
+          <tr data-name="cassandra/jmx-exporter/cassandra-jmx-exporter.yml"><td>cassandra/jmx-exporter/cassandra-jmx-exporter.yml</td><td>The jmx_exporter config — fetched verbatim from its official Cassandra example; re-diff against upstream before changing metric names.</td></tr>
+          <tr data-name="cassandra/schema/001_keyspace.cql"><td>cassandra/schema/001_keyspace.cql</td><td>Creates the <code>iot</code> keyspace (SimpleStrategy, RF=1 — local/single-VPS only).</td></tr>
+          <tr data-name="cassandra/schema/002_raw_events.cql"><td>cassandra/schema/002_raw_events.cql</td><td>The <code>raw_events</code> table — partitioned by (device_id, bucket_start), a 15-minute bucket.</td></tr>
+          <tr data-name="cassandra/schema/003_agg_1m.cql"><td>cassandra/schema/003_agg_1m.cql</td><td>The <code>agg_1m</code> table — partitioned by (device_id, day).</td></tr>
+          <tr data-name="cassandra/schema/004_agg_1h.cql"><td>cassandra/schema/004_agg_1h.cql</td><td>The <code>agg_1h</code> table — partitioned by (device_id, month).</td></tr>
+          <tr data-name="cassandra/schema/005_device_metadata.cql"><td>cassandra/schema/005_device_metadata.cql</td><td>The <code>device_metadata</code> table + seed inserts — data-derived Lingen (Ems) placements. Feeds the planner role's map.</td></tr>
+          <tr data-name="cassandra/schema/006_device_thresholds.cql"><td>cassandra/schema/006_device_thresholds.cql</td><td>The <code>device_thresholds</code> table — empty until <code>spark_job</code> writes it at startup.</td></tr>
+          <tr data-name="grafana/Dockerfile"><td>grafana/Dockerfile</td><td>Bakes the Cassandra datasource plugin into a path outside the <code>grafana_data</code> volume.</td></tr>
+          <tr data-name="grafana/provisioning/datasources/datasources.yaml"><td>grafana/provisioning/datasources/datasources.yaml</td><td>Auto-provisions the Prometheus, Cassandra, and Loki datasources — no manual UI setup.</td></tr>
+          <tr data-name="grafana/provisioning/dashboards/dashboards.yaml"><td>grafana/provisioning/dashboards/dashboards.yaml</td><td>Points Grafana at the dashboard JSON directory.</td></tr>
+          <tr data-name="grafana/provisioning/dashboards/json/kpi-dashboard.json"><td>grafana/provisioning/dashboards/json/kpi-dashboard.json</td><td>The single 5-row KPI dashboard (KPI-1..5) — every panel's exact CQL/PromQL query lives here.</td></tr>
+          <tr data-name="prometheus/prometheus.yml"><td>prometheus/prometheus.yml</td><td>The real exporter scrape jobs. Requires <code>docker compose restart prometheus</code> after editing — no hot reload.</td></tr>
+          <tr data-name="loki/loki-config.yml"><td>loki/loki-config.yml</td><td>Single-binary Loki (filesystem storage) — the infrastructure/admin role's centralized log store.</td></tr>
+          <tr data-name="promtail/promtail-config.yml"><td>promtail/promtail-config.yml</td><td>Tails every compose container's stdout via Docker service discovery and ships to Loki.</td></tr>
+          <tr data-name="grafana/provisioning/alerting/rules.yaml"><td>grafana/provisioning/alerting/rules.yaml</td><td>Provisioned-as-code alert rules: Kafka consumer lag, Cassandra write latency, elevated ERROR log rate, service down.</td></tr>
+          <tr data-name="grafana/provisioning/alerting/contactpoints.yaml"><td>grafana/provisioning/alerting/contactpoints.yaml</td><td>One webhook contact point → backend's <code>/api/admin/alerts/webhook</code>.</td></tr>
+          <tr data-name="grafana/provisioning/alerting/policies.yaml"><td>grafana/provisioning/alerting/policies.yaml</td><td>Root notification policy routing every alert to that contact point.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <footer class="page-foot">
+      <span>174 files, one line each.</span>
+      <span><a href="index.html">&larr; Back to documentation hub</a></span>
+    </footer>
+  </main>
+</div>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>
