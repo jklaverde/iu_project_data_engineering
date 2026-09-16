@@ -4,15 +4,16 @@
 infrastructure/admin role (pipeline health, centralized logs, alerting) and an environmental/planner
 role (live sensor map, air quality/comfort scoring, citizen-facing warnings), both served from the
 same streaming pipeline and KPI dashboard.
-**Status:** **v2.0 — approved for development.** v1.0's technical pipeline (Kafka/Spark/Cassandra) is
-unchanged; v2.0 redirects the *purpose* the two user-facing surfaces serve — see the v2.0 changelog
-entry below and D29-D33.
-**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0)
+**Status:** **v2.1 — approved for development.** v1.0's technical pipeline (Kafka/Spark/Cassandra) is
+unchanged; v2.0 redirected the *purpose* the two user-facing surfaces serve (D29-D33); v2.1 responds to
+external review feedback on the v2.0 build — see the v2.1 changelog entry below and D38-D41.
+**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1)
 **v0.2 changes:** frontend (React.js) and backend (Python) confirmed; added NFR-10 npm supply-chain security policy and Risk R-5, based on the 2025–2026 npm attack landscape (Shai-Hulud worm and successors, axios and keyv compromises).
 **v0.3 changes:** deployment target defined — two Contabo VPS orchestrated with Docker Swarm, true-cluster topology (Kafka broker + Cassandra node on both machines, replication factor 2), public exposure via IP address; added §4.1 deployment topology, NFR-11/NFR-12, Risk R-6, OQ-6/OQ-7.
 **v0.4 changes:** orchestrator switched from Docker Swarm to **k3s** on **three** Contabo VPS (2 data nodes + 1 small control node; HA control plane with 3-member etcd; 3 KRaft controllers), Kafka/Cassandra as plain StatefulSets; OQ-7 resolved; OQ-4 resolved as KRaft; D16 superseded by D18/D19; NFR-11/NFR-12 and phases updated.
 **v1.0 changes:** all remaining open questions closed — FastAPI confirmed (D21); all proposed numeric values accepted (D22); atmospheric pressure simulated for all rows, labeled synthetic (D23); raw events + aggregates in Cassandra confirmed (D24); TLS via self-signed certificate (D25); charting with Apache ECharts (D26); supply-chain scanning with Socket + free Socket Firewall + Trivy (D27).
 **v2.0 changes:** reviewing the actual assignment brief (`development_notes/Assignments_Portfolio_DLBDSEDE02.pdf`) surfaced a drift — the system had become a pipeline-mechanics demo, when the brief's real scenario is a municipality using sensor data to inform planners and warn citizens. Redirected around two roles instead of one guided tour: **infrastructure/admin** (D28 replay-timestamp fix so "last N minutes" queries work from the start of a run; D29 role-based auth; D30 Loki + Promtail centralized logs; D31 Grafana alerting with a webhook into the backend and Explore drill-down links) and **environmental/planner** (D32 a Leaflet map of Lingen (Ems) with data-derived, not arbitrary, sensor placement; D33 threshold/AQI logic that reuses Spark's own baseline statistics rather than inventing separate numbers). §1, §2, §6, §7, and §9 updated accordingly; §3-5 and §10-14 extended, not replaced.
+**v2.1 changes:** external review of the running v2.0 build (recorded privately, not committed to the repo) surfaced three concrete gaps rather than new feature requests: (1) no way to compare a current reading against an earlier period, and no described per-role usage narratives beyond the one-line UC success criteria; (2) the admin role's health coverage has no defined path for the disk-exhaustion failure mode already flagged as Risk R-1; (3) nothing in the running system lets a user tell whether a displayed reading is live/synthetic or replayed-real, or when a replayed reading was *actually* collected — a direct consequence of D28 discarding the dataset's original timestamps. Addressed by: D38 (`source_ts` provenance field + a standalone Dataset Explorer view on the source CSV's own real 2020 timeline, shared by both roles); D39 (a compare-to-earlier-period overlay on the existing behavior-over-time charts, falling back to the Dataset Explorer when the compared period predates the live deployment's own history); D40 (a disk-usage-critical alert plus a narrow, explicit, admin-triggered archive-and-trim action — the first Phase-1 exception to the "observer mode only" control-panel deferral); D41 (concrete per-role scenario narratives in the docs site, not just UC one-liners). §2, §5, §6, §7, §8, §9, and §13 updated accordingly.
 
 ---
 
@@ -76,13 +77,28 @@ broke and why.
   recent-alerts feed.
 - **Infrastructure/admin role:** the original guided pipeline tour, plus centralized logs (Loki +
   Promtail, D30) and Grafana-fired alerts pushed into the UI with log drill-down (D31).
+- **Data provenance (D38):** a `source_ts` field carried alongside every replayed event, and a
+  standalone **Dataset Explorer** view — reachable by both roles — that browses the original Kaggle
+  CSV on its own real 2020 timeline, independent of the live Cassandra store.
+- **Historical comparison (D39):** a compare-to-earlier-period overlay on the planner's existing
+  behavior-over-time charts (§FR-E3), spanning both the live/synthetic history and, once a compared
+  period predates that history, the Dataset Explorer's real data.
+- **Disk-pressure remediation (D40):** a disk-usage-critical Grafana alert (extends FR-G4), and one
+  narrow, explicit, admin-triggered **archive-and-trim** action — export the oldest raw-event
+  partitions to a local archive file, then drop them from Cassandra. This is the one Phase-1 exception
+  to the control-panel deferral below: a single, logged, capacity-emergency action, not a general
+  start/stop/inject control surface.
+- **Documented per-role scenarios (D41):** concrete action/reading walkthroughs for both roles in the
+  docs site, beyond the existing UC list's one-line success criteria.
 - Grafana dashboards for the KPI catalogue of §9 (now six families, not five).
 - Basic login on the web application (now role-aware); Grafana's built-in authentication.
 - 48-hour endurance-run scenario, with acceptance criteria (§10).
 
 ### Out of scope (Phase 1 — planned for later phases)
-- Web-app **control panel** (start/stop flows, trigger bursts, inject anomalies from the UI).
-  The backend API must be designed so these actions can be added without redesign.
+- Web-app **control panel** (start/stop flows, trigger bursts, inject anomalies from the UI), **except**
+  the narrow archive-and-trim admin action of D40, which is a single logged capacity-emergency
+  operation, not a general control surface. The backend API must be designed so broader control-panel
+  actions can be added without redesign.
 - Kubernetes operators (Strimzi, K8ssandra): Phase 1 uses plain hand-written
   StatefulSets (D19); operators are a possible later phase.
 - Docker Swarm: evaluated and superseded by k3s (D16 → D18).
@@ -240,6 +256,13 @@ explicitly labeled as synthetic in the web app and Grafana so real and invented 
 never confused. Timestamps at each hop (`ingest_ts` at producer, processing time at Spark,
 write time at Cassandra) are mandatory because end-to-end latency is a required KPI (§9).
 
+Every event also carries a nullable **`source_ts`** (D38): for a row produced during the replay
+phase, the dataset's own original collection timestamp for that row (2020, per §5.1); `null` for
+synthetic rows, which have no real-world collection moment. `source_ts` is purely descriptive
+metadata — it is never used for windowing, ordering, or any query logic (that stays on
+`event_ts`/`ingest_ts` per D28); its only job is answering "when was this actually collected,"
+which `event_ts` alone cannot do once D28 rewrites it to the production moment.
+
 ### 5.3 Synthetic generation phase
 - Activates automatically when the dataset is fully consumed; the transition must be
   visible in the web app and logged.
@@ -289,6 +312,28 @@ by the backend rather than queried per request:
   convention), a comfort index (temp+humidity), and a chronic-exposure ratio from `agg_1h` history.
   One consequence of this design: the planner map's "critical" pin and the admin's anomaly log agree
   for the same device/metric/moment, because they're reading the same numbers.
+
+### 5.7 Dataset Explorer and historical comparison (D38/D39)
+
+Two features address the "how does live data relate to the dataset" and "no way to compare across
+time" feedback together, since both are fundamentally about giving a user access to *a real point in
+time other than now*:
+
+- **Dataset Explorer.** A read-only view, reachable by either role (`GET /api/dataset/*`), that
+  browses the original Kaggle CSV directly — not through Kafka/Spark/Cassandra — on its own real
+  timeline: 3 devices, ~405,000 readings, 7 days in 2020 (§5.1). It reads the same file the
+  `dataset-init` container already fetched into the `kaggle_dataset` volume, so no new ingestion path
+  or duplicate storage is needed. Every reading shown here displays its true original timestamp, never
+  `event_ts`. This is the direct answer to "is there one version live and one version per dataset":
+  yes, and now both are separately inspectable.
+- **Historical comparison overlay.** Extends the planner's per-metric behavior-over-time charts
+  (§FR-E3) with a "compare to" control (an hour/day/week/month/year ago, matching the chart's own
+  resolution). The backend resolves the compared period against whichever source actually has data for
+  it: live/synthetic history from Cassandra when the period falls within the deployment's own running
+  time, or the Dataset Explorer's real data when it predates that (e.g. comparing "now" against "the
+  same time of year" necessarily means the 2020 dataset window, not a fabricated year of live history).
+  The overlay is explicitly labeled with which source answered it, so a planner is never shown two
+  numbers without knowing they come from different eras.
 
 ---
 
@@ -343,6 +388,20 @@ directly on the Loki logs for that service and time window — no manual log-hun
 containers.
 *Success:* time from "alert appears" to "root-cause log lines visible" is one click.
 
+**UC-10 — Either role: compare a reading against an earlier period.** From a device's
+behavior-over-time chart, the user picks a "compare to" offset (a day/week/month/year ago). The chart
+overlays the earlier period, sourced from live history or the Dataset Explorer as needed (§5.7), and
+labels which source it used.
+*Success:* a user can tell, for any metric, whether current conditions are typical for that
+time-of-day/week/year or a departure from it — without manually cross-referencing two separate views.
+
+**UC-11 — Admin: remediate a disk-full risk.** A disk-usage-critical alert fires in the Alerts tab
+(D40). The admin drills into Grafana Explore to confirm which node/table is growing fastest, then uses
+the archive-and-trim action to export the oldest raw-event partitions to a local archive file and drop
+them from Cassandra, freeing space without an unqualified data-loss reset.
+*Success:* disk usage drops below the alert threshold, the alert clears, and the archived data remains
+recoverable from the exported file — not silently destroyed.
+
 ---
 
 ## 7. Functional Requirements
@@ -370,8 +429,11 @@ containers.
 
 **Cassandra (FR-C)**
 - FR-C1. Keyspace `iot` with tables for raw events, 1-minute aggregates, and 1-hour
-  aggregates, modeled with time-series partition/clustering keys.
-- FR-C2. No TTL: all data is retained (explicit decision; see NFR-4 and Risk R-1).
+  aggregates, modeled with time-series partition/clustering keys. The raw-events table
+  includes the nullable `source_ts` column (D38, §5.2).
+- FR-C2. No TTL: all data is retained by default (explicit decision; see NFR-4 and Risk
+  R-1), with the D40 archive-and-trim action as the sole, explicit, admin-triggered
+  exception for capacity emergencies.
 - FR-C3. Write latency, pending compactions, and data-directory disk usage are exported to
   Prometheus.
 
@@ -404,6 +466,21 @@ containers.
   administrator sees exactly the same pages a developer opens directly via `file://`, no repo
   checkout needed. `REQUIREMENTS.md` and root `README.md` stay repository-only, cross-linked from
   the docs site rather than duplicated into it.
+- FR-W8. A "Dataset Explorer" is reachable from both role UIs (D38, §5.7), browsing the source
+  CSV on its own real timeline independent of the live pipeline.
+
+**Admin capacity-remediation action (FR-A, D40)**
+- FR-A1. `POST /api/admin/archive` triggers the archive-and-trim action: the oldest raw-event
+  partitions (a caller-specified cutoff, or a sane default such as the oldest 10% by time) are
+  exported to a local archive file (path under a dedicated named volume) before being deleted
+  from Cassandra. This is the sole write/mutate action available to either role in Phase 1 — the
+  one explicit exception to FR-W2's observer-mode rule, and to the control-panel deferral in §2.
+- FR-A2. The action is logged (structured log line, picked up by Loki/Promtail per D30) with the
+  cutoff used, row/partition count, and archive file path, and the action itself, and its
+  before/after disk usage, are visible in the admin Alerts/Pipeline tabs.
+- FR-A3. The action is only reachable by the admin role (FR-R3) and requires an explicit
+  confirmation step in the UI before executing, since it is irreversible against the live store
+  (the archive file is the only remaining copy).
 
 **Environmental/planner role (FR-E, D32)**
 - FR-E1. A map of Lingen (Ems) shows one marker per known device at its
@@ -429,6 +506,19 @@ containers.
   smoothed average) against the normal band or safety ceiling it crossed, in plain
   language. Complements FR-E3 rather than replacing it: the charts answer "how long and
   how often," the log answers "which exact reading, and by how much."
+- FR-E6. A "compare to" control on FR-E3's charts (D39, §5.7) overlays an earlier period (a
+  day/week/month/year, matching the chart's resolution) onto the current one, resolving the data
+  from live/synthetic history or the Dataset Explorer as needed, and labeling which source
+  answered — so a planner can tell whether "now" is typical for that time-of-day/week/year.
+
+**Data provenance and historical browsing (FR-P, D38)**
+- FR-P1. Every reading shown in the planner or admin UI that originates from a replayed row is
+  labeled with its provenance: "replayed, originally collected `source_ts`" vs. "live/synthetic,
+  generated `event_ts`" — answering directly whether a displayed number is real-historical or
+  invented-live.
+- FR-P2. `GET /api/dataset/*` serves the Dataset Explorer: browse/query the original Kaggle CSV
+  by device and real timestamp range, independent of Kafka/Spark/Cassandra, reading the same file
+  `dataset-init` already fetched (no duplicate ingestion or storage).
 
 **Dashboards (FR-G)**
 - FR-G1. Grafana ships pre-provisioned (dashboards, data sources, and alert rules as code
@@ -437,8 +527,8 @@ containers.
 - FR-G3. Grafana uses its built-in authentication; default credentials must be changed at
   first login.
 - FR-G4. Alert rules (consumer lag, Cassandra write latency, elevated per-service ERROR
-  log rate, service down) are provisioned as code and route to a webhook contact point
-  into the backend (D31, §4.2).
+  log rate, service down, **disk-usage-critical, D40**) are provisioned as code and route
+  to a webhook contact point into the backend (D31, §4.2).
 
 **Deployment (FR-D)**
 - FR-D1. One Docker Compose file starts the entire system; a second command stops it.
@@ -460,9 +550,17 @@ containers.
   **100 GB free disk** for the endurance run. (Sizing basis: 500 msg/s × 48 h × ~250 B
   ≈ 22 GB raw JSON, amplified by Cassandra storage overhead, aggregates, commit logs,
   Kafka retention, and Prometheus data. At 100 msg/s, 25 GB free disk suffices.)
-- **NFR-4 Retention.** Keep everything — no TTL, no automatic deletion. Consequence:
+- **NFR-4 Retention.** Keep everything by default — no TTL, no automatic deletion. Consequence:
   disk usage grows unboundedly; disk-growth monitoring (KPI-4) and the minimum disk of
-  NFR-3 are therefore mandatory, and Risk R-1 applies.
+  NFR-3 are therefore mandatory, and Risk R-1 applies. The sole sanctioned exception is
+  D40's archive-and-trim action (FR-A): explicit, admin-triggered, logged, and lossless
+  only in the sense that the data survives in the exported archive file, not in Cassandra.
+- **NFR-14 Archive storage (D40).** The archive-and-trim action (FR-A1) writes to a
+  dedicated named volume (`archive_data`), one file per invocation, plain newline-delimited
+  JSON (matches the event schema, §5.2) so an archived file is re-inspectable without special
+  tooling. Not retained under any TTL itself — same "keep everything" default as live data,
+  just moved off the Cassandra write/read path — and out of scope for automatic re-import in
+  Phase 1 (a later phase could add "restore from archive").
 - **NFR-5 Portability.** No dependency on any specific machine beyond Docker:
   configuration externalized (FR-D2), no hardcoded hostnames or IPs in application code,
   secrets injectable via environment. The same images run unchanged in local Compose and
@@ -499,7 +597,10 @@ containers.
 - **NFR-8 Recoverability.** After a host reboot, `docker compose up -d` resumes the
   pipeline with all previously stored data intact (named volumes, committed Kafka offsets).
 - **NFR-9 Documentation.** README covering: prerequisites, one-command start, walkthrough
-  guide, endurance-run procedure, and how to reset all data.
+  guide, endurance-run procedure, and how to reset all data. Per D41, the docs site also
+  carries a concrete, narrative scenario per role (specific actions taken and readings
+  encountered, e.g. UC-10/UC-11 walked through end to end) — not just the one-line
+  success criteria already in §6's use-case list.
 - **NFR-10 npm supply-chain security.** Motivated by the 2025–2026 wave of npm
   supply-chain attacks (Shai-Hulud worm 09/2025 and its 2026 successors; axios maintainer
   compromise 03/2026; keyv/cacheable worm 08/2026; ongoing typosquatting and
@@ -558,10 +659,15 @@ containers.
 | KPI-3 | Anomaly metrics | anomalies/min, anomaly rate %, by device and metric, top anomalous device | Spark aggregates in Cassandra |
 | KPI-4 | Cassandra health | data-directory disk usage & growth rate, write latency, pending compactions, GC pauses | Cassandra/JMX exporter → Prometheus |
 | KPI-5 | Business aggregates (planner role, §5.6) | max/avg temperature, avg humidity, max CO/LPG/smoke, motion & light activity — per device, per 1-min and 1-h window; the same data also drives the planner map's per-device air quality score, comfort index, and chronic-exposure ratio | Cassandra aggregate tables |
-| KPI-6 | Infra observability (admin role, D30/D31) | log volume and ERROR rate by service, count of currently-firing alerts by severity | Loki (log queries) + the backend's alert store |
+| KPI-6 | Infra observability (admin role, D30/D31) | log volume and ERROR rate by service, count of currently-firing alerts by severity, **disk-usage-critical firing state (D40)** | Loki (log queries) + the backend's alert store |
 
 Note: atmospheric-pressure KPIs are computed from the simulated `pressure` field (D23)
 and labeled as synthetic in the dashboards.
+
+Note: KPI-4's disk-usage panel now also drives the disk-usage-critical alert rule (FR-G4, D40); its
+threshold is calibrated the same way as the endurance-run acceptance threshold in §10 — a percentage
+of the sized volume (NFR-3/NFR-12), not a fixed absolute value, so it stays meaningful in both local
+and Contabo deployments.
 
 ---
 
@@ -620,6 +726,10 @@ The 48-hour run at the NFR-2 rate passes when:
 | D35 | Out-of-range log, and a fifth "month" resolution | D34 argued a text log couldn't show *how long/how often* a metric was bad — still true, and the charts stay for that. But planners reviewing specific business-relevant readings (temperature, CO, LPG, humidity, ...) also need *which exact reading, when, by how much* — a question a shaded chart region answers only visually, not as a checkable number. Added `BoundaryLog.tsx` below the charts: same per-metric selector, its own independent minute/hour/day/week/month scope, newest-first, one line per breach with the actual min/max value (not the window average — a window can be flagged from a single spike its own average would smooth away) against the normal band or ceiling it crossed. Reuses the exact same `GET /api/sensors/{id}/timeline` data already fetched for the charts, no separate endpoint. "Month" was added to that same endpoint (`environment.py`'s `_rollup_bucket_key`/`rollup_metric_windows`, keyed off the 1st of the calendar month) because a log a planner checks periodically needs a coarser lens than "week" to be useful, not because the charts needed a fifth panel — the charts gained one anyway, for free, since both read the same granularity list |
 | D36 | Admin "Docs" tab (superseded by D37, kept for history) | First version: a subset of the project's own `.md` documentation was bundled into the backend image and rendered client-side as HTML with `marked`. Superseded by D37's single local docs site — the multi-page-markdown-plus-renderer approach didn't scale past a handful of short files, and this project already had a much richer interactive doc (the original `containers.html`) sitting outside that system entirely, an inconsistency D37 resolves. |
 | D37 | Centralized local docs site, replacing the scattered `docs/*.md` files | The project had accumulated five separate `docs/*.md` files (`ARCHITECTURE.md`, `PROJECT_STRUCTURE.md`, `DEPLOYMENT.md`, `PROGRESS.md`, `TROUBLESHOOTING.md`) plus, alongside them, one much richer interactive HTML doc (`containers.html`, D-numbered informally before this entry) — two different documentation systems for one project, and the plain-markdown ones constantly cross-referenced each other by hand (e.g. `docs/TROUBLESHOOTING.md` P5 §1-style links), which drifts the moment a file is renamed. Consolidated into one local, multi-page site under `docs/`: `index.html` (hub), `containers.html` (kept — architecture + the animated D3 diagrams, unchanged in substance), `deployment.html` (from `DEPLOYMENT.md`), `operations.html` (`PROGRESS.md` + `TROUBLESHOOTING.md` merged — both were "why is it built this way" documents that referenced each other constantly; the troubleshooting log's exact phase/issue numbering — P1 §1 … P11 — was preserved as real anchor IDs, not renumbered, so every existing cross-reference in code comments still resolves), and `reference.html` (from `PROJECT_STRUCTURE.md`). A shared `docs/assets/docs.css`/`docs.js` factors out the design system and the sidebar filter/scroll-spy behavior `containers.html` originated, so all five pages render as one product instead of five one-off ones — change the look once, it applies everywhere. Root `README.md` and `REQUIREMENTS.md` deliberately stay outside this site (README as the GitHub-facing entry point, REQUIREMENTS as the formal spec/decision log) and are cross-linked from `docs/index.html` instead of duplicated into it. The admin "Docs" tab (D36) now embeds this site directly via an admin-gated static-file route (`backend/app/routers/docs.py`'s `GET /api/admin/docs-site/{path}`) in an `<iframe>`, rather than fetching and re-rendering markdown — the same files serve both the local `file://` reading experience and the in-app one, one authored place. `marked` was removed from the frontend's dependencies (`npm uninstall marked`) since nothing parses markdown client-side anymore. |
+| D38 | Data provenance: `source_ts` + Dataset Explorer | External review couldn't tell whether a displayed reading was live/synthetic or replayed-real, or when a replayed reading was actually collected — a direct consequence of D28 discarding the dataset's original 2020 timestamps for windowing purposes. Rather than reversing D28 (which would break "last N minutes" queries again), a nullable `source_ts` field is added alongside `event_ts`/`ingest_ts` purely for display, and a standalone Dataset Explorer view browses the original CSV on its own real timeline, reading the same file `dataset-init` already fetched — no new ingestion path or duplicated storage. |
+| D39 | Historical comparison overlay | External review noted there was no way to compare a current reading against an earlier period (e.g. a week or a year ago). Added a "compare to" overlay on the existing behavior-over-time charts (FR-E3) rather than a separate view, since the comparison is only useful anchored to the metric already being looked at. Resolves the compared period from live/synthetic Cassandra history when it's within the deployment's own running time, and from the Dataset Explorer (D38) when it predates that — chosen over fabricating a full year of live history, which the project's own short running time can't honestly provide. |
+| D40 | Disk-full remediation: alert + archive-and-trim | Risk R-1 (disk exhaustion) was flagged High since v1.0 but had no defined repair path beyond a full data-destroying reset, and no dedicated alert — external review asked directly "what happens if a disk goes full, what's the repair way." Rather than relaxing NFR-4's "keep everything" retention policy wholesale, added one narrow, explicit, admin-triggered, logged action (FR-A) that exports the oldest raw-event partitions to a local archive file before dropping them from Cassandra — data survives, just off the live read/write path — plus a disk-usage-critical Grafana alert (extends FR-G4) so the admin has warning before the disk actually fills. This is the one Phase-1 exception to the control-panel deferral (§2): a single-purpose capacity action, not a general start/stop/inject surface. |
+| D41 | Per-role scenario narratives in the docs site | External review felt the UC list's one-line success criteria didn't add up to a believable "a real user does X, reads Y, reacts Z" story for either role, despite the UI itself being mature. Rather than inventing new features to compensate, D41 is a documentation-only decision: NFR-9 now requires the docs site to carry a concrete, narrated walkthrough per role (grounded in UC-10/UC-11 among others), separate from and more detailed than the formal use-case list. |
 
 ---
 
@@ -647,7 +757,10 @@ The 48-hour run at the NFR-2 rate passes when:
 
 - **R-1 — Disk exhaustion (High).** "Keep everything" + endurance load will fill the disk
   eventually; if the disk fills mid-run, Cassandra fails ungracefully. Mitigation: NFR-3
-  minimum disk, KPI-4 growth-rate panel with projection, documented reset procedure.
+  minimum disk, KPI-4 growth-rate panel with projection, a disk-usage-critical alert
+  (D40, FR-G4) firing before the disk actually fills, and the archive-and-trim admin
+  action (D40, FR-A) as a repair path that frees space without a full destructive reset
+  — the reset procedure remains available as a last resort.
 - **R-2 — Local resource contention (Medium).** Kafka + Spark + Cassandra + monitoring on
   one laptop compete for RAM; Cassandra is sensitive to memory pressure. Mitigation:
   explicit per-container memory limits in Compose; NFR-3 sizing.
@@ -708,11 +821,16 @@ The 48-hour run at the NFR-2 rate passes when:
    verify cluster behavior (replication visible, single-node failure demo).
 7. **P7 — Endurance:** rehearsal run, tuning, full 48-hour run on the VPS cluster
    against §10 criteria.
-8. **P8 — Role-based redirect (this document's v2.0):** R0 replay-timestamp fix (D28);
+8. **P8 — Role-based redirect (v2.0):** R0 replay-timestamp fix (D28);
    R1 role-based auth + `device_metadata`/`device_thresholds` + `/api/sensors` (D29,
    D33); R2 Leaflet map for the planner role (D32); R3 Loki + Promtail for the admin
    role's centralized logs (D30); R4 Grafana alerting + webhook + admin Alerts tab with
    Explore drill-down (D31); R5 this requirements rewrite. Risks R-7/R-8 flag what's not
    yet live-verified.
+9. **P9 — External-feedback response (this document's v2.1):** R6 `source_ts` schema
+   addition + Dataset Explorer API/view (D38); R7 historical-comparison overlay on the
+   behavior-over-time charts, spanning live history and the Dataset Explorer (D39); R8
+   disk-usage-critical alert + archive-and-trim admin action (D40, FR-A); R9 per-role
+   scenario narratives added to the docs site (D41).
 
 Each phase should end in a runnable, demonstrable state.
