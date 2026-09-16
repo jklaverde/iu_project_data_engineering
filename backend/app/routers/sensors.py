@@ -28,11 +28,13 @@ async def sensors(request: Request):
             entry["air_quality_score"] = None
             entry["comfort_index"] = None
             entry["metric_ranges"] = {}
+            entry["provenance"] = None
         else:
             entry["status"] = environment.device_status(reading, device_thresholds)
             entry["air_quality_score"] = environment.air_quality_score(reading, device_thresholds)
             entry["comfort_index"] = environment.comfort_index(reading.get("temp"), reading.get("humidity"))
             entry["metric_ranges"] = environment.metric_ranges(reading, device_thresholds)
+            entry["provenance"] = environment.reading_provenance(reading)
         out.append(entry)
 
     return {"sensors": out}
@@ -72,9 +74,54 @@ _TIMELINE_LOOKBACK_HOURS = {
 }
 _ROLLUP_GRANULARITIES = ("1d", "1w", "1mo")
 
+# D39: each granularity's "compare to" offset, matching §5.7's own wording
+# ("an hour/day/week/month/year ago") to the granularity list it's paired
+# with (1m/1h/1d/1w/1mo) in that same order.
+_COMPARE_OFFSET_HOURS = {"1m": 1, "1h": 24, "1d": 24 * 7, "1w": 24 * 30, "1mo": 24 * 365}
+_COMPARE_OFFSET_LABEL = {"1m": "1 hour ago", "1h": "1 day ago", "1d": "1 week ago", "1w": "1 month ago", "1mo": "1 year ago"}
+_DATASET_ROLLUP_LIMIT = 200
+
+
+async def _build_compare(request: Request, device_id: str, metric: str, granularity: str) -> dict:
+    """Resolves the compared period against whichever source actually has
+    data for it (D39, §5.7): live/synthetic Cassandra history when it's
+    within the deployment's own running history, the Dataset Explorer's real
+    data otherwise. "Has live history that far back" is answered by the
+    earliest raw_events partition that actually exists (reused from D40's
+    archive-and-trim, cassandra_client.raw_event_buckets_sync) rather than a
+    guessed deployment-start time."""
+    reader = request.app.state.cassandra_reader
+    offset_hours = _COMPARE_OFFSET_HOURS[granularity]
+    now = datetime.now(timezone.utc)
+    compare_reference = now - timedelta(hours=offset_hours)
+
+    buckets = await asyncio.to_thread(reader.raw_event_buckets_sync)
+    earliest = min((b[1] for b in buckets), default=None)
+    window_start = compare_reference - timedelta(hours=_TIMELINE_LOOKBACK_HOURS[granularity])
+
+    if earliest is not None and earliest <= window_start:
+        source_table = "1h" if granularity in _ROLLUP_GRANULARITIES else granularity
+        rows = await asyncio.to_thread(
+            reader.aggregates_sync,
+            device_id, source_table, _TIMELINE_LOOKBACK_HOURS[granularity], 20000, compare_reference,
+        )
+        points = (
+            environment.rollup_metric_windows(rows, metric, granularity)
+            if granularity in _ROLLUP_GRANULARITIES
+            else environment.metric_windows(rows, metric)
+        )
+        return {"source": "live", "offset_label": _COMPARE_OFFSET_LABEL[granularity], "points": points}
+
+    dataset_reader = request.app.state.dataset_reader
+    dataset_rows = await asyncio.to_thread(dataset_reader.query, device_id, None, None, 500000)
+    points = environment.bucket_dataset_rows(dataset_rows, metric, granularity)[-_DATASET_ROLLUP_LIMIT:]
+    return {"source": "dataset", "offset_label": _COMPARE_OFFSET_LABEL[granularity], "points": points}
+
 
 @router.get("/sensors/{device_id}/timeline")
-async def sensor_timeline(request: Request, device_id: str, metric: str = "co", granularity: str = "1m"):
+async def sensor_timeline(
+    request: Request, device_id: str, metric: str = "co", granularity: str = "1m", compare: bool = False
+):
     if metric not in environment.NUMERIC_METRICS:
         metric = "co"
     if granularity not in _TIMELINE_LOOKBACK_HOURS:
@@ -91,4 +138,9 @@ async def sensor_timeline(request: Request, device_id: str, metric: str = "co", 
     else:
         points = environment.metric_windows(rows, metric)
 
-    return {"device_id": device_id, "metric": metric, "granularity": granularity, "points": points}
+    compare_result = await _build_compare(request, device_id, metric, granularity) if compare else None
+
+    return {
+        "device_id": device_id, "metric": metric, "granularity": granularity,
+        "points": points, "compare": compare_result,
+    }

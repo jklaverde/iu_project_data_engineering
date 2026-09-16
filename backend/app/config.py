@@ -23,6 +23,8 @@ class Config:
     cookie_secure: bool = False
     grafana_port: int = 3000
     log_level: str = "INFO"
+    dataset_csv_path: str = "/data/iot_telemetry_data.csv"
+    archive_dir: str = "/archive"
 
 
 def load_config() -> Config:
@@ -48,4 +50,6 @@ def load_config() -> Config:
         cookie_secure=os.getenv("BACKEND_COOKIE_SECURE", "false").lower() == "true",
         grafana_port=int(os.getenv("BACKEND_GRAFANA_PORT", "3000")),
         log_level=os.getenv("BACKEND_LOG_LEVEL", "INFO"),
+        dataset_csv_path=os.getenv("BACKEND_DATASET_CSV_PATH", "/data/iot_telemetry_data.csv"),
+        archive_dir=os.getenv("BACKEND_ARCHIVE_DIR", "/archive"),
     )

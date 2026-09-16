@@ -82,6 +82,7 @@ export interface SparkStep {
 
 export interface RawEventRow extends RawEventWire {
   bucket_start: string | null;
+  source_ts: string | null;
   write_ts: string | null;
   is_anomaly: boolean;
   anomaly_reason: string | null;
@@ -124,6 +125,7 @@ export interface DeviceReading {
   event_ts: string | null;
   event_id: string;
   ingest_ts: string | null;
+  source_ts: string | null;
   write_ts: string | null;
   co: number;
   humidity: number;
@@ -153,6 +155,11 @@ export interface MetricRange {
   status: MetricStatus;
 }
 
+export interface ReadingProvenance {
+  kind: "replayed" | "synthetic";
+  label: string;
+}
+
 export interface SensorEntry {
   device_id: string;
   name: string;
@@ -164,6 +171,7 @@ export interface SensorEntry {
   air_quality_score: number | null;
   comfort_index: number | null;
   metric_ranges: Record<string, MetricRange>;
+  provenance: ReadingProvenance | null;
 }
 
 export interface SensorsResponse {
@@ -206,11 +214,49 @@ export interface TimelinePoint {
   unhealthy: boolean;
 }
 
+export type CompareSource = "live" | "dataset";
+
+export interface CompareTimeline {
+  source: CompareSource;
+  offset_label: string;
+  points: TimelinePoint[];
+}
+
 export interface TimelineResponse {
   device_id: string;
   metric: string;
   granularity: TimelineGranularity;
   points: TimelinePoint[];
+  compare: CompareTimeline | null;
+}
+
+// Mirrors backend/app/routers/dataset.py (D38 - Dataset Explorer, FR-P2).
+
+export interface DatasetDeviceSummary {
+  device_id: string;
+  row_count: number;
+  min_source_ts: string;
+  max_source_ts: string;
+}
+
+export interface DatasetSummaryResponse {
+  devices: DatasetDeviceSummary[];
+}
+
+export interface DatasetReading {
+  source_ts: string;
+  device_id: string;
+  co: number;
+  humidity: number;
+  lpg: number;
+  smoke: number;
+  temp: number;
+  light: boolean;
+  motion: boolean;
+}
+
+export interface DatasetReadingsResponse {
+  readings: DatasetReading[];
 }
 
 // Mirrors backend/app/routers/admin.py (R4 - infrastructure/admin role, alerting).
@@ -226,5 +272,13 @@ export interface AdminAlert {
   ends_at: string | null;
   generator_url: string | null;
   received_at: string;
+}
+
+// Mirrors backend/app/archive.py (D40 - archive-and-trim, FR-A1-A3).
+export interface ArchiveResult {
+  cutoff: string;
+  partitions_archived: number;
+  rows_archived: number;
+  archive_path: string;
 }
 

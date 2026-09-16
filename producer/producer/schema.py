@@ -20,12 +20,18 @@ def build_event(
     motion: bool,
     pressure: float,
     is_synthetic: bool,
+    source_ts: datetime | None = None,
 ) -> dict:
     """Builds one canonical event dict (REQUIREMENTS.md Sec 5.2).
 
     Producer-owned fields only: is_anomaly, anomaly_reason, write_ts, and
     bucket_start are NOT included here - those are populated later by the
     Spark job (P3) and the Cassandra sink, not the producer.
+
+    source_ts (D38) is the dataset's own original collection timestamp for a
+    replayed row; None for synthetic rows, which have no real-world
+    collection moment. Purely descriptive - never used for windowing or
+    ordering (that stays on event_ts/ingest_ts per D28).
     """
     return {
         "event_id": str(uuid.uuid4()),
@@ -41,4 +47,5 @@ def build_event(
         "motion": motion,
         "pressure": pressure,
         "is_synthetic": is_synthetic,
+        "source_ts": _iso(source_ts) if source_ts else None,
     }

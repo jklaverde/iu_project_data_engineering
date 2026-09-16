@@ -58,6 +58,10 @@ export default function SensorDetailPanel({ sensor }: { sensor: SensorEntry | nu
           </p>
         </div>
 
+        {sensor.provenance && (
+          <p className={`provenance-label provenance-${sensor.provenance.kind}`}>{sensor.provenance.label}</p>
+        )}
+
         <div className="stat-tiles">
           <div className="stat-tile">
             <span className="score-label">Air quality score</span>

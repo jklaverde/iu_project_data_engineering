@@ -2,6 +2,7 @@ import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import AboutModal from "../about/AboutModal";
+import DatasetExplorer from "../dataset/DatasetExplorer";
 import { useSensors } from "../state/useSensors";
 import type { SensorEntry } from "../types";
 import SensorDetailPanel from "./SensorDetailPanel";
@@ -43,6 +44,7 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
   const sensors = useSensors();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
+  const [showDataset, setShowDataset] = useState(false);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -100,6 +102,9 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
         <div className="header-right">
+          <button className="btn btn-ghost" onClick={() => setShowDataset(true)}>
+            Dataset Explorer
+          </button>
           <button className="btn btn-accent" onClick={() => setShowAbout(true)}>
             About the project
           </button>
@@ -110,6 +115,7 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
       </header>
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+      {showDataset && <DatasetExplorer onClose={() => setShowDataset(false)} />}
 
       <div className="planner-body">
         <div className="map-container" ref={containerRef} />

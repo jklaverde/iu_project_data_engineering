@@ -1,5 +1,8 @@
 import type {
   AdminAlert,
+  ArchiveResult,
+  DatasetReadingsResponse,
+  DatasetSummaryResponse,
   PipelineState,
   Role,
   SensorsResponse,
@@ -61,14 +64,39 @@ export function fetchPipelineState(): Promise<PipelineState> {
 
 export function fetchSensorTimeline(
   deviceId: string,
-  params: { metric: string; granularity: TimelineGranularity },
+  params: { metric: string; granularity: TimelineGranularity; compare?: boolean },
 ): Promise<TimelineResponse> {
   const search = new URLSearchParams({ metric: params.metric, granularity: params.granularity });
+  if (params.compare) search.set("compare", "true");
   return request(`/api/sensors/${encodeURIComponent(deviceId)}/timeline?${search.toString()}`);
 }
 
 export function fetchAdminAlerts(): Promise<{ alerts: AdminAlert[] }> {
   return request("/api/admin/alerts");
+}
+
+export function runArchive(cutoff?: string): Promise<ArchiveResult> {
+  return request("/api/admin/archive", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: true, ...(cutoff ? { cutoff } : {}) }),
+  });
+}
+
+export function fetchDatasetSummary(): Promise<DatasetSummaryResponse> {
+  return request("/api/dataset/summary");
+}
+
+export function fetchDatasetReadings(params: {
+  deviceId?: string; since?: string; until?: string; limit?: number;
+} = {}): Promise<DatasetReadingsResponse> {
+  const search = new URLSearchParams();
+  if (params.deviceId) search.set("device_id", params.deviceId);
+  if (params.since) search.set("since", params.since);
+  if (params.until) search.set("until", params.until);
+  if (params.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return request(`/api/dataset/readings${qs ? `?${qs}` : ""}`);
 }
 
 export function connectPipelineStateSocket(

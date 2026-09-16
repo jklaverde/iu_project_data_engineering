@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 BUCKET_SECONDS = 15 * 60  # must match spark_job/spark_job/time_buckets.py
 
 RAW_EVENTS_COLUMNS = (
-    "device_id, bucket_start, event_ts, event_id, ingest_ts, write_ts, "
+    "device_id, bucket_start, event_ts, event_id, ingest_ts, source_ts, write_ts, "
     "co, humidity, lpg, smoke, temp, light, motion, pressure, "
     "is_synthetic, is_anomaly, anomaly_reason"
 )
@@ -79,6 +79,7 @@ def _row_to_dict(row) -> dict:
         "event_ts": _iso(row.event_ts),
         "event_id": str(row.event_id),
         "ingest_ts": _iso(row.ingest_ts),
+        "source_ts": _iso(row.source_ts),
         "write_ts": _iso(row.write_ts),
         "co": row.co,
         "humidity": row.humidity,
@@ -214,14 +215,42 @@ class CassandraReader:
                 return _row_to_dict(row)
         return None
 
-    def aggregates_sync(self, device_id: str, granularity: str, since_hours: float, limit: int) -> list:
+    def raw_event_buckets_sync(self) -> list:
+        """All (device_id, bucket_start) partitions currently in raw_events -
+        SELECT DISTINCT on exactly the partition-key columns is a supported,
+        non-ALLOW-FILTERING partition listing (not a row scan), used by the
+        archive-and-trim action (D40, FR-A1) to find candidates for the
+        default oldest-10%-by-time cutoff."""
+        result = self._session.execute("SELECT DISTINCT device_id, bucket_start FROM raw_events")
+        return [(r.device_id, r.bucket_start) for r in result]
+
+    def export_and_delete_partition_sync(self, device_id: str, bucket_start: datetime) -> list:
+        """Single-partition read (full partition key supplied) followed by a
+        single-partition delete - the archive-and-trim action's unit of work
+        (D40, FR-A1). Returns the exported rows so the caller can write them
+        to the archive file before/after the delete; the row data itself is
+        the only remaining copy once this returns, per NFR-14."""
+        stmt = f"SELECT {RAW_EVENTS_COLUMNS} FROM raw_events WHERE device_id=%s AND bucket_start=%s"
+        rows = [_row_to_dict(r) for r in self._session.execute(stmt, (device_id, bucket_start))]
+        self._session.execute(
+            "DELETE FROM raw_events WHERE device_id=%s AND bucket_start=%s", (device_id, bucket_start)
+        )
+        return rows
+
+    def aggregates_sync(
+        self, device_id: str, granularity: str, since_hours: float, limit: int, reference_time: datetime | None = None
+    ) -> list:
         """granularity is "1m" (agg_1m, partitioned by (device_id, day)) or
         "1h" (agg_1h, partitioned by (device_id, month)). Spans however many
         day/month partitions the requested window touches - single-partition
         reads per partition, window_start range filter on the clustering
-        column (no ALLOW FILTERING needed)."""
+        column (no ALLOW FILTERING needed).
+
+        reference_time (D39) lets a caller ask for a window ending in the
+        past instead of "now" - the historical-comparison overlay's live
+        source path queries the same window shifted back by its offset."""
         table = "agg_1m" if granularity == "1m" else "agg_1h"
-        now = datetime.now(timezone.utc)
+        now = reference_time or datetime.now(timezone.utc)
         since = now - timedelta(hours=since_hours)
 
         if granularity == "1m":

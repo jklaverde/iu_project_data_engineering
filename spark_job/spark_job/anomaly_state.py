@@ -10,7 +10,7 @@ from .schema import NUMERIC_METRICS
 MIN_VAR = 1e-12
 
 INPUT_COLUMNS = [
-    "event_id", "device_id", "event_ts", "ingest_ts",
+    "event_id", "device_id", "event_ts", "ingest_ts", "source_ts",
     "co", "humidity", "lpg", "smoke", "temp",
     "light", "motion", "pressure", "is_synthetic",
 ]
@@ -24,6 +24,7 @@ OUTPUT_SCHEMA = StructType([
     StructField("device_id", StringType(), False),
     StructField("event_ts", TimestampType(), False),
     StructField("ingest_ts", TimestampType(), False),
+    StructField("source_ts", TimestampType(), True),
     StructField("co", DoubleType(), False),
     StructField("humidity", DoubleType(), False),
     StructField("lpg", DoubleType(), False),

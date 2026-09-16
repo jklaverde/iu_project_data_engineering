@@ -27,6 +27,7 @@
         <div class="toc-links">
           <a href="#status" data-name="status phase table">Status</a>
           <a href="#resuming-locally" data-name="resuming locally docker compose up">Resuming locally</a>
+          <a href="#scenario-walkthroughs" data-name="role scenario walkthroughs planner admin d41 uc-10 uc-11">Role scenario walkthroughs</a>
           <a href="#decisions" data-name="implementation decisions beyond requirements">Implementation decisions</a>
           <a href="#interim-vps" data-name="interim vps deployment">Interim VPS deployment</a>
           <a href="#next" data-name="where to pick this up next priorities">Where to pick this up next</a>
@@ -135,6 +136,71 @@
           restarts once the volume has the file (see <a href="#p6">P6</a> for the bug
           this replaced). To fetch it by hand instead, run
           <code>python kaggle_repository/download_repository.py</code>.</p>
+      </div>
+    </section>
+
+    <section class="doc-section" id="scenario-walkthroughs">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-web)"></span>Role scenario walkthroughs (D41)</h2></div>
+      <p class="subhead-note">
+        Added after external review of the v2.0 build noted the use-case list's one-line success
+        criteria didn't add up to a believable "a real user does X, reads Y, reacts Z" story for
+        either role. These two walkthroughs are concrete, narrated, and grounded in the actual UI
+        (<a href="#decisions">D38-D40</a>), not a restatement of <code>REQUIREMENTS.md</code>'s UC-10/UC-11.
+      </p>
+
+      <div class="prose-body">
+        <h3 id="scenario-planner-compare">Planner: is this CO reading normal for this time of year?</h3>
+        <p>
+          It's a warm afternoon. A planner logs in with the planner account and lands on the Lingen
+          (Ems) map. The pin near Kaiserstraße/B70 (<code>b8:27:eb:bf:9d:51</code>) is showing amber
+          — <em>warning</em>, not <em>critical</em>. They click it: the detail panel shows an air
+          quality score of 61, and a provenance label under the status badge reads
+          <em>"Live/synthetic — generated …"</em> — so they know this number is the running pipeline's
+          own reading, not a replayed historical one.
+        </p>
+        <p>
+          They open the CO chart below the map and tick <strong>"Compare to an earlier period."</strong>
+          The per-day chart overlays a dashed line labeled <em>"compare (1 week ago, live)"</em> — CO
+          was similar a week ago, so this isn't a new pattern. Curious whether this is just how this
+          spot behaves in general, they check the per-month chart: its compare overlay is labeled
+          <em>"compare (1 year ago, dataset)"</em> instead of <em>live</em> — the deployment hasn't
+          been running for a year, so the backend fell back to the Dataset Explorer's real 2020 data
+          for that device automatically, and says so on the label rather than silently returning
+          nothing or, worse, a fabricated number.
+        </p>
+        <p>
+          Wanting to see the source data itself, they open <strong>Dataset Explorer</strong> from the
+          header, pick the same device, and see its real collection window (7 days, 2020) and a
+          genuine sample of readings, each timestamped to when it was actually collected — not
+          <code>event_ts</code>. They now have an answer to both halves of the brief's question: this
+          reading is elevated but not new, and the underlying device has always run a bit hot on CO
+          relative to the other two — exactly what its placement rationale (§5.6) predicted.
+        </p>
+
+        <h3 id="scenario-admin-disk">Admin: the disk-usage-critical alert fires</h3>
+        <p>
+          Mid-endurance-run, a critical alert appears in the admin's Alerts tab:
+          <em>"A scraped filesystem is above 85% used."</em> The admin clicks through to Grafana
+          Explore, pre-scoped to the flagged service, and confirms from the KPI-4 disk-growth panel
+          that <code>cassandra_storage_load_count</code> has been climbing linearly all run, as
+          expected under NFR-4's no-TTL retention — not a leak, just the endurance run doing exactly
+          what it's supposed to.
+        </p>
+        <p>
+          Back in the admin console, they scroll to <strong>"Disk capacity — archive &amp; trim"</strong>
+          under the Alerts tab and click <strong>"Archive oldest data…"</strong>. A confirmation panel
+          explains this is irreversible against the live store before they can proceed — they confirm.
+          A few seconds later the result line reads: <em>"Archived 214,880 rows across 96 partitions
+          (cutoff 2026-09-10T03:00:00.000Z) to /archive/archive-20260916T140212123456.ndjson."</em>
+        </p>
+        <p>
+          Disk usage drops back under the threshold within the next Prometheus scrape interval and the
+          alert clears on its own. The admin hasn't lost the archived data — it's sitting on disk as
+          plain newline-delimited JSON, in the same shape as the live event schema, readable without
+          any special tooling if it's ever needed again — just no longer competing for space with the
+          live write path. NFR-4's "keep everything" is unchanged as the default; this was the one
+          explicit, logged exception to it (D40).
+        </p>
       </div>
     </section>
 

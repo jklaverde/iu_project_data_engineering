@@ -151,3 +151,48 @@ groups:
               expression: B
               conditions:
                 - evaluator: { type: lt, params: [1] }
+
+      # D40: R-1 (disk exhaustion) had monitoring (KPI-4) but no alert - this
+      # closes that gap. Percentage of the sized volume (NFR-3/NFR-12), not
+      # an absolute byte value, so the same 85% threshold is meaningful both
+      # locally and on the Contabo nodes. topk(1, ...) picks whichever
+      # scraped filesystem is fullest rather than hardcoding a mountpoint
+      # label, since node-exporter's --path.rootfs setup (docker-compose.yml)
+      # makes the exact label worth confirming against a live scrape before
+      # relying on it.
+      - uid: disk-usage-critical
+        title: Host disk usage critical
+        condition: C
+        for: 5m
+        noDataState: NoData
+        execErrState: Error
+        labels:
+          severity: critical
+          service: disk
+        annotations:
+          summary: "A scraped filesystem is above 85% used - see docs/operations.html for the archive-and-trim remediation (D40)"
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              range: true
+              expr: >-
+                topk(1, 100 * (1 - node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|overlay"}
+                / node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|overlay"}))
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator: { type: gt, params: [85] }

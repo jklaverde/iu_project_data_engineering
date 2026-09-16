@@ -9,9 +9,10 @@ from .alert_store import AlertStore
 from .auth import make_require_role, make_require_session
 from .cassandra_client import CassandraReader
 from .config import load_config
+from .dataset_reader import DatasetReader
 from .kafka_client import KafkaReader
 from .logging_setup import configure_logging
-from .routers import admin, anomalies, auth, docs, sensors, steps, ws
+from .routers import admin, anomalies, auth, dataset, docs, sensors, steps, ws
 from .state_poller import StatePoller
 from .ws_manager import ConnectionManager
 
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.state.ws_manager = ConnectionManager()
     app.state.poller = StatePoller(config, app.state.kafka_reader, app.state.cassandra_reader, app.state.ws_manager)
     app.state.alert_store = AlertStore()
+    app.state.dataset_reader = DatasetReader(config.dataset_csv_path)
 
     require_session = make_require_session(config)
     require_admin = make_require_role(config, "admin")
@@ -59,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(steps.router, dependencies=[Depends(require_session)])
     app.include_router(anomalies.router, dependencies=[Depends(require_session)])
     app.include_router(sensors.router, dependencies=[Depends(require_session)])
+    app.include_router(dataset.router, dependencies=[Depends(require_session)])
     app.include_router(admin.webhook_router)
     app.include_router(admin.alerts_router, dependencies=[Depends(require_admin)])
     app.include_router(docs.router, dependencies=[Depends(require_admin)])

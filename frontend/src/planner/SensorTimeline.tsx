@@ -76,10 +76,57 @@ function TimelineChart({
   // the chart reads left (older) to right (now).
   const points = response.points;
   const ranges = unhealthyRanges(points);
+  const compare = response.compare;
+
+  // The compare series (D39) has its own, generally different, point count
+  // and window_start values (it's a different period, possibly from the
+  // Dataset Explorer's real 2020 timeline, not calendar-aligned to the
+  // current series) - plotted against the same category axis by position
+  // (older to now-relative position), not by matching timestamp, since the
+  // whole point is "how did this metric look over an equivalent period,"
+  // not a literal date overlay.
+  const series: Record<string, unknown>[] = [
+    {
+      type: "line",
+      data: points.map((p) => p.avg),
+      smooth: true,
+      symbol: "none",
+      // No areaStyle here on purpose: a translucent fill under the
+      // line used to sit on top of markArea and muddy its red into
+      // a brownish blend. The shaded region is the one color that
+      // actually needs to read clearly, so it gets to be the only
+      // fill in the chart.
+      lineStyle: { width: 2.5, color: "#7dd3fc" },
+      markArea: {
+        itemStyle: {
+          color: "rgba(251, 90, 110, 0.32)",
+          borderColor: "rgba(251, 90, 110, 0.9)",
+          borderWidth: 1,
+        },
+        data: ranges.map(([s, e]) => [{ xAxis: s - 0.5 }, { xAxis: e + 0.5 }]),
+      },
+    },
+  ];
+
+  if (compare && compare.points.length > 0) {
+    series.push({
+      type: "line",
+      name: `compare (${compare.offset_label}, ${compare.source})`,
+      data: compare.points.map((p) => p.avg),
+      smooth: true,
+      symbol: "none",
+      lineStyle: { width: 2, color: "#c4b5fd", type: "dashed" },
+    });
+  }
 
   return (
     <div className="timeline-chart">
       <h4>{title}</h4>
+      {compare && (
+        <p className="waiting compare-source-label">
+          Compare series: {compare.offset_label} · source: {compare.source === "live" ? "live history" : "Dataset Explorer (2020)"}
+        </p>
+      )}
       <EChartWrapper
         height={230}
         option={{
@@ -87,28 +134,7 @@ function TimelineChart({
           xAxis: { type: "category", data: points.map((p) => formatLabel(p.window_start)), axisLabel: { fontSize: 10 } },
           yAxis: { type: "value" },
           tooltip: { trigger: "axis" },
-          series: [
-            {
-              type: "line",
-              data: points.map((p) => p.avg),
-              smooth: true,
-              symbol: "none",
-              // No areaStyle here on purpose: a translucent fill under the
-              // line used to sit on top of markArea and muddy its red into
-              // a brownish blend. The shaded region is the one color that
-              // actually needs to read clearly, so it gets to be the only
-              // fill in the chart.
-              lineStyle: { width: 2.5, color: "#7dd3fc" },
-              markArea: {
-                itemStyle: {
-                  color: "rgba(251, 90, 110, 0.32)",
-                  borderColor: "rgba(251, 90, 110, 0.9)",
-                  borderWidth: 1,
-                },
-                data: ranges.map(([s, e]) => [{ xAxis: s - 0.5 }, { xAxis: e + 0.5 }]),
-              },
-            },
-          ],
+          series,
         }}
       />
     </div>
@@ -118,13 +144,14 @@ function TimelineChart({
 export default function SensorTimeline({ sensor }: { sensor: SensorEntry }) {
   const [metric, setMetric] = useState("co");
   const [data, setData] = useState(EMPTY_DATA);
+  const [showCompare, setShowCompare] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setData(EMPTY_DATA);
     Promise.all(
       GRANULARITIES.map((g) =>
-        fetchSensorTimeline(sensor.device_id, { metric, granularity: g.key })
+        fetchSensorTimeline(sensor.device_id, { metric, granularity: g.key, compare: showCompare })
           .then((res) => [g.key, res] as const)
           .catch(() => [g.key, null] as const),
       ),
@@ -139,7 +166,7 @@ export default function SensorTimeline({ sensor }: { sensor: SensorEntry }) {
     return () => {
       cancelled = true;
     };
-  }, [sensor.device_id, metric]);
+  }, [sensor.device_id, metric, showCompare]);
 
   return (
     <div className="step timeline-panel">
@@ -160,6 +187,10 @@ export default function SensorTimeline({ sensor }: { sensor: SensorEntry }) {
       <p className="waiting timeline-caption">
         Shaded regions mark windows where readings fell outside the acceptable range.
       </p>
+      <label className="compare-toggle">
+        <input type="checkbox" checked={showCompare} onChange={(e) => setShowCompare(e.target.checked)} />
+        Compare to an earlier period (D39)
+      </label>
       <div className="timeline-grid">
         {GRANULARITIES.map((g) => (
           <TimelineChart key={g.key} title={g.label} formatLabel={g.formatLabel} response={data[g.key]} />

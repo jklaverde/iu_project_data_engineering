@@ -142,6 +142,28 @@ def comfort_index(temp: float | None, humidity: float | None) -> float | None:
     return max(0.0, min(100.0, 100.0 - temp_penalty - humidity_penalty))
 
 
+def reading_provenance(reading: dict) -> dict:
+    """FR-P1 (D38): labels a raw reading as replayed-real or live/synthetic,
+    so the UI never shows a number without saying whether it's an invented
+    live value or a genuine historical one. source_ts is only ever set on
+    replayed rows (producer/producer/replay.py); is_synthetic distinguishes
+    the remaining case from "replay, but before source_ts existed"."""
+    if reading.get("source_ts"):
+        return {
+            "kind": "replayed",
+            "label": f"Replayed — originally collected {reading['source_ts']}",
+        }
+    if reading.get("is_synthetic"):
+        return {
+            "kind": "synthetic",
+            "label": f"Live/synthetic — generated {reading.get('event_ts') or 'now'}",
+        }
+    return {
+        "kind": "replayed",
+        "label": f"Replayed — original collection time unavailable (generated {reading.get('event_ts') or 'now'})",
+    }
+
+
 def chronic_exposure_ratio(agg_rows: list) -> float | None:
     """Fraction of aggregate windows (agg_1h rows, typically the last 24)
     where at least one anomaly was flagged - separates a persistent problem
@@ -192,6 +214,59 @@ def metric_windows(rows: list, metric: str) -> list:
             "unhealthy": (r.get("anomaly_count") or 0) > 0,
         })
     out.sort(key=lambda p: p["window_start"] or "")
+    return out
+
+
+def _fine_bucket_start(source_ts_iso: str, granularity: str) -> str:
+    """Truncates a raw timestamp to the minute ("1m") or hour ("1h") mark,
+    the two granularities finer than _rollup_bucket_key's day/week/month."""
+    dt = datetime.fromisoformat(source_ts_iso.replace("Z", "+00:00"))
+    if granularity == "1m":
+        dt = dt.replace(second=0, microsecond=0)
+    else:
+        dt = dt.replace(minute=0, second=0, microsecond=0)
+    return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def bucket_dataset_rows(rows: list, metric: str, granularity: str) -> list:
+    """Buckets raw Dataset Explorer rows (each a dict with source_ts + the
+    numeric metric fields, see backend/app/dataset_reader.py) into the same
+    TimelinePoint shape metric_windows/rollup_metric_windows produce, so the
+    frontend's one chart component can render a dataset-sourced comparison
+    series exactly like a live-sourced one (D39's compare overlay, §5.7).
+
+    No anomaly/threshold evaluation is applied to these rows (unhealthy is
+    always False) - the overlay's purpose is a value comparison against a
+    real historical period, not a second anomaly detector running over the
+    source CSV."""
+    buckets: dict = {}
+    for r in rows:
+        value = r.get(metric)
+        if value is None:
+            continue
+        key = (
+            _fine_bucket_start(r["source_ts"], granularity)
+            if granularity in ("1m", "1h")
+            else f"{_rollup_bucket_key(r['source_ts'], granularity)}T00:00:00.000Z"
+        )
+        b = buckets.setdefault(key, {"min": None, "max": None, "sum": 0.0, "count": 0})
+        b["min"] = value if b["min"] is None else min(b["min"], value)
+        b["max"] = value if b["max"] is None else max(b["max"], value)
+        b["sum"] += value
+        b["count"] += 1
+
+    out = []
+    for key in sorted(buckets.keys()):
+        b = buckets[key]
+        out.append({
+            "window_start": key,
+            "avg": (b["sum"] / b["count"]) if b["count"] else None,
+            "min": b["min"],
+            "max": b["max"],
+            "anomaly_count": 0,
+            "event_count": b["count"],
+            "unhealthy": False,
+        })
     return out
 
 

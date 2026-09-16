@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS iot.raw_events (
     event_ts       timestamp,
     event_id       uuid,
     ingest_ts      timestamp,   -- stamped by the producer (FR-I3)
+    source_ts      timestamp,   -- nullable (D38): dataset's real collection time for replayed rows, null for synthetic; display-only, never used for windowing/ordering
     write_ts       timestamp,   -- stamped by the Spark sink at Cassandra write time; feeds KPI-2 end-to-end latency
     co             double,
     humidity       double,

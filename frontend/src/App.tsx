@@ -3,6 +3,7 @@ import { ApiError, logout, me } from "./api";
 import AboutModal from "./about/AboutModal";
 import AlertsTab from "./admin/AlertsTab";
 import DocsTab from "./admin/DocsTab";
+import DatasetExplorer from "./dataset/DatasetExplorer";
 import LoginForm from "./auth/LoginForm";
 import ErrorBoundary from "./layout/ErrorBoundary";
 import Stepper from "./layout/Stepper";
@@ -32,6 +33,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const { state, connectionMode } = usePipelineState();
   const [currentStep, setCurrentStep] = useState<StepName>("deployment");
   const [showAbout, setShowAbout] = useState(false);
+  const [showDataset, setShowDataset] = useState(false);
   const [adminTab, setAdminTab] = useState<AdminTab>("pipeline");
 
   return (
@@ -45,6 +47,9 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <span className={`connection-badge connection-${connectionMode}`}>
             {connectionMode === "ws" ? "live (websocket)" : connectionMode === "polling" ? "live (polling)" : "connecting..."}
           </span>
+          <button className="btn btn-ghost" onClick={() => setShowDataset(true)}>
+            Dataset Explorer
+          </button>
           <button className="btn btn-accent" onClick={() => setShowAbout(true)}>
             About the project
           </button>
@@ -55,6 +60,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       </header>
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+      {showDataset && <DatasetExplorer onClose={() => setShowDataset(false)} />}
 
       <nav className="admin-tabs">
         <button

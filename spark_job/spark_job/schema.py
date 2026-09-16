@@ -9,6 +9,7 @@ EVENT_SCHEMA = StructType([
     StructField("device_id", StringType(), nullable=False),
     StructField("event_ts", StringType(), nullable=False),
     StructField("ingest_ts", StringType(), nullable=False),
+    StructField("source_ts", StringType(), nullable=True),
     StructField("co", StringType(), nullable=False),
     StructField("humidity", StringType(), nullable=False),
     StructField("lpg", StringType(), nullable=False),
@@ -62,5 +63,8 @@ def parse_and_cast(kafka_df):
         parsed
         .withColumn("event_ts", F.to_timestamp("event_ts", _TIMESTAMP_FORMAT))
         .withColumn("ingest_ts", F.to_timestamp("ingest_ts", _TIMESTAMP_FORMAT))
+        # nullable - to_timestamp(null) is null, matching synthetic rows' lack
+        # of a real-world collection moment (D38).
+        .withColumn("source_ts", F.to_timestamp("source_ts", _TIMESTAMP_FORMAT))
     )
     return parsed
