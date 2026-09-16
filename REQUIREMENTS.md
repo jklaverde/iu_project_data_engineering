@@ -4,16 +4,28 @@
 infrastructure/admin role (pipeline health, centralized logs, alerting) and an environmental/planner
 role (live sensor map, air quality/comfort scoring, citizen-facing warnings), both served from the
 same streaming pipeline and KPI dashboard.
-**Status:** **v2.1 — approved for development.** v1.0's technical pipeline (Kafka/Spark/Cassandra) is
+**Status:** **v2.2 — approved for development.** v1.0's technical pipeline (Kafka/Spark/Cassandra) is
 unchanged; v2.0 redirected the *purpose* the two user-facing surfaces serve (D29-D33); v2.1 responds to
-external review feedback on the v2.0 build — see the v2.1 changelog entry below and D38-D41.
-**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1)
+external review feedback on the v2.0 build (D38-D41); v2.2 adds a Cassandra storage-capacity control to
+the admin role, prompted by a follow-up conversation about this project's own disk-growth story (D42).
+**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1, v2.2)
 **v0.2 changes:** frontend (React.js) and backend (Python) confirmed; added NFR-10 npm supply-chain security policy and Risk R-5, based on the 2025–2026 npm attack landscape (Shai-Hulud worm and successors, axios and keyv compromises).
 **v0.3 changes:** deployment target defined — two Contabo VPS orchestrated with Docker Swarm, true-cluster topology (Kafka broker + Cassandra node on both machines, replication factor 2), public exposure via IP address; added §4.1 deployment topology, NFR-11/NFR-12, Risk R-6, OQ-6/OQ-7.
 **v0.4 changes:** orchestrator switched from Docker Swarm to **k3s** on **three** Contabo VPS (2 data nodes + 1 small control node; HA control plane with 3-member etcd; 3 KRaft controllers), Kafka/Cassandra as plain StatefulSets; OQ-7 resolved; OQ-4 resolved as KRaft; D16 superseded by D18/D19; NFR-11/NFR-12 and phases updated.
 **v1.0 changes:** all remaining open questions closed — FastAPI confirmed (D21); all proposed numeric values accepted (D22); atmospheric pressure simulated for all rows, labeled synthetic (D23); raw events + aggregates in Cassandra confirmed (D24); TLS via self-signed certificate (D25); charting with Apache ECharts (D26); supply-chain scanning with Socket + free Socket Firewall + Trivy (D27).
 **v2.0 changes:** reviewing the actual assignment brief (`development_notes/Assignments_Portfolio_DLBDSEDE02.pdf`) surfaced a drift — the system had become a pipeline-mechanics demo, when the brief's real scenario is a municipality using sensor data to inform planners and warn citizens. Redirected around two roles instead of one guided tour: **infrastructure/admin** (D28 replay-timestamp fix so "last N minutes" queries work from the start of a run; D29 role-based auth; D30 Loki + Promtail centralized logs; D31 Grafana alerting with a webhook into the backend and Explore drill-down links) and **environmental/planner** (D32 a Leaflet map of Lingen (Ems) with data-derived, not arbitrary, sensor placement; D33 threshold/AQI logic that reuses Spark's own baseline statistics rather than inventing separate numbers). §1, §2, §6, §7, and §9 updated accordingly; §3-5 and §10-14 extended, not replaced.
 **v2.1 changes:** external review of the running v2.0 build (recorded privately, not committed to the repo) surfaced three concrete gaps rather than new feature requests: (1) no way to compare a current reading against an earlier period, and no described per-role usage narratives beyond the one-line UC success criteria; (2) the admin role's health coverage has no defined path for the disk-exhaustion failure mode already flagged as Risk R-1; (3) nothing in the running system lets a user tell whether a displayed reading is live/synthetic or replayed-real, or when a replayed reading was *actually* collected — a direct consequence of D28 discarding the dataset's original timestamps. Addressed by: D38 (`source_ts` provenance field + a standalone Dataset Explorer view on the source CSV's own real 2020 timeline, shared by both roles); D39 (a compare-to-earlier-period overlay on the existing behavior-over-time charts, falling back to the Dataset Explorer when the compared period predates the live deployment's own history); D40 (a disk-usage-critical alert plus a narrow, explicit, admin-triggered archive-and-trim action — the first Phase-1 exception to the "observer mode only" control-panel deferral); D41 (concrete per-role scenario narratives in the docs site, not just UC one-liners). §2, §5, §6, §7, §8, §9, and §13 updated accordingly.
+**v2.2 changes:** a follow-up conversation about Kafka/Cassandra storage limits surfaced that this
+project had never given Cassandra's own disk usage a dedicated, node-level signal (only the
+whole-host-filesystem alert from D40) or an admin-facing way to actually add capacity — Cassandra's
+ring/gossip design makes "add a node, let token ranges rebalance" the real, standard way it scales
+storage, unlike Kafka. D42 adds a Storage_Load-based usage control (per-node bytes already scraped by
+the existing JMX exporter, compared against a configured budget — a monitored threshold, not a
+kernel-enforced quota, since Docker Desktop's WSL2 backend doesn't support per-volume filesystem
+quotas) and an admin-triggered "deploy a new Cassandra node" action with live step-by-step progress,
+the second explicit, scoped exception to the observer-mode/control-panel deferral (after D40) and the
+first to require a new privilege (Docker socket access) rather than only mutating the app's own data
+store. §2, §4, §5, §6, §7, §8, and §13 updated accordingly.
 
 ---
 
@@ -90,14 +102,20 @@ broke and why.
   start/stop/inject control surface.
 - **Documented per-role scenarios (D41):** concrete action/reading walkthroughs for both roles in the
   docs site, beyond the existing UC list's one-line success criteria.
+- **Cassandra storage capacity control (D42):** a per-node storage-usage display (Storage_Load vs. a
+  configured budget) and an admin-triggered "deploy a new Cassandra node" action with live
+  step-by-step progress, so a second node genuinely joins the existing ring and appears in the
+  deployment map — the second scoped exception to the control-panel deferral below, and the first to
+  require Docker socket access rather than only mutating the app's own data.
 - Grafana dashboards for the KPI catalogue of §9 (now six families, not five).
 - Basic login on the web application (now role-aware); Grafana's built-in authentication.
 - 48-hour endurance-run scenario, with acceptance criteria (§10).
 
 ### Out of scope (Phase 1 — planned for later phases)
 - Web-app **control panel** (start/stop flows, trigger bursts, inject anomalies from the UI), **except**
-  the narrow archive-and-trim admin action of D40, which is a single logged capacity-emergency
-  operation, not a general control surface. The backend API must be designed so broader control-panel
+  the narrow archive-and-trim admin action of D40 (a single logged capacity-emergency operation) and
+  D42's Cassandra node-deploy action (standing up a new ring member) — two scoped, single-purpose
+  exceptions, not a general control surface. The backend API must be designed so broader control-panel
   actions can be added without redesign.
 - Kubernetes operators (Strimzi, K8ssandra): Phase 1 uses plain hand-written
   StatefulSets (D19); operators are a possible later phase.
@@ -208,7 +226,37 @@ broke and why.
 - **Ingress:** k3s's bundled Traefik terminates TLS and routes to the web app and
   Grafana; nothing else is publicly reachable.
 - **Local development** remains single-machine Docker Compose with one broker/one
-  Cassandra node; the k3s manifests are the production deployment contract.
+  Cassandra node by default; the k3s manifests are the production deployment contract. D42 adds an
+  admin-triggered path to a second Cassandra node *within* that local Compose environment (§4.3) —
+  a capacity-scaling illustration, not a redefinition of the local topology's default shape.
+
+### 4.3 Admin-triggered Cassandra node deploy (D42)
+
+Cassandra's gossip/token-ring design makes "add a node, let the ring rebalance" the standard way it
+scales storage — unlike Kafka, where a new broker only helps once partitions are explicitly
+reassigned to it. The admin role's Pipeline/Deployment view gets a storage-usage control (§5.8) and a
+"Deploy new Cassandra node" action:
+
+1. Backend creates and starts a new Cassandra container via the Docker Engine API (the backend
+   container gets `/var/run/docker.sock` mounted for this — see NFR-15), reusing the existing node's
+   image, environment (`CASSANDRA_CLUSTER_NAME`, DC, `GossipingPropertyFileSnitch`), and network,
+   with `CASSANDRA_SEEDS` pointing at the existing node so it joins the same ring, on a fresh named
+   volume.
+2. Progress is pushed to the admin over the existing pipeline-state WebSocket channel (§4.2's
+   pattern) as a small step sequence: creating container → container healthy → visible in
+   `nodetool status` as a full ring member (`UN`) → done, with a clear error state if any step
+   fails or times out.
+3. Token ranges rebalance automatically on bootstrap regardless of the keyspace's replication
+   factor (RF only controls replica *count*, not range ownership) — RF stays at 1 for local dev
+   (§7 FR-C1's existing value), no `ALTER KEYSPACE` needed for the new node to take over part of the
+   original node's range.
+4. Reclaiming the disk space the original node no longer owns requires `nodetool cleanup` on it —
+   documented as a manual follow-up step (`docs/operations.html`), not automated by this action:
+   automating a data-redistribution side-effect without a human decision point is a bigger step than
+   this pass takes on (see D42 in §11).
+5. Once healthy, the new node appears in the Deployment step's health grid automatically — that grid
+   moves from a fixed configured service list to also discover any running `cassandra-*` containers
+   via the Docker API (FR-W1).
 
 ### 4.2 Role-based web app surfaces and alert flow
 
@@ -335,6 +383,18 @@ time other than now*:
   The overlay is explicitly labeled with which source answered it, so a planner is never shown two
   numbers without knowing they come from different eras.
 
+### 5.8 Cassandra storage-usage control (D42)
+
+Per Cassandra node, `org.apache.cassandra.metrics:type=Storage,name=Load` (bytes of data that node
+currently holds) is already scraped by the existing JMX exporter (§3, `infra/cassandra/jmx-exporter/`)
+into Prometheus — D42 is the first thing to actually display it. The admin UI shows each node's usage
+as a percentage of a **configured budget** (`CASSANDRA_NODE_STORAGE_BUDGET_BYTES`, env-var, documented
+default): explicitly a monitored threshold the admin compares Cassandra's own reported usage against,
+**not** a kernel-enforced filesystem quota — Docker Desktop's WSL2 backend doesn't support
+per-container/per-volume storage quotas (`--storage-opt size=` needs devicemapper or
+overlay2-on-XFS-with-pquota; neither is the local dev default), so a real hard cap would need a
+loopback-mounted fixed-size volume, out of scope for what this control needs to illustrate.
+
 ---
 
 ## 6. Use Cases
@@ -402,6 +462,14 @@ them from Cassandra, freeing space without an unqualified data-loss reset.
 *Success:* disk usage drops below the alert threshold, the alert clears, and the archived data remains
 recoverable from the exported file — not silently destroyed.
 
+**UC-12 — Admin: add Cassandra storage capacity.** An admin notices a Cassandra node's storage-usage
+control approaching its configured budget (D42), clicks "Deploy new Cassandra node," and watches live
+step-by-step progress (container created → healthy → joined the ring) in the admin UI. Once done, the
+new node appears in the Deployment step's health grid alongside the original.
+*Success:* a second Cassandra node is visibly part of the running cluster, `nodetool status` on either
+node shows both as full (`UN`) members, and the admin can see this happened without guessing at
+container/cluster internals from a terminal.
+
 ---
 
 ## 7. Functional Requirements
@@ -450,8 +518,12 @@ recoverable from the exported file — not silently destroyed.
 
 **Web application — infrastructure/admin role (FR-W)**
 - FR-W1. Guided, sequential step UI covering: deployment status, ingestion, Kafka,
-  Spark, Cassandra, and a summary linking to Grafana, under a "Pipeline" tab.
-- FR-W2. Observer mode only: no action in the UI mutates pipeline state (Phase 1).
+  Spark, Cassandra, and a summary linking to Grafana, under a "Pipeline" tab. The deployment status
+  step's health grid combines its fixed configured service list with any running `cassandra-*`
+  containers discovered via the Docker API (FR-N3, D42), so an admin-deployed extra node appears
+  without a web-app redeploy.
+- FR-W2. Observer mode only: no action in the UI mutates pipeline state (Phase 1), except the scoped
+  exceptions in FR-A (D40) and FR-N (D42).
 - FR-W3. Live updates (WebSocket or ≤2 s polling) at every pipeline step.
 - FR-W4. Role-based login required before any pipeline data is shown (FR-R).
 - FR-W5. The step layout and copy must make each stage understandable to a newcomer
@@ -481,6 +553,24 @@ recoverable from the exported file — not silently destroyed.
 - FR-A3. The action is only reachable by the admin role (FR-R3) and requires an explicit
   confirmation step in the UI before executing, since it is irreversible against the live store
   (the archive file is the only remaining copy).
+
+**Cassandra node scale-out (FR-N, D42)**
+- FR-N1. `GET /api/admin/cassandra/storage` returns each known Cassandra node's `Storage_Load` (bytes)
+  and the configured budget, so the admin UI can render a usage percentage per node.
+- FR-N2. `POST /api/admin/cassandra/nodes` (admin-only, FR-R3) starts a new Cassandra container via
+  the Docker Engine API, joins it to the existing ring (§4.3), and streams step-by-step progress over
+  the existing pipeline-state WebSocket channel (§4.2) rather than making the caller poll. The
+  progress UI is a genuine animated visual, not a static text list — in the spirit of D26's existing
+  "impressive visuals" pipeline-flow animation (`PipelineFlowDiagram.tsx`) — so a resilient admin
+  watching it has no doubt the process is actively running versus stalled or failed at each step
+  (container creating → healthy → joining the ring → done), with a clearly distinct failure state if
+  any step times out or errors.
+- FR-N3. The Deployment step's health grid (FR-W1) discovers any running `cassandra-*` containers via
+  the Docker API in addition to its fixed configured service list, so a newly joined node appears
+  without a redeploy of the web app.
+- FR-N4. Reclaiming the original node's now-unowned disk space (`nodetool cleanup`) is documented as
+  a manual operator step, not triggered by FR-N2 (§4.3 point 4) — a deliberate scope boundary, not an
+  oversight.
 
 **Environmental/planner role (FR-E, D32)**
 - FR-E1. A map of Lingen (Ems) shows one marker per known device at its
@@ -561,6 +651,15 @@ recoverable from the exported file — not silently destroyed.
   tooling. Not retained under any TTL itself — same "keep everything" default as live data,
   just moved off the Cassandra write/read path — and out of scope for automatic re-import in
   Phase 1 (a later phase could add "restore from archive").
+- **NFR-15 Docker socket privilege (D42).** FR-N2 mounts `/var/run/docker.sock` into the backend
+  container so it can create/start a new Cassandra container via the Docker Engine API — a
+  deliberate, documented exception to this project's otherwise minimal-attack-surface stance
+  (NFR-6, NFR-10.1, NFR-11): whoever can reach the admin-gated node-deploy endpoint effectively gains
+  host-level container-spawning capability. Accepted as local-development/educational tooling for
+  Phase 1, scoped to that one endpoint (FR-N2) and never exposed to the planner role (FR-R3); **not**
+  the pattern the production Contabo/k3s deployment (P6) would use — a real cluster scales via the
+  Kubernetes API (a node/StatefulSet-replica change through kubectl or a controller), not a
+  socket-mounted app container, and P6 should replace this mechanism rather than carry it forward.
 - **NFR-5 Portability.** No dependency on any specific machine beyond Docker:
   configuration externalized (FR-D2), no hardcoded hostnames or IPs in application code,
   secrets injectable via environment. The same images run unchanged in local Compose and
@@ -730,6 +829,7 @@ The 48-hour run at the NFR-2 rate passes when:
 | D39 | Historical comparison overlay | External review noted there was no way to compare a current reading against an earlier period (e.g. a week or a year ago). Added a "compare to" overlay on the existing behavior-over-time charts (FR-E3) rather than a separate view, since the comparison is only useful anchored to the metric already being looked at. Resolves the compared period from live/synthetic Cassandra history when it's within the deployment's own running time, and from the Dataset Explorer (D38) when it predates that — chosen over fabricating a full year of live history, which the project's own short running time can't honestly provide. |
 | D40 | Disk-full remediation: alert + archive-and-trim | Risk R-1 (disk exhaustion) was flagged High since v1.0 but had no defined repair path beyond a full data-destroying reset, and no dedicated alert — external review asked directly "what happens if a disk goes full, what's the repair way." Rather than relaxing NFR-4's "keep everything" retention policy wholesale, added one narrow, explicit, admin-triggered, logged action (FR-A) that exports the oldest raw-event partitions to a local archive file before dropping them from Cassandra — data survives, just off the live read/write path — plus a disk-usage-critical Grafana alert (extends FR-G4) so the admin has warning before the disk actually fills. This is the one Phase-1 exception to the control-panel deferral (§2): a single-purpose capacity action, not a general start/stop/inject surface. |
 | D41 | Per-role scenario narratives in the docs site | External review felt the UC list's one-line success criteria didn't add up to a believable "a real user does X, reads Y, reacts Z" story for either role, despite the UI itself being mature. Rather than inventing new features to compensate, D41 is a documentation-only decision: NFR-9 now requires the docs site to carry a concrete, narrated walkthrough per role (grounded in UC-10/UC-11 among others), separate from and more detailed than the formal use-case list. |
+| D42 | Cassandra storage-usage control + admin-triggered node deploy | A follow-up conversation about Kafka/Cassandra storage limits surfaced that Cassandra's own disk usage had no dedicated signal (D40's alert measures the whole host filesystem) and no admin-facing way to add capacity, even though Cassandra's gossip/token-ring design makes "add a node, let the ring rebalance" the standard, well-supported way it scales storage — unlike Kafka, where a new broker needs an explicit partition-reassignment step to help. Chose real automation with live progress (FR-N2, WebSocket-streamed steps) over a copy-paste runbook, per explicit request; this requires Docker socket access (NFR-15, R-9) — the first Phase-1 admin action to need a new host-level privilege rather than only mutating the app's own data (D40's archive-and-trim). Scoped deliberately short of full automation: token ranges rebalance automatically on bootstrap at the existing RF=1 (no `ALTER KEYSPACE` needed), but reclaiming the original node's freed disk (`nodetool cleanup`) stays a documented manual step (FR-N4) rather than an automated data-redistribution side-effect without a human decision point. The storage "limit" itself is an admin-configured budget compared against Cassandra's own `Storage_Load` metric (already scraped, just never displayed), not a kernel-enforced quota — Docker Desktop's WSL2 backend doesn't support per-volume filesystem quotas, confirmed while scoping this decision. |
 
 ---
 
@@ -803,6 +903,13 @@ The 48-hour run at the NFR-2 rate passes when:
   tiles of Lingen (Ems) rendered correctly with status-colored pins). A future cloud
   deployment (P6-adjacent) serving real public traffic should switch to a paid tile
   provider or a self-hosted tile cache before going live.
+- **R-9 — Docker socket exposure via FR-N2 (Medium, local/demo scope).** Mounting
+  `/var/run/docker.sock` into the backend (NFR-15) means anything that compromises the backend
+  process gains host-level container control, not just app-level access — a materially larger blast
+  radius than any other admin action in this project. Mitigation: scoped to the one admin-gated
+  endpoint, never reachable by the planner role (FR-R3); accepted for local-development/educational
+  use only, explicitly flagged as not the mechanism the production Contabo/k3s deployment (P6) should
+  carry forward (NFR-15).
 
 ---
 
@@ -827,10 +934,14 @@ The 48-hour run at the NFR-2 rate passes when:
    role's centralized logs (D30); R4 Grafana alerting + webhook + admin Alerts tab with
    Explore drill-down (D31); R5 this requirements rewrite. Risks R-7/R-8 flag what's not
    yet live-verified.
-9. **P9 — External-feedback response (this document's v2.1):** R6 `source_ts` schema
+9. **P9 — External-feedback response (v2.1):** R6 `source_ts` schema
    addition + Dataset Explorer API/view (D38); R7 historical-comparison overlay on the
    behavior-over-time charts, spanning live history and the Dataset Explorer (D39); R8
    disk-usage-critical alert + archive-and-trim admin action (D40, FR-A); R9 per-role
    scenario narratives added to the docs site (D41).
+10. **P10 — Cassandra storage capacity control (this document's v2.2):** R10 `Storage_Load`-based
+    per-node usage display (FR-N1); R11 Docker-socket-backed admin node-deploy action with
+    WebSocket-streamed step progress (FR-N2, NFR-15); R12 dynamic `cassandra-*` discovery in the
+    Deployment step's health grid (FR-N3, FR-W1).
 
 Each phase should end in a runnable, demonstrable state.
