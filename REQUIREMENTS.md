@@ -4,11 +4,13 @@
 infrastructure/admin role (pipeline health, centralized logs, alerting) and an environmental/planner
 role (live sensor map, air quality/comfort scoring, citizen-facing warnings), both served from the
 same streaming pipeline and KPI dashboard.
-**Status:** **v2.2 — approved for development.** v1.0's technical pipeline (Kafka/Spark/Cassandra) is
+**Status:** **v3.0 — approved for development.** v1.0's technical pipeline (Kafka/Spark/Cassandra) is
 unchanged; v2.0 redirected the *purpose* the two user-facing surfaces serve (D29-D33); v2.1 responds to
 external review feedback on the v2.0 build (D38-D41); v2.2 adds a Cassandra storage-capacity control to
-the admin role, prompted by a follow-up conversation about this project's own disk-growth story (D42).
-**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1, v2.2)
+the admin role (D42); v3.0 replaces Docker Compose with Kubernetes (k3d locally) as the deployment
+mechanism for the whole stack, closing the Docker-socket privilege D42 introduced and turning the
+previously-aspirational P6 k3s architecture into something that actually runs (D43).
+**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1, v2.2, v3.0)
 **v0.2 changes:** frontend (React.js) and backend (Python) confirmed; added NFR-10 npm supply-chain security policy and Risk R-5, based on the 2025–2026 npm attack landscape (Shai-Hulud worm and successors, axios and keyv compromises).
 **v0.3 changes:** deployment target defined — two Contabo VPS orchestrated with Docker Swarm, true-cluster topology (Kafka broker + Cassandra node on both machines, replication factor 2), public exposure via IP address; added §4.1 deployment topology, NFR-11/NFR-12, Risk R-6, OQ-6/OQ-7.
 **v0.4 changes:** orchestrator switched from Docker Swarm to **k3s** on **three** Contabo VPS (2 data nodes + 1 small control node; HA control plane with 3-member etcd; 3 KRaft controllers), Kafka/Cassandra as plain StatefulSets; OQ-7 resolved; OQ-4 resolved as KRaft; D16 superseded by D18/D19; NFR-11/NFR-12 and phases updated.
@@ -26,6 +28,21 @@ quotas) and an admin-triggered "deploy a new Cassandra node" action with live st
 the second explicit, scoped exception to the observer-mode/control-panel deferral (after D40) and the
 first to require a new privilege (Docker socket access) rather than only mutating the app's own data
 store. §2, §4, §5, §6, §7, §8, and §13 updated accordingly.
+**v3.0 changes:** D42's Docker socket exception (NFR-15/R-9) prompted the obvious next question — why
+give the backend host-root-equivalent access at all, when Kubernetes' own RBAC exists precisely to
+scope this kind of thing narrowly? Rather than patch around it, D43 adopts Kubernetes for the whole
+stack: **k3d** (k3s-in-Docker) locally, the same distribution already chosen for production (D18), so
+local dev and the eventual Contabo VPS cluster share one set of manifests instead of two unrelated
+deployment stories. Cassandra and Kafka become StatefulSets, everything else Deployments (node-exporter
+and promtail become DaemonSets, matching their per-node nature), one-shot setup becomes Jobs, and D42's
+node-deploy action is reimplemented against the Kubernetes API (scale the StatefulSet, watch pod
+readiness, exec `nodetool status` via the k8s exec API) through a narrowly-scoped ServiceAccount +
+RBAC Role instead of the Docker socket — closing R-9 entirely rather than just documenting around it.
+A new admin "Kubernetes status" panel surfaces pod/StatefulSet health the same way the Deployment step
+already surfaces container health. Docker Compose stays in the repo as historical reference (README's
+Quick Start now describes the k3d path); nothing about the pipeline's own logic (producer, Spark job,
+backend business logic) changes — this is a deployment-mechanism swap, not a rewrite. §2, §3, §4, §5,
+§6, §7, §8, §13, and §14 updated accordingly.
 
 ---
 
@@ -105,8 +122,12 @@ broke and why.
 - **Cassandra storage capacity control (D42):** a per-node storage-usage display (Storage_Load vs. a
   configured budget) and an admin-triggered "deploy a new Cassandra node" action with live
   step-by-step progress, so a second node genuinely joins the existing ring and appears in the
-  deployment map — the second scoped exception to the control-panel deferral below, and the first to
-  require Docker socket access rather than only mutating the app's own data.
+  deployment map — the second scoped exception to the control-panel deferral below.
+- **Kubernetes deployment, local and production (D43):** the whole stack runs on Kubernetes —
+  **k3d** locally, the same k3s distribution already chosen for production (D18) — instead of Docker
+  Compose. D42's node-deploy action is reimplemented against the Kubernetes API (RBAC-scoped
+  ServiceAccount) instead of the Docker socket, closing R-9. A new admin "Kubernetes status" panel
+  shows pod/StatefulSet health.
 - Grafana dashboards for the KPI catalogue of §9 (now six families, not five).
 - Basic login on the web application (now role-aware); Grafana's built-in authentication.
 - 48-hour endurance-run scenario, with acceptance criteria (§10).
@@ -132,8 +153,8 @@ broke and why.
 
 | Layer | Tool | Notes / rationale |
 |---|---|---|
-| Containerization | Docker / containerd + Docker Compose | Compose for local development; the same container images run in the k3s cluster. |
-| Orchestration | k3s (3 nodes, HA embedded etcd) | Lightweight Kubernetes; Kafka and Cassandra as plain StatefulSets with node-pinned local persistent volumes; flannel WireGuard backend encrypts all inter-node traffic. |
+| Containerization | Docker / containerd | Same images run locally (k3d) and on the production k3s cluster; Docker Compose (D1-D42 era) stays in the repo as historical reference only, superseded by D43. |
+| Orchestration | Kubernetes — **k3d** (k3s-in-Docker, single node) locally, **k3s** (3 nodes, HA embedded etcd) in production (D43, D18) | One manifest set, two environments via Kustomize overlays; Kafka and Cassandra as plain StatefulSets with persistent volumes; flannel WireGuard backend encrypts inter-node traffic in production. |
 | Edge / TLS | Traefik ingress (bundled with k3s) + host firewall (ufw/nftables) | Only ingress ports are publicly reachable; everything else is cluster-internal, enforced additionally by NetworkPolicies. |
 | Message broker | Apache Kafka (+ KRaft or ZooKeeper) | Topic `sensor-readings`; partitioned by device ID to preserve per-device ordering. |
 | Stream processing | Apache Spark 3.x — Structured Streaming, **PySpark** | Python chosen for the whole codebase; micro-batch reads from Kafka, windowed aggregation, writes to Cassandra. |
@@ -257,6 +278,66 @@ reassigned to it. The admin role's Pipeline/Deployment view gets a storage-usage
 5. Once healthy, the new node appears in the Deployment step's health grid automatically — that grid
    moves from a fixed configured service list to also discover any running `cassandra-*` containers
    via the Docker API (FR-W1).
+
+**Superseded by D43 (§4.4):** point 1's Docker socket mechanism is replaced by the Kubernetes API;
+points 2-5's behavior and UX are unchanged, just re-backed.
+
+### 4.4 Kubernetes deployment — local (k3d) and production (k3s) (D43)
+
+D42 gave the backend host-root-equivalent Docker socket access to deploy a Cassandra container — a
+real, documented risk (NFR-15, R-9), accepted at the time as scoped and local-only. D43 removes the
+need for it entirely by moving the whole stack onto Kubernetes, where RBAC already exists to grant
+exactly the narrow capability D42 actually needs ("scale one named StatefulSet, exec into its pods")
+without host-level privilege. This also stops treating the production k3s architecture (§4.1) as
+aspirational: the same manifests now run locally too.
+
+**Local runtime:** **k3d** (k3s packaged to run as Docker containers) — one single-node cluster,
+chosen over Docker-Desktop's built-in Kubernetes or minikube specifically because it *is* k3s, the
+already-chosen production distribution (D18), so nothing about the deployment model changes between a
+laptop and the Contabo cluster except cluster topology. Images already built via each service's
+existing `Dockerfile` are loaded into the k3d cluster with `k3d image import` — no container registry
+needed for local dev.
+
+**Workload mapping** (from the D1-D42-era `docker-compose.yml`, one-for-one):
+
+| Compose service | Kubernetes object | Why |
+|---|---|---|
+| `cassandra`, `kafka` | StatefulSet | Stable per-replica identity + PersistentVolumeClaim — exactly what D42's node-deploy needs, natively |
+| `backend`, `producer`, `spark-master`, `spark-worker`, `spark-job`, `grafana`, `prometheus`, `loki`, `kafka-exporter`, `kafka-ui` | Deployment | Stateless-ish, single replica, standard rolling updates |
+| `node-exporter`, `promtail` | DaemonSet | Genuinely per-node (host metrics, per-node container logs) — one-per-node is the correct shape now and later on the multi-node VPS cluster, not an arbitrary choice |
+| `kafka-volume-init`, `spark-job-volume-init`, `archive-volume-init` | *(removed)* | Their whole job was fixing volume ownership for a non-root process — Kubernetes' pod `securityContext.fsGroup` does this natively on mount, no init container needed |
+| `kafka-topic-init`, `cassandra-schema-init`, `dataset-init` | Job | One-shot setup, unchanged in substance; downstream pods gain a small `initContainer` that polls for the dependency (same retry-loop pattern `cassandra-schema-init` already used internally), since Kubernetes has no native "wait for this Job" the way Compose's `condition: service_completed_successfully` does |
+
+**Config and secrets:** the non-secret environment variables already in `docker-compose.yml` become one
+ConfigMap per service (or a shared one where values overlap); `GRAFANA_ADMIN_PASSWORD`,
+`BACKEND_ADMIN_PASSWORD`, `BACKEND_PLANNER_PASSWORD`, `BACKEND_SESSION_SECRET`, and the optional Kaggle
+credentials become a Secret generated from the existing `.env` file at apply time — `.env` stays the
+one place these values are set, not duplicated into a second file.
+
+**Storage:** each current named Docker volume becomes a PersistentVolumeClaim against k3d's default
+`local-path` StorageClass. A fresh local k3d cluster starts with empty PVCs — same consequence as
+`docker compose down -v`, not a live migration of existing local data.
+
+**RBAC (closes R-9):** a `backend` ServiceAccount in the `iot-pipeline` namespace, bound via a
+namespaced Role (not ClusterRole) to: `get`/`list`/`watch` on `pods` and `statefulsets` (the new
+Kubernetes-status panel, FR-K1), `patch` on the `cassandra` StatefulSet's `/scale` subresource *only*
+— `resourceNames: ["cassandra"]`, not "any StatefulSet" (D42's node-deploy action, FR-N2), and
+`create` on `pods/exec` for `nodetool status` polling. No cluster-wide permissions, ever.
+
+**Exposure:** only the backend web app (8000) and Grafana (3000) are reachable from the host, via k3d's
+port mapping at cluster-create time — mirroring NFR-11's "only what's needed is externally reachable"
+stance already applied to the production topology. Everything else (Kafka, Cassandra, Spark UIs,
+Prometheus, Loki) is cluster-internal, reached via `kubectl port-forward` when actually debugging it,
+same as they're firewalled from the public internet in production (NFR-11).
+
+**Deliberately not done in this pass** (matches D19's "no more machinery than this phase needs"):
+Helm (plain YAML/Kustomize is enough at this size, and keeps manifests as transparent and diffable as
+the hand-written StatefulSets already were), Operators (Strimzi/K8ssandra — still deferred, D19),
+HorizontalPodAutoscaler or Cluster Autoscaler (nothing here should scale itself; D42/D43's Cassandra
+capacity action is deliberately a human decision, not automatic), a multi-node local cluster (single
+k3d node is sufficient locally; the real multi-node HA topology stays §4.1's production-only concern),
+and actually provisioning the Contabo VPS cluster itself (real infrastructure, credentials, and DNS —
+a separate operational effort from writing manifests, still tracked as P6 in §14).
 
 ### 4.2 Role-based web app surfaces and alert flow
 
@@ -470,6 +551,13 @@ new node appears in the Deployment step's health grid alongside the original.
 node shows both as full (`UN`) members, and the admin can see this happened without guessing at
 container/cluster internals from a terminal.
 
+**UC-13 — Admin: check Kubernetes status.** An admin opens the new Kubernetes-status panel and sees
+every pod's phase, readiness, restart count, and node, plus each StatefulSet/Deployment's desired vs.
+ready replica counts — the same "is the deployment actually healthy" question the Deployment step
+already answers for individual services, now answerable at the orchestration layer too.
+*Success:* a pod stuck `Pending` (e.g. an unschedulable second Cassandra replica, insufficient cluster
+memory) is visibly distinguishable from one that's `CrashLoopBackOff`, without a terminal.
+
 ---
 
 ## 7. Functional Requirements
@@ -557,20 +645,29 @@ container/cluster internals from a terminal.
 **Cassandra node scale-out (FR-N, D42)**
 - FR-N1. `GET /api/admin/cassandra/storage` returns each known Cassandra node's `Storage_Load` (bytes)
   and the configured budget, so the admin UI can render a usage percentage per node.
-- FR-N2. `POST /api/admin/cassandra/nodes` (admin-only, FR-R3) starts a new Cassandra container via
-  the Docker Engine API, joins it to the existing ring (§4.3), and streams step-by-step progress over
-  the existing pipeline-state WebSocket channel (§4.2) rather than making the caller poll. The
-  progress UI is a genuine animated visual, not a static text list — in the spirit of D26's existing
-  "impressive visuals" pipeline-flow animation (`PipelineFlowDiagram.tsx`) — so a resilient admin
-  watching it has no doubt the process is actively running versus stalled or failed at each step
-  (container creating → healthy → joining the ring → done), with a clearly distinct failure state if
+- FR-N2. `POST /api/admin/cassandra/nodes` (admin-only, FR-R3) scales the `cassandra` StatefulSet's
+  replica count via the Kubernetes API (D43, §4.4 — superseding D42's Docker-socket approach), joins
+  the new pod to the existing ring (§4.3), and streams step-by-step progress over the existing
+  pipeline-state WebSocket channel (§4.2) rather than making the caller poll. The progress UI is a
+  genuine animated visual, not a static text list — in the spirit of D26's existing "impressive
+  visuals" pipeline-flow animation (`PipelineFlowDiagram.tsx`) — so a resilient admin watching it has
+  no doubt the process is actively running versus stalled or failed at each step
+  (pod scheduling → healthy → joining the ring → done), with a clearly distinct failure state if
   any step times out or errors.
-- FR-N3. The Deployment step's health grid (FR-W1) discovers any running `cassandra-*` containers via
-  the Docker API in addition to its fixed configured service list, so a newly joined node appears
-  without a redeploy of the web app.
+- FR-N3. The Deployment step's health grid (FR-W1) discovers all `cassandra` StatefulSet pods via the
+  Kubernetes API (D43) in addition to its fixed configured service list, so a newly joined node
+  appears without a redeploy of the web app.
 - FR-N4. Reclaiming the original node's now-unowned disk space (`nodetool cleanup`) is documented as
   a manual operator step, not triggered by FR-N2 (§4.3 point 4) — a deliberate scope boundary, not an
   oversight.
+
+**Kubernetes visibility (FR-K, D43)**
+- FR-K1. `GET /api/admin/kubernetes/status` (admin-only, FR-R3) returns every pod's phase, readiness,
+  restart count, and node, plus each StatefulSet/Deployment's desired vs. ready replica counts, via the
+  same read-only RBAC grant FR-N1/FR-N3 already use — one Kubernetes-status panel in the admin UI
+  (UC-13), not a generic cluster dashboard bolted on.
+- FR-K2. The backend's Kubernetes API access is scoped to a single namespaced Role (§4.4) — no
+  ClusterRole, no permissions beyond what FR-N1-N4 and FR-K1 actually need.
 
 **Environmental/planner role (FR-E, D32)**
 - FR-E1. A map of Lingen (Ems) shows one marker per known device at its
@@ -651,15 +748,21 @@ container/cluster internals from a terminal.
   tooling. Not retained under any TTL itself — same "keep everything" default as live data,
   just moved off the Cassandra write/read path — and out of scope for automatic re-import in
   Phase 1 (a later phase could add "restore from archive").
-- **NFR-15 Docker socket privilege (D42).** FR-N2 mounts `/var/run/docker.sock` into the backend
-  container so it can create/start a new Cassandra container via the Docker Engine API — a
-  deliberate, documented exception to this project's otherwise minimal-attack-surface stance
-  (NFR-6, NFR-10.1, NFR-11): whoever can reach the admin-gated node-deploy endpoint effectively gains
-  host-level container-spawning capability. Accepted as local-development/educational tooling for
-  Phase 1, scoped to that one endpoint (FR-N2) and never exposed to the planner role (FR-R3); **not**
-  the pattern the production Contabo/k3s deployment (P6) would use — a real cluster scales via the
-  Kubernetes API (a node/StatefulSet-replica change through kubectl or a controller), not a
-  socket-mounted app container, and P6 should replace this mechanism rather than carry it forward.
+- **NFR-15 Docker socket privilege (D42, superseded by D43/NFR-16).** FR-N2 originally mounted
+  `/var/run/docker.sock` into the backend container so it could create/start a new Cassandra container
+  via the Docker Engine API — a deliberate, documented exception to this project's otherwise
+  minimal-attack-surface stance (NFR-6, NFR-10.1, NFR-11): whoever could reach the admin-gated
+  node-deploy endpoint effectively gained host-level container-spawning capability. This prediction
+  from D42 held exactly as written: "not the pattern the production Contabo/k3s deployment (P6) would
+  use... P6 should replace this mechanism rather than carry it forward" — D43 does that replacement,
+  for local dev too, not just production. Kept here for history; NFR-16 is the current mechanism.
+- **NFR-16 Kubernetes RBAC, replacing the Docker socket (D43).** The backend's `serviceAccountName`
+  (§4.4) is bound to one namespaced Role, not a ClusterRole: `get`/`list`/`watch` on `pods` and
+  `statefulsets` (FR-K1, FR-N3), `patch` on the `cassandra` StatefulSet's `/scale` subresource only
+  (`resourceNames: ["cassandra"]` — not "any StatefulSet", FR-N2), and `create` on `pods/exec` for
+  `nodetool status` polling (FR-N1). No host-level privilege, no privilege beyond what these four
+  endpoints actually need, and — unlike NFR-15 — this *is* the pattern the production k3s deployment
+  (P6) carries forward unchanged, since it's the same manifests either way (§4.4).
 - **NFR-5 Portability.** No dependency on any specific machine beyond Docker:
   configuration externalized (FR-D2), no hardcoded hostnames or IPs in application code,
   secrets injectable via environment. The same images run unchanged in local Compose and
@@ -829,7 +932,8 @@ The 48-hour run at the NFR-2 rate passes when:
 | D39 | Historical comparison overlay | External review noted there was no way to compare a current reading against an earlier period (e.g. a week or a year ago). Added a "compare to" overlay on the existing behavior-over-time charts (FR-E3) rather than a separate view, since the comparison is only useful anchored to the metric already being looked at. Resolves the compared period from live/synthetic Cassandra history when it's within the deployment's own running time, and from the Dataset Explorer (D38) when it predates that — chosen over fabricating a full year of live history, which the project's own short running time can't honestly provide. |
 | D40 | Disk-full remediation: alert + archive-and-trim | Risk R-1 (disk exhaustion) was flagged High since v1.0 but had no defined repair path beyond a full data-destroying reset, and no dedicated alert — external review asked directly "what happens if a disk goes full, what's the repair way." Rather than relaxing NFR-4's "keep everything" retention policy wholesale, added one narrow, explicit, admin-triggered, logged action (FR-A) that exports the oldest raw-event partitions to a local archive file before dropping them from Cassandra — data survives, just off the live read/write path — plus a disk-usage-critical Grafana alert (extends FR-G4) so the admin has warning before the disk actually fills. This is the one Phase-1 exception to the control-panel deferral (§2): a single-purpose capacity action, not a general start/stop/inject surface. |
 | D41 | Per-role scenario narratives in the docs site | External review felt the UC list's one-line success criteria didn't add up to a believable "a real user does X, reads Y, reacts Z" story for either role, despite the UI itself being mature. Rather than inventing new features to compensate, D41 is a documentation-only decision: NFR-9 now requires the docs site to carry a concrete, narrated walkthrough per role (grounded in UC-10/UC-11 among others), separate from and more detailed than the formal use-case list. |
-| D42 | Cassandra storage-usage control + admin-triggered node deploy | A follow-up conversation about Kafka/Cassandra storage limits surfaced that Cassandra's own disk usage had no dedicated signal (D40's alert measures the whole host filesystem) and no admin-facing way to add capacity, even though Cassandra's gossip/token-ring design makes "add a node, let the ring rebalance" the standard, well-supported way it scales storage — unlike Kafka, where a new broker needs an explicit partition-reassignment step to help. Chose real automation with live progress (FR-N2, WebSocket-streamed steps) over a copy-paste runbook, per explicit request; this requires Docker socket access (NFR-15, R-9) — the first Phase-1 admin action to need a new host-level privilege rather than only mutating the app's own data (D40's archive-and-trim). Scoped deliberately short of full automation: token ranges rebalance automatically on bootstrap at the existing RF=1 (no `ALTER KEYSPACE` needed), but reclaiming the original node's freed disk (`nodetool cleanup`) stays a documented manual step (FR-N4) rather than an automated data-redistribution side-effect without a human decision point. The storage "limit" itself is an admin-configured budget compared against Cassandra's own `Storage_Load` metric (already scraped, just never displayed), not a kernel-enforced quota — Docker Desktop's WSL2 backend doesn't support per-volume filesystem quotas, confirmed while scoping this decision. |
+| D42 | Cassandra storage-usage control + admin-triggered node deploy | A follow-up conversation about Kafka/Cassandra storage limits surfaced that Cassandra's own disk usage had no dedicated signal (D40's alert measures the whole host filesystem) and no admin-facing way to add capacity, even though Cassandra's gossip/token-ring design makes "add a node, let the ring rebalance" the standard, well-supported way it scales storage — unlike Kafka, where a new broker needs an explicit partition-reassignment step to help. Chose real automation with live progress (FR-N2, WebSocket-streamed steps) over a copy-paste runbook, per explicit request; this requires Docker socket access (NFR-15, R-9) — the first Phase-1 admin action to need a new host-level privilege rather than only mutating the app's own data (D40's archive-and-trim). Scoped deliberately short of full automation: token ranges rebalance automatically on bootstrap at the existing RF=1 (no `ALTER KEYSPACE` needed), but reclaiming the original node's freed disk (`nodetool cleanup`) stays a documented manual step (FR-N4) rather than an automated data-redistribution side-effect without a human decision point. The storage "limit" itself is an admin-configured budget compared against Cassandra's own `Storage_Load` metric (already scraped, just never displayed), not a kernel-enforced quota — Docker Desktop's WSL2 backend doesn't support per-volume filesystem quotas, confirmed while scoping this decision. Live-testing D42 twice surfaced real host-resource-contention limits (a second full Cassandra JVM OOM-killed on a 7.7 GiB Docker VM) — a genuine finding, not a code defect, that directly motivated D43. |
+| D43 | Kubernetes for the whole stack (k3d locally, k3s in production), replacing the Docker socket | D42's Docker-socket exception (NFR-15/R-9) was accepted as scoped and documented, but the follow-up question was obvious: Kubernetes RBAC exists precisely to grant "scale this one StatefulSet, exec into its pods" without host-root-equivalent access — patching around the socket would have been treating the symptom. Rather than a narrow fix, chose the broader, more coherent move: adopt Kubernetes for everything, per explicit request ("include it at every level"), using **k3d** locally because it *is* k3s, the distribution §4.1/D18 already chose for production — one manifest set instead of two unrelated deployment stories, turning P6 from aspirational into something that actually runs now. Cassandra/Kafka become StatefulSets, node-exporter/promtail become DaemonSets (genuinely per-node, not an arbitrary choice), stateless services become Deployments, one-shot setup becomes Jobs, and the three volume-permission-fixing init containers (D40/D42's `*-volume-init` idiom) disappear entirely — `securityContext.fsGroup` does that natively. Deliberately did not add Helm, Operators, autoscaling, or a multi-node local cluster (§4.4) — same "no more machinery than this phase needs" discipline as D19. Docker Compose stays in the repo as historical reference rather than being deleted, since it documents the D1-D42 era accurately and cleanly. |
 
 ---
 
@@ -903,13 +1007,14 @@ The 48-hour run at the NFR-2 rate passes when:
   tiles of Lingen (Ems) rendered correctly with status-colored pins). A future cloud
   deployment (P6-adjacent) serving real public traffic should switch to a paid tile
   provider or a self-hosted tile cache before going live.
-- **R-9 — Docker socket exposure via FR-N2 (Medium, local/demo scope).** Mounting
-  `/var/run/docker.sock` into the backend (NFR-15) means anything that compromises the backend
-  process gains host-level container control, not just app-level access — a materially larger blast
-  radius than any other admin action in this project. Mitigation: scoped to the one admin-gated
-  endpoint, never reachable by the planner role (FR-R3); accepted for local-development/educational
-  use only, explicitly flagged as not the mechanism the production Contabo/k3s deployment (P6) should
-  carry forward (NFR-15).
+- **R-9 — Docker socket exposure via FR-N2 (RESOLVED by D43, kept for history).** Mounting
+  `/var/run/docker.sock` into the backend (NFR-15) meant anything that compromised the backend process
+  gained host-level container control, not just app-level access — a materially larger blast radius
+  than any other admin action in this project. D42 accepted this for local-development/educational use
+  only, explicitly flagged as not the mechanism production should carry forward. D43 resolves it
+  outright rather than continuing to accept it: the backend now holds a namespaced Kubernetes RBAC
+  Role (NFR-16) scoped to exactly the four operations FR-N1-N4/FR-K1 need, with no host-level privilege
+  at all — and this *is* the production mechanism too, not a local-only exception.
 
 ---
 
@@ -925,7 +1030,10 @@ The 48-hour run at the NFR-2 rate passes when:
 6. **P6 — VPS deployment:** provision & harden all three Contabo VPS (NFR-11), install
    k3s in HA mode with the WireGuard flannel backend, benchmark disk/CPU (fixes the §10
    latency threshold), apply the manifests (StatefulSets, ingress, NetworkPolicies),
-   verify cluster behavior (replication visible, single-node failure demo).
+   verify cluster behavior (replication visible, single-node failure demo). P11 (below) now
+   supplies the base manifests this phase applies — P6's own remaining scope is the real
+   infrastructure work (provisioning, hardening, the production Kustomize overlay), not
+   writing the manifests themselves.
 7. **P7 — Endurance:** rehearsal run, tuning, full 48-hour run on the VPS cluster
    against §10 criteria.
 8. **P8 — Role-based redirect (v2.0):** R0 replay-timestamp fix (D28);
@@ -939,9 +1047,17 @@ The 48-hour run at the NFR-2 rate passes when:
    behavior-over-time charts, spanning live history and the Dataset Explorer (D39); R8
    disk-usage-critical alert + archive-and-trim admin action (D40, FR-A); R9 per-role
    scenario narratives added to the docs site (D41).
-10. **P10 — Cassandra storage capacity control (this document's v2.2):** R10 `Storage_Load`-based
+10. **P10 — Cassandra storage capacity control (v2.2):** R10 `Storage_Load`-based
     per-node usage display (FR-N1); R11 Docker-socket-backed admin node-deploy action with
     WebSocket-streamed step progress (FR-N2, NFR-15); R12 dynamic `cassandra-*` discovery in the
     Deployment step's health grid (FR-N3, FR-W1).
+11. **P11 — Kubernetes migration, local + shared manifests (this document's v3.0):** R13 base
+    Kubernetes manifests for every service (StatefulSets, Deployments, DaemonSets, Jobs, §4.4's
+    mapping table) plus k3d as the local runtime; R14 RBAC ServiceAccount/Role replacing the Docker
+    socket (NFR-16); R15 FR-N1-N4 reimplemented against the Kubernetes API; R16 the new admin
+    Kubernetes-status panel (FR-K1, UC-13). This is a large step toward P6 (below) but not P6 itself:
+    P6's remaining scope after P11 is narrower — provisioning and hardening the actual three Contabo
+    VPS and applying these same manifests there via a production Kustomize overlay (3-node topology,
+    Traefik ingress, TLS, NFR-11's firewall rules) — real infrastructure work, not manifest-writing.
 
 Each phase should end in a runnable, demonstrable state.
