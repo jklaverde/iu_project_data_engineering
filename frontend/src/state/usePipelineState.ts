@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { connectPipelineStateSocket, fetchPipelineState } from "../api";
-import type { PipelineState } from "../types";
+import type { CassandraDeployProgress, PipelineState } from "../types";
 
 const POLL_INTERVAL_MS = Number(import.meta.env.VITE_POLL_INTERVAL_MS ?? 2000);
 const WS_CONNECT_TIMEOUT_MS = 3000;
@@ -19,6 +19,10 @@ const EMPTY_STATE: PipelineState = {
 export function usePipelineState() {
   const [state, setState] = useState<PipelineState>(EMPTY_STATE);
   const [connectionMode, setConnectionMode] = useState<ConnectionMode>("connecting");
+  // D42 (FR-N2): only arrives over the WebSocket (no polling fallback - the
+  // node-deploy action itself requires a live connection to even start, so
+  // there's no polling-mode story to support here, unlike `state` above).
+  const [cassandraDeployProgress, setCassandraDeployProgress] = useState<CassandraDeployProgress | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +64,9 @@ export function usePipelineState() {
       () => {
         if (!cancelled) startPolling();
       },
+      (progress) => {
+        if (!cancelled) setCassandraDeployProgress(progress);
+      },
     );
 
     const fallbackTimer = setTimeout(() => {
@@ -74,5 +81,5 @@ export function usePipelineState() {
     };
   }, []);
 
-  return { state, connectionMode };
+  return { state, connectionMode, cassandraDeployProgress };
 }

@@ -20,6 +20,8 @@ class JsonLineFormatter(logging.Formatter):
                 payload["message"] = msg
         except (json.JSONDecodeError, TypeError):
             payload["message"] = msg
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
         return json.dumps(payload)
 
 

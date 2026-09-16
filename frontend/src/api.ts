@@ -1,6 +1,8 @@
 import type {
   AdminAlert,
   ArchiveResult,
+  CassandraDeployProgress,
+  CassandraStorageSummary,
   DatasetReadingsResponse,
   DatasetSummaryResponse,
   PipelineState,
@@ -83,6 +85,14 @@ export function runArchive(cutoff?: string): Promise<ArchiveResult> {
   });
 }
 
+export function fetchCassandraStorage(): Promise<CassandraStorageSummary> {
+  return request("/api/admin/cassandra/storage");
+}
+
+export function deployCassandraNode(): Promise<{ status: string }> {
+  return request("/api/admin/cassandra/nodes", { method: "POST" });
+}
+
 export function fetchDatasetSummary(): Promise<DatasetSummaryResponse> {
   return request("/api/dataset/summary");
 }
@@ -103,6 +113,7 @@ export function connectPipelineStateSocket(
   onMessage: (state: PipelineState) => void,
   onOpen: () => void,
   onClose: () => void,
+  onCassandraDeployProgress?: (progress: CassandraDeployProgress) => void,
 ): WebSocket {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WebSocket(`${protocol}//${location.host}/ws/pipeline-state`);
@@ -114,6 +125,8 @@ export function connectPipelineStateSocket(
       const payload = JSON.parse(event.data);
       if (payload.type === "pipeline-state") {
         onMessage(payload.data as PipelineState);
+      } else if (payload.type === "cassandra-node-deploy") {
+        onCassandraDeployProgress?.(payload as CassandraDeployProgress);
       }
     } catch {
       // ignore malformed frames

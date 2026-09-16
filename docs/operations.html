@@ -27,7 +27,7 @@
         <div class="toc-links">
           <a href="#status" data-name="status phase table">Status</a>
           <a href="#resuming-locally" data-name="resuming locally docker compose up">Resuming locally</a>
-          <a href="#scenario-walkthroughs" data-name="role scenario walkthroughs planner admin d41 uc-10 uc-11">Role scenario walkthroughs</a>
+          <a href="#scenario-walkthroughs" data-name="role scenario walkthroughs planner admin d41 uc-10 uc-11 d42 uc-12 cassandra node deploy storage">Role scenario walkthroughs</a>
           <a href="#decisions" data-name="implementation decisions beyond requirements">Implementation decisions</a>
           <a href="#interim-vps" data-name="interim vps deployment">Interim VPS deployment</a>
           <a href="#next" data-name="where to pick this up next priorities">Where to pick this up next</a>
@@ -200,6 +200,28 @@
           any special tooling if it's ever needed again — just no longer competing for space with the
           live write path. NFR-4's "keep everything" is unchanged as the default; this was the one
           explicit, logged exception to it (D40).
+        </p>
+
+        <h3 id="scenario-admin-cassandra-node">Admin: adding Cassandra storage capacity (D42, UC-12)</h3>
+        <p>
+          On the Cassandra step, the admin sees a per-node storage bar climbing toward its configured
+          budget. They click <strong>"Deploy new Cassandra node…"</strong>, confirm the warning that this
+          starts a real second container, and watch an animated four-step progress view: creating the
+          container, waiting for it to report healthy, waiting for it to join the ring
+          (<code>nodetool status</code> shows it as <code>UN</code>), then done — each step lighting up
+          in turn rather than a static "please wait." A visible notice on this control says plainly that
+          deploying a database node from a web UI is a demo convenience, not a safe production practice
+          (NFR-15) — a real deployment would scale through Cassandra's own cluster tooling or, in this
+          project's production plan (§4.1), the Kubernetes API.
+        </p>
+        <p>
+          Once joined, the second node appears in the Deployment step's health grid automatically, and
+          the storage control now shows two bars instead of one. Token ranges rebalance on bootstrap
+          regardless of replication factor (RF stays at 1 for local dev), so the original node's own
+          <code>Storage_Load</code> starts falling — but only once the admin runs
+          <code>docker exec &lt;container&gt; nodetool cleanup</code> by hand: reclaiming the
+          now-unowned disk space is a deliberate manual follow-up (FR-N4), not something the deploy
+          action does on its own.
         </p>
       </div>
     </section>

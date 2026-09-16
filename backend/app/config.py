@@ -25,6 +25,7 @@ class Config:
     log_level: str = "INFO"
     dataset_csv_path: str = "/data/iot_telemetry_data.csv"
     archive_dir: str = "/archive"
+    cassandra_storage_budget_bytes: int = 2 * 1024**3
 
 
 def load_config() -> Config:
@@ -52,4 +53,5 @@ def load_config() -> Config:
         log_level=os.getenv("BACKEND_LOG_LEVEL", "INFO"),
         dataset_csv_path=os.getenv("BACKEND_DATASET_CSV_PATH", "/data/iot_telemetry_data.csv"),
         archive_dir=os.getenv("BACKEND_ARCHIVE_DIR", "/archive"),
+        cassandra_storage_budget_bytes=int(os.getenv("CASSANDRA_NODE_STORAGE_BUDGET_BYTES", str(2 * 1024**3))),
     )

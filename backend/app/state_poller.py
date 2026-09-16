@@ -51,11 +51,19 @@ class StatePoller:
     spark/cassandra/summary, and a slower loop for the deployment health grid
     (UC-1), which doesn't need second-by-second freshness."""
 
-    def __init__(self, config: Config, kafka_reader: KafkaReader, cassandra_reader: CassandraReader, ws_manager: ConnectionManager):
+    def __init__(
+        self,
+        config: Config,
+        kafka_reader: KafkaReader,
+        cassandra_reader: CassandraReader,
+        ws_manager: ConnectionManager,
+        cassandra_nodes=None,
+    ):
         self._config = config
         self._kafka_reader = kafka_reader
         self._cassandra_reader = cassandra_reader
         self._ws_manager = ws_manager
+        self._cassandra_nodes = cassandra_nodes
         self._lock = asyncio.Lock()
         self._snapshot: dict = {
             "deployment": None,
@@ -170,6 +178,16 @@ class StatePoller:
             {"name": name, "healthy": ok, "detail": detail, "latency_ms": round(latency_ms, 1)}
             for name, (ok, detail, latency_ms) in zip(names, probes)
         ]
+
+        # FR-N3 (D42): any extra Cassandra node an admin deployed via the
+        # storage-capacity action shows up here too, without a web-app
+        # redeploy - discovered live via the Docker API rather than the
+        # fixed list above.
+        if self._cassandra_nodes is not None:
+            try:
+                services += await asyncio.to_thread(self._cassandra_nodes.discover_extra_nodes_health_sync)
+            except Exception:
+                logger.exception(json.dumps({"event": "cassandra_node_discovery_failed"}))
 
         deployment_step = {
             "checked_at": _now_iso(),

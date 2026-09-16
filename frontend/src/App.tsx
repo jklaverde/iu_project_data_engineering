@@ -30,7 +30,7 @@ const STEPS: { name: StepName; label: string }[] = [
 type AdminTab = "pipeline" | "alerts" | "docs";
 
 function Shell({ onLogout }: { onLogout: () => void }) {
-  const { state, connectionMode } = usePipelineState();
+  const { state, connectionMode, cassandraDeployProgress } = usePipelineState();
   const [currentStep, setCurrentStep] = useState<StepName>("deployment");
   const [showAbout, setShowAbout] = useState(false);
   const [showDataset, setShowDataset] = useState(false);
@@ -95,7 +95,9 @@ function Shell({ onLogout }: { onLogout: () => void }) {
                 {currentStep === "ingestion" && <IngestionStep data={state.ingestion} />}
                 {currentStep === "kafka" && <KafkaStep data={state.kafka} spark={state.spark} />}
                 {currentStep === "spark" && <SparkStep data={state.spark} />}
-                {currentStep === "cassandra" && <CassandraStep data={state.cassandra} />}
+                {currentStep === "cassandra" && (
+                  <CassandraStep data={state.cassandra} deployProgress={cassandraDeployProgress} />
+                )}
                 {currentStep === "summary" && <SummaryStep data={state.summary} />}
               </ErrorBoundary>
             </main>

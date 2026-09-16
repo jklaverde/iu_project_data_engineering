@@ -282,3 +282,26 @@ export interface ArchiveResult {
   archive_path: string;
 }
 
+// Mirrors backend/app/cassandra_nodes.py (D42 - storage control + node deploy, FR-N1/N2).
+export interface CassandraStorageNode {
+  container_name: string;
+  address: string;
+  load_bytes: number;
+  percent_of_budget: number;
+  up_normal: boolean;
+}
+
+export interface CassandraStorageSummary {
+  budget_bytes: number;
+  nodes: CassandraStorageNode[];
+}
+
+export type CassandraDeployStep = "creating" | "healthy" | "joining_ring" | "done" | "error";
+
+export interface CassandraDeployProgress {
+  step: CassandraDeployStep;
+  status: "in_progress" | "done" | "error";
+  node_name?: string;
+  message?: string;
+}
+

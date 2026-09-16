@@ -421,9 +421,21 @@ services:
       BACKEND_COOKIE_SECURE: ${BACKEND_COOKIE_SECURE:-false}
       BACKEND_GRAFANA_PORT: ${GRAFANA_PORT:-3000}
       BACKEND_LOG_LEVEL: ${BACKEND_LOG_LEVEL:-INFO}
+      CASSANDRA_NODE_STORAGE_BUDGET_BYTES: ${CASSANDRA_NODE_STORAGE_BUDGET_BYTES:-2147483648}
+    # D42 (NFR-15): runs as root here ONLY so it can reach the socket below -
+    # confirmed empirically that Docker Desktop's exposed docker.sock is
+    # root:root mode 660, so backend/Dockerfile's normal USER 1000:1000
+    # cannot open it (PermissionError) and there is no docker group to join.
+    # Root-in-container is a negligible marginal risk on top of docker.sock
+    # access itself, which is already host-root-equivalent (NFR-15/R-9) -
+    # local-dev/educational only, not the pattern the production k3s
+    # deployment (P6) should carry forward, which never mounts this socket
+    # at all.
+    user: "0:0"
     volumes:
       - kaggle_dataset:/data:ro
       - archive_data:/archive
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
