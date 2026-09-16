@@ -97,6 +97,11 @@ async def _build_compare(request: Request, device_id: str, metric: str, granular
 
     buckets = await asyncio.to_thread(reader.raw_event_buckets_sync)
     earliest = min((b[1] for b in buckets), default=None)
+    # The Cassandra driver returns bucket_start as a naive datetime (UTC-valued,
+    # same convention as _iso() elsewhere in this codebase) - make it aware
+    # before comparing against the aware datetimes below.
+    if earliest is not None and earliest.tzinfo is None:
+        earliest = earliest.replace(tzinfo=timezone.utc)
     window_start = compare_reference - timedelta(hours=_TIMELINE_LOOKBACK_HOURS[granularity])
 
     if earliest is not None and earliest <= window_start:
