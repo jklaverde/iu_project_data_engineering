@@ -223,6 +223,22 @@
           now-unowned disk space is a deliberate manual follow-up (FR-N4), not something the deploy
           action does on its own.
         </p>
+        <p>
+          <strong>Known limitation, live-verified:</strong> on a modestly-sized host, this can fail.
+          A real second Cassandra JVM's bootstrap-streaming burst is memory-hungry, and the Docker
+          Desktop VM itself — not just the new container's own <code>mem_limit</code> — can simply run
+          out of RAM to give it (confirmed on one dev machine: a 7.7&nbsp;GiB total VM with ~6.6&nbsp;GiB
+          already committed to the rest of this ~15-container stack before the second node even starts).
+          When that happens the new container is <code>OOMKilled</code>, the animation correctly shows
+          exactly which step failed with a message naming the cause, and — because it was starving the
+          whole VM, not just its own cgroup — the primary Cassandra node and even unrelated services
+          (spark-job) can briefly restart too before everything self-heals via their own health checks.
+          This is a genuine capacity limit of the host, not a bug in the deploy action: raising the new
+          node's own memory limit does not help when the VM has no free memory left to give at all. The
+          fix, if you hit this, is increasing Docker Desktop's memory allocation (Settings → Resources,
+          or <code>.wslconfig</code>'s <code>memory=</code> on Windows) before retrying, not tuning
+          anything in this project's own config.
+        </p>
       </div>
     </section>
 

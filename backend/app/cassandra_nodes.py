@@ -171,6 +171,19 @@ class CassandraNodes:
             container.reload()
             state = container.attrs["State"]
             if state.get("Status") != "running":
+                if state.get("OOMKilled"):
+                    # Live-observed on this host: the Docker Desktop VM's
+                    # total memory (`free -h` inside any container) can be
+                    # smaller than what this stack plus a second full
+                    # Cassandra JVM needs during bootstrap streaming -
+                    # raising this container's own mem_limit doesn't help
+                    # when the VM itself has no free memory left to give.
+                    raise NodeDeployError(
+                        "container was killed for exceeding its memory limit (OOMKilled) - this host's "
+                        "Docker VM likely doesn't have enough free memory to run a second Cassandra node "
+                        "alongside the rest of this stack; see docs/operations.html for D42's known "
+                        "resource-contention limitation"
+                    )
                 raise NodeDeployError(f"container exited: {state.get('Status')} ({state.get('Error') or 'no error message'})")
             if state.get("Health", {}).get("Status") == "healthy":
                 return
