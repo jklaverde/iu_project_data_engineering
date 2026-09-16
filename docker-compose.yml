@@ -367,6 +367,23 @@ services:
     mem_limit: 512m
     restart: unless-stopped
 
+  archive-volume-init:
+    image: python:3.11.9-slim-bookworm
+    user: root
+    entrypoint: ["/bin/sh", "-c"]
+    # Same idempotent-chown pattern as kafka-volume-init/spark-job-volume-init
+    # above: a fresh named volume is root-owned, but backend runs as 1000:1000
+    # (backend/Dockerfile) and needs to write archive-and-trim's NDJSON export
+    # (D40, FR-A1) - without this, every archive attempt fails with
+    # PermissionError. Reuses the backend's own base image so this doesn't
+    # pull anything new.
+    command:
+      - "mkdir -p /archive && [ \"$(stat -c '%u' /archive)\" = \"1000\" ] || chown -R 1000:1000 /archive"
+    volumes:
+      - archive_data:/archive
+    restart: "no"
+    mem_limit: 128m
+
   backend:
     build:
       context: .
@@ -379,6 +396,8 @@ services:
       producer:
         condition: service_healthy
       dataset-init:
+        condition: service_completed_successfully
+      archive-volume-init:
         condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
