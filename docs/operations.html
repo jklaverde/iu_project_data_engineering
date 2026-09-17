@@ -102,7 +102,7 @@
           <tr><td>P5 — Web app</td><td>FastAPI read-only API + React (TypeScript) guided UI + basic login</td><td><span class="pill pill--done">Done</span></td></tr>
           <tr><td>Interim VPS deployment</td><td><code>dataset-init</code>, reboot-safe restart policies, a real Grafana dashboard bug found and fixed on a live deploy</td><td><span class="pill pill--done">Done</span> — actually deployed and used on a real Linux VPS</td></tr>
           <tr><td>P6 (full) — VPS deployment</td><td>3 Contabo VPS, k3s, hardening, Kafka/Cassandra replicated across nodes</td><td><span class="pill pill--todo">Not started</span></td></tr>
-          <tr><td>P6 — Cassandra scale-out verified on real k3s (D44)</td><td>FR-N2 (admin node-deploy) run end-to-end on a real Contabo VPS; found/fixed 2 RBAC gaps + a silent ring-join bug</td><td><span class="pill pill--done">Done</span> — de-risks P6's core scaling story; not P6 itself (one node, no TLS/ingress/WireGuard, NFR-11 unaddressed)</td></tr>
+          <tr><td>P6 — Cassandra scale-out verified on real k3s (D44/D45)</td><td>FR-N2 (admin node-deploy) run end-to-end on a real Contabo VPS to 2 nodes (D44, found/fixed 2 RBAC gaps + a silent ring-join bug) then 3 nodes (D45, found/fixed a client-sharing concurrency bug); D45 also simulated the full UC-12 approaching-budget scenario</td><td><span class="pill pill--done">Done</span> — de-risks P6's core scaling story; not P6 itself (no TLS/ingress/WireGuard, NFR-11 unaddressed)</td></tr>
           <tr><td>P7 — Endurance</td><td>48-hour run against §10 acceptance criteria</td><td><span class="pill pill--todo">Not started</span></td></tr>
           <tr><td>P8 — Role-based redirect</td><td>Two roles, <code>device_metadata</code>/<code>device_thresholds</code>, Leaflet map, Loki+Promtail, Grafana alerting + webhook + Alerts tab, D34/D35 timeline+log</td><td><span class="pill pill--done">Done — live-verified</span> against a real <code>docker compose up</code></td></tr>
         </table>
@@ -544,6 +544,78 @@
             pod/PVC directly (rather than <code>nodetool removenode</code> first) leaves the ring
             believing that node still owns half the token range. Hit this firsthand resetting state
             between test runs; worth knowing before repeating.</li>
+        </ul>
+
+        <h4 class="doc-h4">Simulating an approaching storage budget, a 3-node scale-out, and a real
+          concurrency bug (D45)</h4>
+        <ul>
+          <li><strong>Why this exists:</strong> D44 validated the deploy mechanism by calling
+            <code>POST /api/admin/cassandra/nodes</code> directly against a healthy cluster — it never
+            confirmed the actual UC-12 story, where an admin first sees a node genuinely approaching
+            its configured budget in the UI, <em>then</em> deploys. Nothing had ever driven
+            <code>Storage_Load</code> anywhere near <code>CASSANDRA_NODE_STORAGE_BUDGET_BYTES</code>
+            (2 GiB default), and Docker/host-level storage quotas aren't available (§5.8), so there was
+            no obvious way to make a node look "full" for a demo.</li>
+          <li><strong>The budget is just an env var — no code needed to simulate it:</strong> lowering
+            <code>CASSANDRA_NODE_STORAGE_BUDGET_BYTES</code> (read once at backend startup, compared
+            against Cassandra's real <code>Storage_Load</code> in <code>storage_summary_sync</code>)
+            below a node's actual current load reproduces the "critical" admin-UI state immediately,
+            with zero code changes — just a temporary override on the live Deployment
+            (<code>kubectl set env deployment/backend CASSANDRA_NODE_STORAGE_BUDGET_BYTES=...</code>),
+            reverted afterward so the committed 2 GiB default (<code>k8s/base/config.env</code>) never
+            changes.</li>
+          <li><strong>Storage_Load lags real writes until a memtable flush:</strong> with ~40k rows
+            already written to <code>raw_events</code> (confirmed via <code>cqlsh COUNT(*)</code>) and
+            <code>spark-job</code> actively writing ~3,000 rows/batch, <code>nodetool status</code>'s
+            <code>Load</code> stayed flat at the node's tiny post-bootstrap baseline (94.77 KiB) for
+            several minutes — it only reflects on-disk SSTables, not memtables/commitlog. A manual
+            <code>nodetool flush</code> made the real ~2.4 MiB of written data show up immediately.
+            Anything that demos or tests this control needs to account for this lag (flush manually, or
+            wait long enough for Cassandra's own flush thresholds).</li>
+          <li><strong>FR-N4 is visibly real, not just documented:</strong> after scaling
+            cassandra-0&rarr;cassandra-1, the storage summary showed <code>cassandra-1</code> at
+            exactly the budget (100%, matching its streamed bootstrap share) while
+            <code>cassandra-0</code> stayed at <strong>208.8%</strong> of the (deliberately tiny) demo
+            budget — new writes rebalance across the ring immediately, but a node's <em>existing</em>
+            data stays put until an admin runs <code>nodetool cleanup</code> (FR-N4, explicitly a manual
+            step, not automated). A real admin using this feature to relieve pressure would still see
+            the original node over budget immediately after "fixing" it — worth knowing going in, not
+            a bug.</li>
+          <li><strong>3-node scale-out verified for the first time — the memory-contention finding was
+            resource pressure, not a capacity ceiling:</strong> D42 and D44 both found a second
+            Cassandra JVM causing OOM pressure, but neither tried a third node. With
+            <code>spark-worker</code>/<code>spark-job</code> and the observability stack
+            (<code>grafana</code>/<code>loki</code>/<code>kafka-ui</code>/<code>kafka-exporter</code>)
+            scaled to 0 first (freeing ~4 GiB on the same 11 GiB VPS), cassandra-1&rarr;cassandra-2
+            completed cleanly — ring-joined within ~2 minutes, ownership rebalanced to a near-even
+            35.7% / 31.6% / 32.7% split, no OOM, no restarts, memory held at ~3 GiB free throughout.
+            The earlier OOMs were this VPS running everything at once with no headroom, not a hard
+            limit on Cassandra node count.</li>
+          <li><strong>Bug found — a real concurrency defect in <code>CassandraNodes</code>, not a
+            simulation artifact:</strong> while the above was running, <code>state_poller</code>'s
+            periodic <code>discover_extra_nodes_health_sync()</code> (FR-N3, a plain
+            <code>list_namespaced_pod</code> call) intermittently raised
+            <code>WebSocketBadStatusException</code>. Root cause: <code>kubernetes.stream.stream()</code>
+            (used by <code>_exec_sync</code> for <code>nodetool</code> calls) monkey-patches the target
+            <code>ApiClient</code>'s <code>.request</code> attribute for the duration of the call
+            (<code>kubernetes/stream/stream.py</code>'s <code>_websocket_request</code>) — not
+            thread-safe. <code>CassandraNodes</code> shared one <code>CoreV1Api</code>/<code>ApiClient</code>
+            between exec-based calls (<code>_exec_sync</code>, on a background thread during
+            ring-join polling) and plain REST calls (<code>_list_cassandra_pods</code>,
+            <code>cluster_status_sync</code>, on <code>state_poller</code>'s own periodic thread); when
+            both hit the shared client concurrently, the REST call could land mid-patch and get routed
+            through the websocket path too. Fixed with a second, dedicated <code>CoreV1Api</code>
+            instance used only by <code>_exec_sync</code>, so the monkey-patched client is never shared
+            with plain-REST call sites. Verified with 480 concurrent requests (6 threads each hammering
+            <code>/cassandra/storage</code> and <code>/kubernetes/status</code>, 40 requests/thread) —
+            0 errors after the fix, versus the original transient failure observed live during a real
+            node deploy.</li>
+          <li><strong>The third node is now a standing cost, not a transient one:</strong> FR-N2 has no
+            decommission path, so cassandra-2 stays part of this VPS's steady state. With the full
+            stack and observability services scaled back up afterward, available memory settled at
+            <strong>242 MiB free / 1.6 GiB available</strong> — tighter than this VPS's baseline before
+            this session. A concrete NFR-12 data point: each admin-deployed Cassandra node is a
+            permanent addition to the memory budget, not a one-time cost during the deploy itself.</li>
         </ul>
       </div>
     </section>

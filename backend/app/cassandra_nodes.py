@@ -79,10 +79,22 @@ class CassandraNodes:
         self._budget = storage_budget_bytes
         self._available = False
         self._core_v1: k8s_client.CoreV1Api | None = None
+        self._exec_core_v1: k8s_client.CoreV1Api | None = None
         self._apps_v1: k8s_client.AppsV1Api | None = None
         try:
             k8s_config.load_incluster_config()
             self._core_v1 = k8s_client.CoreV1Api()
+            # Separate CoreV1Api/ApiClient instance dedicated to _exec_sync's
+            # stream() calls (nodetool exec/status). kubernetes.stream.stream()
+            # monkey-patches its target ApiClient's .request for the call's
+            # duration (kubernetes/stream/stream.py's _websocket_request) - on
+            # a shared client, a concurrent plain REST call from another
+            # thread (e.g. state_poller's periodic discover_extra_nodes_health_sync)
+            # can land mid-patch and get routed through the websocket path
+            # too, raising a WebSocketBadStatusException for what should be
+            # an ordinary list_namespaced_pod. Hit this live testing D42/D44's
+            # node-deploy while state_poller was polling concurrently.
+            self._exec_core_v1 = k8s_client.CoreV1Api()
             self._apps_v1 = k8s_client.AppsV1Api()
             self._available = True
         except Exception as exc:
@@ -101,7 +113,7 @@ class CassandraNodes:
 
     def _exec_sync(self, pod_name: str, command: list[str]) -> tuple[bool, str]:
         resp = k8s_stream(
-            self._core_v1.connect_get_namespaced_pod_exec,
+            self._exec_core_v1.connect_get_namespaced_pod_exec,
             pod_name, NAMESPACE,
             command=command, stderr=True, stdin=False, stdout=True, tty=False,
             _preload_content=False,
