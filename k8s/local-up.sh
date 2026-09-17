@@ -100,7 +100,12 @@ kubectl apply -f "$ROOT_DIR/k8s/base/namespace.yaml"
 # here, per-line, without shell-interpreting the rest of the file.
 echo "==> Generating app-secrets Secret from .env"
 env_value() {
-  grep -m1 "^${1}=" .env | cut -d'=' -f2-
+  # Strip a trailing inline `# ...` comment (only when preceded by
+  # whitespace, so a bare `#` inside a value is left alone) - .env's own
+  # REQUIRED/example comments would otherwise end up baked into the secret
+  # value itself, same failure mode as docker-compose.yml's env_file
+  # handling (which also doesn't strip these).
+  grep -m1 "^${1}=" .env | cut -d'=' -f2- | sed -E 's/[[:space:]]+#.*$//'
 }
 GRAFANA_ADMIN_PASSWORD="$(env_value GRAFANA_ADMIN_PASSWORD)"
 BACKEND_ADMIN_PASSWORD="$(env_value BACKEND_ADMIN_PASSWORD)"
