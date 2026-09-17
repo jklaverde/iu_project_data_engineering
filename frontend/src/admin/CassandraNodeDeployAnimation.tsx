@@ -7,8 +7,8 @@ import type { CassandraDeployProgress, CassandraDeployStep } from "../types";
 // only runs across the segment currently in flight, and each box gets an
 // unambiguous done/active/pending/error look.
 const STEPS: { key: CassandraDeployStep; label: string }[] = [
-  { key: "creating", label: "Create container" },
-  { key: "healthy", label: "Container healthy" },
+  { key: "creating", label: "Schedule pod" },
+  { key: "healthy", label: "Pod healthy" },
   { key: "joining_ring", label: "Joining the ring" },
   { key: "done", label: "Ready" },
 ];

@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: iot-pipeline
+  labels:
+    app: grafana
+spec:
+  # LoadBalancer to match backend's Service - see deployment-backend.yaml and
+  # k8s/local-up.sh for the k3d port-mapping this pairs with.
+  type: LoadBalancer
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: iot-pipeline
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      # See deployment-spark-master.yaml for why this is set cluster-wide.
+      enableServiceLinks: false
+      # Official image's built-in "grafana" user - well-known default UID
+      # (472) for this upstream image, not independently verified here.
+      securityContext:
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: iu-sensor-pipeline/grafana:local
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: GRAFANA_ADMIN_USER
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: GRAFANA_ADMIN_PASSWORD
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          ports:
+            - containerPort: 3000
+              name: http
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: dashboards-json
+              mountPath: /etc/grafana/provisioning/dashboards/json
+              readOnly: true
+            - name: alerting
+              mountPath: /etc/grafana/provisioning/alerting
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: datasources
+          configMap:
+            name: grafana-provisioning-datasources
+        - name: dashboards
+          configMap:
+            name: grafana-provisioning-dashboards
+        - name: dashboards-json
+          configMap:
+            name: grafana-dashboard-json
+        - name: alerting
+          configMap:
+            name: grafana-provisioning-alerting

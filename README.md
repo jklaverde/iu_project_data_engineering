@@ -16,10 +16,13 @@ file-by-file reference for the whole repo.
 
 ## Prerequisites
 
-- Docker Desktop (WSL2 backend on Windows) or Docker Engine + Compose v2 on Linux.
+- Docker Desktop (WSL2 backend on Windows) or Docker Engine on Linux.
+- [k3d](https://k3d.io/) (k3s-in-Docker) and `kubectl` — the primary local runtime as of
+  `REQUIREMENTS.md` D43. `docker compose` (Compose v2) still works as a legacy fallback,
+  see [Legacy: docker compose](#legacy-docker-compose) below.
 - ~16 GB RAM / 4 CPU cores free, ~25 GB free disk for normal use (see
   `REQUIREMENTS.md` NFR-3 for the 48-hour endurance-run sizing).
-- Internet access on first start, so the `dataset-init` container can fetch the
+- Internet access on first start, so the `dataset-init` job can fetch the
   Kaggle source dataset — see [Dataset](#dataset) below. No manual download step.
 
 ## Quick start
@@ -30,19 +33,40 @@ cp .env.example .env
 # BACKEND_PLANNER_PASSWORD, and BACKEND_SESSION_SECRET (e.g. `openssl rand -hex 32`
 # for the last one)
 
+./k8s/local-up.sh
+```
+
+First start creates a local k3d cluster, builds the custom images, imports them into
+that cluster, generates a Kubernetes `Secret` from `.env` (never committed — same rule as
+`.env` itself), and applies the full manifest set (`k8s/base`, a plain Kustomize
+directory — no Helm). This takes several minutes on a cold start (same reasons as before:
+pre-warming Spark's dependency cache, fetching the Kaggle dataset). It prints the two
+URLs the host can actually reach when it's done: the backend at
+**http://localhost:8000** and Grafana at **http://localhost:3000** — see
+`REQUIREMENTS.md` §4.4 for why nothing else (Spark UIs, kafka-ui, Prometheus, ...) is
+exposed to the host anymore; use `kubectl -n iot-pipeline port-forward` for those during
+development. See `docs/operations.html`'s D43 section if anything looks different.
+
+Tear down (deletes the whole local cluster, including its data — the k3d equivalent of
+`docker compose down -v`):
+```
+./k8s/local-down.sh
+```
+
+### Legacy: docker compose
+
+`docker-compose.yml` is kept as a historical reference (`REQUIREMENTS.md` D43) — it still
+runs the full stack on its own, but no longer holds a Docker-socket-mounted backend the
+way it briefly did under D42; that control now only works under the k3d/Kubernetes path.
+
+```
 docker compose up -d --build --wait
 ```
 
-First start builds the custom images, pre-warms Spark's dependency cache, and fetches
-the Kaggle dataset into a named volume — this takes several minutes. `--wait` makes the
-command itself block until every service with a healthcheck reports `healthy`, so a
-clean exit is a real verification, not a guess; if it times out or exits non-zero, check
-with `docker compose ps` — every long-running service should reach `healthy`, and the
-`*-init`/`*-schema-init` one-shot containers should show `Exited (0)` (that's success).
-See `docs/operations.html` if anything looks different — its "Resuming locally" section
-covers cold-start timing details (baseline recomputation, catching up on a Kafka
-backlog), and its troubleshooting log covers non-obvious bugs found while operating
-this stack.
+`--wait` blocks until every service with a healthcheck reports `healthy` — check with
+`docker compose ps` if it times out or exits non-zero; every long-running service should
+reach `healthy`, and the `*-init`/`*-schema-init` one-shot containers should show
+`Exited (0)` (that's success).
 
 If you ever rebuild or restart just one service by name (`docker compose up -d --build
 backend`, say), Compose only reconciles that service — anything else that had drifted to
@@ -95,6 +119,11 @@ WebSocket updates:
 latency, elevated per-service error rate, service down), each with a one-click link into
 Grafana Explore, pre-scoped to that alert's service and a recent time window
 (`REQUIREMENTS.md` UC-9).
+
+**Kubernetes tab** — pod and StatefulSet/Deployment health read straight from the
+Kubernetes API (`REQUIREMENTS.md` FR-K1, D43), via the same narrowly-scoped RBAC Role the
+Cassandra node-deploy control uses. Shows `503`/unavailable when running under the legacy
+`docker compose` path instead, since there's no cluster to ask.
 
 **Docs tab** — the full local documentation site (`docs/index.html` and everything it
 links to), embedded in-app so an administrator can read how the system was conceived and

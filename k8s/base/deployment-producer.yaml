@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: producer
+  namespace: iot-pipeline
+  labels:
+    app: producer
+spec:
+  selector:
+    app: producer
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: producer
+  namespace: iot-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: producer
+  template:
+    metadata:
+      labels:
+        app: producer
+    spec:
+      # See deployment-spark-master.yaml for why this is set cluster-wide.
+      enableServiceLinks: false
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox:1.36
+          command: ["/bin/sh", "-c", "until nc -z kafka 19092; do echo waiting for kafka; sleep 2; done"]
+      containers:
+        - name: producer
+          image: iu-sensor-pipeline/producer:local
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:19092
+            - name: KAFKA_TOPIC_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: KAFKA_TOPIC_NAME
+            - name: PRODUCER_DATASET_CSV_PATH
+              value: /data/iot_telemetry_data.csv
+            - name: PRODUCER_STATE_HTTP_PORT
+              value: "8000"
+          ports:
+            - containerPort: 8000
+              name: http
+          volumeMounts:
+            - name: kaggle-dataset
+              mountPath: /data
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: 192Mi
+            limits:
+              memory: 384Mi
+      volumes:
+        - name: kaggle-dataset
+          persistentVolumeClaim:
+            claimName: kaggle-dataset

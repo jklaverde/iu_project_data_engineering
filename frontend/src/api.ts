@@ -5,6 +5,7 @@ import type {
   CassandraStorageSummary,
   DatasetReadingsResponse,
   DatasetSummaryResponse,
+  KubernetesStatusResponse,
   PipelineState,
   Role,
   SensorsResponse,
@@ -91,6 +92,10 @@ export function fetchCassandraStorage(): Promise<CassandraStorageSummary> {
 
 export function deployCassandraNode(): Promise<{ status: string }> {
   return request("/api/admin/cassandra/nodes", { method: "POST" });
+}
+
+export function fetchKubernetesStatus(): Promise<KubernetesStatusResponse> {
+  return request("/api/admin/kubernetes/status");
 }
 
 export function fetchDatasetSummary(): Promise<DatasetSummaryResponse> {

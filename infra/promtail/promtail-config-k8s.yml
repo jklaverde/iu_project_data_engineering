@@ -1,0 +1,52 @@
+# D43: Kubernetes-native equivalent of promtail-config.yml (kept unmodified
+# for the historical docker-compose.yml deployment). Tails
+# /var/log/pods/<ns>_<pod>_<uid>/<container>/*.log via the standard kubelet
+# hostPath (every container's stdout/stderr is symlinked there by the
+# container runtime - no docker.sock needed) instead of Docker service
+# discovery, using kubernetes_sd_configs + the canonical Grafana Agent/
+# promtail relabel recipe for building that path from pod metadata. Same
+# cardinality discipline as the Compose config: only "namespace"/"pod"/
+# "container"/"level"/"stream" become indexed labels, everything else stays
+# in the log body for `| json`.
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /run/promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: kubernetes-pods
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - action: replace
+        source_labels: ["__meta_kubernetes_namespace"]
+        target_label: "namespace"
+      - action: replace
+        source_labels: ["__meta_kubernetes_pod_name"]
+        target_label: "pod"
+      - action: replace
+        source_labels: ["__meta_kubernetes_pod_container_name"]
+        target_label: "container"
+      - action: replace
+        replacement: "$1"
+        separator: "/"
+        source_labels: ["namespace", "pod"]
+        target_label: "job"
+      - action: replace
+        replacement: "/var/log/pods/*$1/*.log"
+        separator: "/"
+        source_labels: ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+        target_label: "__path__"
+    pipeline_stages:
+      - cri: {}
+      - json:
+          expressions:
+            level: level
+      - labels:
+          level:
+          stream:

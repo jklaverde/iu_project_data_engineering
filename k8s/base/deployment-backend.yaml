@@ -1,0 +1,123 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: iot-pipeline
+  labels:
+    app: backend
+spec:
+  # LoadBalancer so k3d's built-in servicelb can bind the host port mapping
+  # k8s/local-up.sh passes at cluster-create time (`-p 8000:8000@loadbalancer`)
+  # - see k8s/local-up.sh for the exact k3d syntax and its confidence caveat.
+  type: LoadBalancer
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: iot-pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Kubernetes injects a <SERVICE>_PORT / <SERVICE>_SERVICE_HOST env var
+      # per Service into every pod by default; disabled everywhere in this
+      # project since it can silently shadow an app's own same-named env var
+      # (see deployment-spark-master.yaml's comment - that's where this was
+      # actually found, via SPARK_MASTER_PORT colliding with Spark's own).
+      enableServiceLinks: false
+      # D43 (NFR-16): the whole reason this migration exists - the backend
+      # authenticates to the Kubernetes API as this narrowly-scoped
+      # ServiceAccount (see rbac.yaml) instead of mounting the Docker socket
+      # (D42, NFR-15/R-9 - superseded). No `user: "0:0"` override needed
+      # anymore either; backend/Dockerfile's own USER 1000:1000 applies as-is.
+      serviceAccountName: backend
+      # Replaces D1-era archive-volume-init: backend/Dockerfile's own
+      # USER 1000:1000 needs the archive-data PVC writable by that UID.
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: wait-for-deps
+          image: busybox:1.36
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              until nc -z kafka 19092; do echo waiting for kafka; sleep 2; done
+              until nc -z cassandra 9042; do echo waiting for cassandra; sleep 2; done
+      containers:
+        - name: backend
+          image: iu-sensor-pipeline/backend:local
+          envFrom:
+            - configMapRef:
+                name: app-config
+            - secretRef:
+                name: app-secrets
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:19092
+            - name: KAFKA_TOPIC_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: KAFKA_TOPIC_NAME
+            - name: CASSANDRA_HOST
+              value: cassandra
+            - name: CASSANDRA_PORT
+              value: "9042"
+            - name: CASSANDRA_KEYSPACE
+              value: iot
+            - name: PRODUCER_STATE_URL
+              value: http://producer:8000
+            - name: SPARK_JOB_STATE_URL
+              value: http://spark-job:8000
+            - name: BACKEND_DATASET_CSV_PATH
+              value: /data/iot_telemetry_data.csv
+            - name: BACKEND_ARCHIVE_DIR
+              value: /archive
+          ports:
+            - containerPort: 8000
+              name: http
+          volumeMounts:
+            - name: kaggle-dataset
+              mountPath: /data
+              readOnly: true
+            - name: archive-data
+              mountPath: /archive
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: 192Mi
+            limits:
+              memory: 384Mi
+      volumes:
+        - name: kaggle-dataset
+          persistentVolumeClaim:
+            claimName: kaggle-dataset
+        - name: archive-data
+          persistentVolumeClaim:
+            claimName: archive-data

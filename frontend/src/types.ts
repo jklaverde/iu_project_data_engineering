@@ -305,3 +305,24 @@ export interface CassandraDeployProgress {
   message?: string;
 }
 
+// Mirrors backend/app/cassandra_nodes.py's cluster_status_sync (D43 - FR-K1).
+export interface KubernetesPodStatus {
+  name: string;
+  phase: string;
+  ready: string;
+  restarts: number;
+  node: string | null;
+}
+
+export interface KubernetesWorkloadStatus {
+  kind: "StatefulSet" | "Deployment";
+  name: string;
+  desired: number;
+  ready: number;
+}
+
+export interface KubernetesStatusResponse {
+  pods: KubernetesPodStatus[];
+  workloads: KubernetesWorkloadStatus[];
+}
+

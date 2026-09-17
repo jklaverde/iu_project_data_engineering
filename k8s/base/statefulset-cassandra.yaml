@@ -1,0 +1,106 @@
+# Headless (clusterIP: None) so it doubles as: (1) the StatefulSet's
+# governing service, giving each pod a stable `cassandra-N.cassandra...` DNS
+# name for gossip/ring membership, and (2) the client-facing hostname
+# `cassandra` that backend/spark-job/grafana/prometheus already use (a
+# headless Service's bare name resolves to the A records of every Ready
+# pod - the cassandra-driver/plugin clients use whichever addresses come
+# back, so this works the same for 1 replica or several).
+apiVersion: v1
+kind: Service
+metadata:
+  name: cassandra
+  namespace: iot-pipeline
+  labels:
+    app: cassandra
+spec:
+  clusterIP: None
+  selector:
+    app: cassandra
+  ports:
+    - name: cql
+      port: 9042
+      targetPort: 9042
+    - name: jmx-exporter
+      port: 7070
+      targetPort: 7070
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cassandra
+  namespace: iot-pipeline
+spec:
+  serviceName: cassandra
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cassandra
+  template:
+    metadata:
+      labels:
+        app: cassandra
+    spec:
+      # Assumed UID/GID for the upstream `cassandra:4.1.12` image's built-in
+      # `cassandra` user (the official docker-library/cassandra image creates
+      # it at 999:999) - not independently verified in this sandbox (no live
+      # cluster access). fsGroup makes the PVC writable by that user without
+      # a separate chown init container (replaces D1-era volume-init pattern).
+      # See deployment-spark-master.yaml for why this is set cluster-wide.
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: cassandra
+          image: iu-sensor-pipeline/cassandra:local
+          env:
+            - name: CASSANDRA_CLUSTER_NAME
+              value: iot-cluster-dev
+            - name: CASSANDRA_DC
+              value: dc1
+            - name: CASSANDRA_RACK
+              value: rack1
+            - name: CASSANDRA_ENDPOINT_SNITCH
+              value: GossipingPropertyFileSnitch
+            - name: MAX_HEAP_SIZE
+              value: 1G
+            - name: HEAP_NEWSIZE
+              value: 256M
+            - name: JVM_EXTRA_OPTS
+              value: "-javaagent:/opt/jmx-exporter/jmx_prometheus_javaagent.jar=7070:/opt/jmx-exporter/cassandra-jmx-exporter.yml"
+          ports:
+            - containerPort: 9042
+              name: cql
+            - containerPort: 7070
+              name: jmx-exporter
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/cassandra
+          readinessProbe:
+            exec:
+              command: ["cqlsh", "-e", "describe keyspaces"]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            exec:
+              command: ["cqlsh", "-e", "describe keyspaces"]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 10
+          resources:
+            requests:
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

@@ -23,3 +23,9 @@ kaggle_repository/*.csv
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+
+# k8s/base/kustomization.yaml's configMapGenerator sources these from here
+# (kustomize refuses to reference files outside the kustomization root) —
+# k8s/local-up.sh copies them from infra/ before every apply, so infra/ stays
+# the one committed source of truth and this directory is never committed.
+k8s/base/generated/

@@ -1,0 +1,86 @@
+# Standalone PVCs for the non-StatefulSet volumes (cassandra_data/kafka_data
+# become volumeClaimTemplates on their StatefulSets instead - see
+# statefulset-cassandra.yaml / statefulset-kafka.yaml).
+#
+# All against k3d's default `local-path` StorageClass, which only supports
+# ReadWriteOnce - fine here because k3d's default local cluster is single-node,
+# so every pod that mounts one of these lands on the same node anyway. A
+# multi-node cluster (explicitly deferred, D43) would need a real RWX-capable
+# StorageClass for kaggle_dataset and spark_checkpoints, which are each
+# mounted by more than one Deployment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kaggle-dataset
+  namespace: iot-pipeline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spark-checkpoints
+  namespace: iot-pipeline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: archive-data
+  namespace: iot-pipeline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: iot-pipeline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: iot-pipeline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 512Mi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data
+  namespace: iot-pipeline
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: iot-pipeline
+  labels:
+    app: loki
+spec:
+  selector:
+    app: loki
+  ports:
+    - name: http
+      port: 3100
+      targetPort: 3100
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: iot-pipeline
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      # See deployment-spark-master.yaml for why this is set cluster-wide.
+      enableServiceLinks: false
+      # Official image's built-in "loki" user - well-known default UID for
+      # this upstream image, not independently verified in this sandbox.
+      securityContext:
+        fsGroup: 10001
+      containers:
+        - name: loki
+          image: grafana/loki:3.6.11
+          args: ["-config.file=/etc/loki/loki-config.yml"]
+          ports:
+            - containerPort: 3100
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki
+              readOnly: true
+            - name: data
+              mountPath: /loki
+          # docker-compose.yml has no healthcheck here because this
+          # distroless-style image has no shell for a CMD-SHELL/exec check -
+          # that limitation doesn't apply to httpGet (kubelet calls it
+          # directly, no shell needed), so this can do more than Compose could.
+          readinessProbe:
+            httpGet: { path: /ready, port: 3100 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            httpGet: { path: /ready, port: 3100 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: loki-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: loki-data

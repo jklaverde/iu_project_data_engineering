@@ -371,6 +371,68 @@
             <code>READ_TOO_MANY_TOMBSTONES</code> under high data volume, shared with the P4 Grafana
             panel it mirrors (<a href="#p5">P5 §3</a>).</li>
         </ul>
+
+        <h4 class="doc-h4">Kubernetes migration (D43) — replacing the Docker socket with RBAC</h4>
+        <ul>
+          <li><strong>Why this exists:</strong> D42's admin-triggered Cassandra node-deploy control
+            (UC-12) needed the backend to reach Docker itself, and the only way to do that from
+            inside a container was mounting <code>/var/run/docker.sock</code> — root-equivalent
+            access to the whole host (NFR-15, R-9), called out at the time as demo-only. D43 replaces
+            that entirely: the backend now authenticates to the Kubernetes API as a <code>backend</code>
+            <code>ServiceAccount</code> bound to a namespaced <code>Role</code>
+            (<code>k8s/base/rbac.yaml</code>) that can only read pod/workload status in the
+            <code>iot-pipeline</code> namespace and scale <em>one specific</em> StatefulSet by name
+            (<code>resourceNames: ["cassandra"]</code>) — nothing else in the cluster, and nothing
+            host-level at all. <code>backend/app/cassandra_nodes.py</code> is a full rewrite around the
+            <code>kubernetes</code> Python client instead of <code>docker</code>; the exposed behavior
+            (storage summary, node-deploy animation, its step names) is unchanged.</li>
+          <li><strong>Graceful degradation:</strong> if the backend can't load an in-cluster
+            Kubernetes config (e.g. it's actually running under the legacy
+            <code>docker-compose.yml</code>, which has no <code>ServiceAccount</code> to mount), the
+            Cassandra storage/node-deploy endpoints and the new <code>GET
+            /api/admin/kubernetes/status</code> endpoint return <code>503</code> instead of crashing
+            the app — surfaced in the frontend as a plain "Kubernetes API not available" message on
+            both the Cassandra step's storage control and the new Kubernetes tab, not a broken page.</li>
+          <li><strong>Workload mapping</strong> (full table in <code>REQUIREMENTS.md</code> §4.4):
+            <code>cassandra</code>/<code>kafka</code> became <code>StatefulSet</code>s (stable
+            per-replica identity + PVC via <code>volumeClaimTemplates</code>);
+            everything else long-running became a single-replica <code>Deployment</code>;
+            <code>node-exporter</code>/<code>promtail</code> became <code>DaemonSet</code>s (genuinely
+            per-node); the three <code>*-volume-init</code> chown containers (P1 §2, P11 §1) were
+            <strong>dropped entirely</strong> — <code>securityContext.fsGroup</code> on each pod
+            replaces them, matching each image's already-documented default UID
+            (999 cassandra / 1000 kafka+backend / 185 spark, per the original chown targets).</li>
+          <li><strong>Job-completion ordering is a known simplification versus Compose.</strong>
+            Kubernetes Jobs don't block downstream pod scheduling the way
+            <code>depends_on: condition: service_completed_successfully</code> did. Deployments that
+            depend directly on another Service being reachable (kafka, cassandra, spark-master) get a
+            plain <code>busybox</code> <code>initContainer</code> TCP-wait loop; nothing does an
+            in-cluster wait for the one-shot Jobs (<code>kafka-topic-init</code>,
+            <code>cassandra-schema-init</code>) actually completing — <code>k8s/local-up.sh</code> does
+            a best-effort <code>kubectl wait --for=condition=complete</code> on them after applying,
+            for operator feedback, not as a hard release gate. This relies on the same
+            client-side retry behavior the Compose-era services already had (cassandra-schema-init's
+            own 30×5s cqlsh retry loop, in particular) rather than a stricter Kubernetes-native
+            guarantee — a real gap versus Compose, left as a P11 follow-up rather than solved here
+            (e.g. a proper Job-aware initContainer, or moving to Helm/Argo hooks — both explicitly
+            deferred by D43).</li>
+          <li><code>kustomize</code>'s built-in loader refuses to reference a file outside the
+            kustomization root as a security restriction — confirmed the hard way running
+            <code>kubectl kustomize k8s/base</code> against <code>../../infra/...</code> paths
+            (<code>kubectl apply -k</code> enforces the same restriction, with no
+            <code>--load-restrictor</code> escape hatch the way the standalone <code>kustomize</code>
+            CLI has). <code>k8s/base/kustomization.yaml</code>'s <code>configMapGenerator</code>
+            entries instead read from a gitignored <code>k8s/base/generated/</code> that
+            <code>k8s/local-up.sh</code> populates from the real <code>infra/</code> source files
+            before every apply — <code>infra/</code> stays the one committed source of truth,
+            <code>generated/</code> is never committed.</li>
+          <li>Only <code>backend</code> and <code>grafana</code> are exposed to the host (both
+            <code>type: LoadBalancer</code> Services, matched by <code>-p 8000:8000@loadbalancer -p
+            3000:3000@loadbalancer</code> at <code>k3d cluster create</code> time) — a deliberate
+            narrowing versus Compose, which also published kafka-ui/Prometheus/the Spark UIs/etc. to
+            host ports for dev convenience. Reach those via <code>kubectl -n iot-pipeline
+            port-forward</code> instead.</li>
+        </ul>
       </div>
     </section>
 
@@ -421,11 +483,17 @@
             sustained/restart-cycled run (Promtail's Docker-socket bind-mount on a different host OS,
             Loki/Grafana behavior across a <code>down && up</code> cycle). Low priority unless P7 or a
             real VPS deployment surfaces something.</li>
-          <li><strong>Full P6 (3-VPS k3s cluster)</strong> — the actual next roadmap phase. Needs: k3s
-            manifests (StatefulSets for Kafka/Cassandra, D19 — no operators), Traefik ingress +
-            self-signed TLS (D25), flannel WireGuard inter-node traffic, NFR-11 firewall rules, NFR-12
-            node sizing. <a href="#interim-vps">"What full P6 needs to know"</a> above has the
-            wire-contract details already confirmed.</li>
+          <li><strong>Full P6 (3-VPS k3s cluster)</strong> — the actual next roadmap phase. D43 (local
+            k3d) already produced the manifest starting point (<code>k8s/base/</code>) — StatefulSets
+            for Kafka/Cassandra (D19, no operators) are done, as is the RBAC design. What's still
+            needed for the real multi-node target: Traefik ingress + real TLS (D25, self-signed was
+            the interim-VPS-only choice), flannel WireGuard inter-node traffic, NFR-11 firewall rules,
+            NFR-12 node sizing, and re-checking every PVC's <code>local-path</code>
+            <code>storageClassName</code> — that only works because k3d's default local cluster is
+            single-node (<code>k8s/base/pvc.yaml</code>'s own comment), and a real 3-node cluster needs
+            a genuine RWX-capable StorageClass for the volumes more than one Deployment mounts
+            (<code>kaggle_dataset</code>, <code>spark_checkpoints</code>). <a href="#interim-vps">"What
+            full P6 needs to know"</a> above has the wire-contract details already confirmed.</li>
           <li><strong>P7 — 48-hour endurance run</strong> (§10) — can be attempted against the current
             single-VPS or local deployment even before full P6 exists. Worth checking with the user
             whether they want this run now or want to wait for full P6.</li>

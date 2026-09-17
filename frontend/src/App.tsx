@@ -3,6 +3,7 @@ import { ApiError, logout, me } from "./api";
 import AboutModal from "./about/AboutModal";
 import AlertsTab from "./admin/AlertsTab";
 import DocsTab from "./admin/DocsTab";
+import KubernetesStatusTab from "./admin/KubernetesStatusTab";
 import DatasetExplorer from "./dataset/DatasetExplorer";
 import LoginForm from "./auth/LoginForm";
 import ErrorBoundary from "./layout/ErrorBoundary";
@@ -27,7 +28,7 @@ const STEPS: { name: StepName; label: string }[] = [
   { name: "summary", label: "6. Summary" },
 ];
 
-type AdminTab = "pipeline" | "alerts" | "docs";
+type AdminTab = "pipeline" | "alerts" | "kubernetes" | "docs";
 
 function Shell({ onLogout }: { onLogout: () => void }) {
   const { state, connectionMode, cassandraDeployProgress } = usePipelineState();
@@ -76,6 +77,12 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           Alerts
         </button>
         <button
+          className={`admin-tab ${adminTab === "kubernetes" ? "admin-tab-active" : ""}`}
+          onClick={() => setAdminTab("kubernetes")}
+        >
+          Kubernetes
+        </button>
+        <button
           className={`admin-tab ${adminTab === "docs" ? "admin-tab-active" : ""}`}
           onClick={() => setAdminTab("docs")}
         >
@@ -106,6 +113,8 @@ function Shell({ onLogout }: { onLogout: () => void }) {
       )}
 
       {adminTab === "alerts" && <AlertsTab grafanaPort={state.summary?.grafana_port ?? null} />}
+
+      {adminTab === "kubernetes" && <KubernetesStatusTab />}
 
       {adminTab === "docs" && <DocsTab />}
     </div>

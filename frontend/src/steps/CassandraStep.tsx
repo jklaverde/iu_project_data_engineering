@@ -65,9 +65,10 @@ function StorageControl({ deploying, onDeploy }: { deploying: boolean; onDeploy:
 
       <p className="demo-only-notice">
         ⚠ Demo/illustration only: deploying a database node straight from a web UI is not a safe
-        production practice (it needs the backend to hold Docker-socket / host-level privilege — see
-        NFR-15). A real deployment scales Cassandra through its own cluster tooling or, in this
-        project's own production plan (§4.1), the Kubernetes API — not an app button.
+        production practice, even now that it goes through a narrowly-scoped Kubernetes RBAC Role
+        instead of a Docker socket (D43, NFR-16) — the backend can only scale this one StatefulSet by
+        name, nothing else in the cluster. A real deployment scales Cassandra through its own cluster
+        tooling, not an app button.
       </p>
 
       {!confirming && (

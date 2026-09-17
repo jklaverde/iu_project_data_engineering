@@ -1,0 +1,52 @@
+# D43 (NFR-16): replaces the Docker-socket mount (D42, NFR-15/R-9 - superseded)
+# with a namespaced Role scoped to exactly what the backend's Cassandra
+# node-deploy control (UC-12) and Kubernetes status panel (UC-13) need -
+# nothing cluster-wide, and the write action (scaling) is pinned to the one
+# StatefulSet by name via `resourceNames`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend
+  namespace: iot-pipeline
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backend
+  namespace: iot-pipeline
+rules:
+  # FR-N1/N3/FR-K1: read pod/workload status to report storage, node health,
+  # and the Kubernetes status panel.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "deployments"]
+    verbs: ["get", "list", "watch"]
+  # FR-N2: scale the cassandra StatefulSet only - not any other workload.
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/scale"]
+    resourceNames: ["cassandra"]
+    verbs: ["get", "patch"]
+  # nodetool exec against the cassandra pods for storage/ring queries
+  # (cassandra_nodes.py's _exec_sync) - pods/exec has no resourceNames
+  # support, so this is scoped as tightly as RBAC allows (namespace + verb).
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend
+  namespace: iot-pipeline
+subjects:
+  - kind: ServiceAccount
+    name: backend
+    namespace: iot-pipeline
+roleRef:
+  kind: Role
+  name: backend
+  apiGroup: rbac.authorization.k8s.io

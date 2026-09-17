@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dataset-init
+  namespace: iot-pipeline
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      # See deployment-spark-master.yaml for why this is set cluster-wide.
+      enableServiceLinks: false
+      restartPolicy: OnFailure
+      # No securityContext override: this image runs as root by design (sole
+      # writer to a fresh PVC), same as the original kaggle_repository/Dockerfile
+      # - the read-only consumers (producer/spark-worker/spark-job) rely on
+      # the resulting files' default world-readable permissions, not on a
+      # matching UID/GID, so no fsGroup is needed on this PVC either.
+      containers:
+        - name: dataset-init
+          image: iu-sensor-pipeline/dataset-init:local
+          env:
+            - name: KAGGLE_DATASET_OUTPUT_DIR
+              value: /data
+            - name: KAGGLE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: KAGGLE_USERNAME
+            - name: KAGGLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: KAGGLE_KEY
+          volumeMounts:
+            - name: kaggle-dataset
+              mountPath: /data
+          resources:
+            requests:
+              memory: 384Mi
+            limits:
+              memory: 384Mi
+      volumes:
+        - name: kaggle-dataset
+          persistentVolumeClaim:
+            claimName: kaggle-dataset
