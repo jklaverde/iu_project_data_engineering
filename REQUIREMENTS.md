@@ -43,6 +43,14 @@ already surfaces container health. Docker Compose stays in the repo as historica
 Quick Start now describes the k3d path); nothing about the pipeline's own logic (producer, Spark job,
 backend business logic) changes — this is a deployment-mechanism swap, not a rewrite. §2, §3, §4, §5,
 §6, §7, §8, §13, and §14 updated accordingly.
+**D43 is live-verified**, not just statically checked: a full `k8s/local-up.sh` run on a real k3d
+cluster surfaced and fixed four real bugs a live control plane is needed to catch — a `.env`-parsing
+crash in the Secret-generation step, Kubernetes' automatic per-Service env-var injection colliding with
+Spark's own `SPARK_MASTER_PORT`, a RollingUpdate-vs-single-spark-worker deadlock (now `Recreate`), and
+the Spark driver advertising an unresolvable bare pod hostname to its executors instead of its pod IP.
+With those fixed, `kubectl -n iot-pipeline get pods` shows every workload `1/1 Running`/`Completed`,
+and the app was confirmed end-to-end in the browser: live row counts flowing through the Pipeline
+Console's Deployment/Cassandra steps and the new Kubernetes status panel reading real pod health.
 
 ---
 
@@ -1007,7 +1015,7 @@ The 48-hour run at the NFR-2 rate passes when:
   tiles of Lingen (Ems) rendered correctly with status-colored pins). A future cloud
   deployment (P6-adjacent) serving real public traffic should switch to a paid tile
   provider or a self-hosted tile cache before going live.
-- **R-9 — Docker socket exposure via FR-N2 (RESOLVED by D43, kept for history).** Mounting
+- **R-9 — Docker socket exposure via FR-N2 (RESOLVED by D43, live-verified, kept for history).** Mounting
   `/var/run/docker.sock` into the backend (NFR-15) meant anything that compromised the backend process
   gained host-level container control, not just app-level access — a materially larger blast radius
   than any other admin action in this project. D42 accepted this for local-development/educational use
