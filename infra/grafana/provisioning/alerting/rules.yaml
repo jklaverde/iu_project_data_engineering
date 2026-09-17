@@ -59,7 +59,7 @@ groups:
           severity: warning
           service: cassandra
         annotations:
-          summary: "Cassandra p95 write latency for keyspace iot is above 500ms (placeholder threshold - see REQUIREMENTS.md Sec 10, to be replaced by a calibrated benchmark value like the endurance-run threshold)"
+          summary: "Cassandra p95 write latency for keyspace iot is above 500ms (placeholder threshold, not yet calibrated against a real endurance-run benchmark)"
         data:
           - refId: A
             relativeTimeRange: { from: 300, to: 0 }
@@ -170,7 +170,7 @@ groups:
           severity: critical
           service: disk
         annotations:
-          summary: "A scraped filesystem is above 85% used - see docs/operations.html for the archive-and-trim remediation (D40)"
+          summary: "A scraped filesystem is above 85% used - use the admin console's archive-and-trim action to free space"
         data:
           - refId: A
             relativeTimeRange: { from: 300, to: 0 }

@@ -240,7 +240,7 @@ class CassandraNodes:
         raise NodeDeployError(
             f"pod {pod_name} did not become ready within {HEALTHY_TIMEOUT_SECONDS}s - if this is an "
             "OOMKilled/Pending loop, the cluster likely doesn't have enough allocatable memory for a "
-            "second Cassandra pod (see docs/operations.html for D42/D43's known resource-contention note)"
+            "second Cassandra pod (see the Operations doc's known resource-contention note)"
         )
 
     def _pod_ip_sync(self, pod_name: str) -> str:

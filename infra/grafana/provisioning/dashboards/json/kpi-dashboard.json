@@ -1,7 +1,7 @@
 {
   "uid": "iot-kpi-dashboard",
   "title": "IoT Sensor Pipeline - KPIs",
-  "description": "REQUIREMENTS.md Sec 9 KPI catalogue (KPI-1..5). Rows 1/2/4 read Prometheus; rows 3/5 read Cassandra directly.",
+  "description": "Pipeline health and data-quality KPIs. Rows 1/2/4 read Prometheus; rows 3/5 read Cassandra directly.",
   "tags": ["iot-sensor-pipeline"],
   "timezone": "utc",
   "editable": false,
@@ -153,7 +153,7 @@
       ]
     },
     {
-      "id": 304, "type": "table", "title": "Anomaly drill-down (raw events, UC-6)",
+      "id": 304, "type": "table", "title": "Anomaly drill-down (raw events)",
       "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
       "fieldConfig": { "defaults": {}, "overrides": [
@@ -267,8 +267,8 @@
       ]
     },
     {
-      "id": 504, "type": "timeseries", "title": "Pressure (hPa) — simulated, D23",
-      "description": "Atmospheric pressure is not present in the source dataset - simulated for every row (D23) and labeled synthetic here per REQUIREMENTS.md Sec 5.5/9.",
+      "id": 504, "type": "timeseries", "title": "Pressure (hPa) — simulated",
+      "description": "Atmospheric pressure is not present in the source dataset - simulated for every row and labeled synthetic here.",
       "gridPos": { "x": 0, "y": 66, "w": 12, "h": 8 },
       "datasource": { "type": "hadesarchitect-cassandra-datasource", "uid": "cassandra" },
       "fieldConfig": { "defaults": { "unit": "pressurehpa" }, "overrides": [
