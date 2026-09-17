@@ -89,8 +89,14 @@
         to end on real k3s infrastructure for the first time, found and fixed three
         more real bugs (two RBAC gaps, and a missing <code>CASSANDRA_SEEDS</code> that
         let a scaled-out node silently fail to join the ring while reporting healthy),
-        and confirmed it genuinely works — a de-risking step for P6, not P6 itself. Full
-        P6 (3-VPS k3s, hardened per NFR-11) and P7 (endurance) not started.
+        and confirmed it genuinely works — a de-risking step for P6, not P6 itself. D45
+        went one node further (3-node scale-out) and fixed a real concurrency bug. D46
+        then found that <code>k8s/local-up.sh</code> itself — the actual local-dev
+        onboarding script D43's "five bugs" claim describes — had never once been run on
+        this VPS; running it for real surfaced a sixth bug (a <code>kubectl</code>/
+        <code>KUBECONFIG</code> conflict on hosts that also have native k3s installed) and
+        confirmed the other five are genuinely fixed. Full P6 (3-VPS k3s, hardened per
+        NFR-11) and P7 (endurance) not started.
       </p>
       <div class="table-wrap">
         <table class="data-table">
@@ -616,6 +622,47 @@
             <strong>242 MiB free / 1.6 GiB available</strong> — tighter than this VPS's baseline before
             this session. A concrete NFR-12 data point: each admin-deployed Cassandra node is a
             permanent addition to the memory budget, not a one-time cost during the deploy itself.</li>
+        </ul>
+
+        <h4 class="doc-h4"><code>k8s/local-up.sh</code>/<code>local-down.sh</code> genuinely
+          live-verified for the first time — a real <code>kubectl</code>/<code>KUBECONFIG</code>
+          bug (D46)</h4>
+        <ul>
+          <li><strong>Why this exists:</strong> the script had carried a header comment since D43
+            admitting it was "fork-authored, not live-verified... not a successful end-to-end run,"
+            and this VPS — despite running the real k3s-based Cassandra work in D44/D45 — had never
+            actually run this script; D44/D45 went straight against the native k3s install instead.
+            Installed <code>k3d</code> and ran it for real, for the first time.</li>
+          <li><strong>The bug — wrong <code>kubectl</code> config, not a k3d problem:</strong> the
+            first run failed immediately, <code>kubectl apply</code> hitting a connection-refused
+            error against <code>127.0.0.1:6443</code> instead of ever reaching the freshly-created
+            k3d cluster. Root cause: on this host, <code>/usr/local/bin/kubectl</code> is a symlink
+            to the <code>k3s</code> binary itself (its own bundled <code>k3s kubectl</code>
+            convenience subcommand) — a normal outcome of installing k3s via <code>get.k3s.io</code>,
+            and therefore a real risk on any machine that also follows this project's own
+            production-VPS setup (D18). That bundled <code>kubectl</code> defaults to
+            <code>/etc/rancher/k3s/k3s.yaml</code> and silently ignores the standard
+            <code>~/.kube/config</code> file <code>k3d cluster create</code> correctly merges into,
+            unless <code>KUBECONFIG</code> is explicitly set — so the k3d cluster itself was fine the
+            whole time, but every <code>kubectl</code> call in the script was quietly talking to the
+            wrong (in this case stopped) cluster.</li>
+          <li><strong>Fix:</strong> <code>export KUBECONFIG="$(k3d kubeconfig write "$CLUSTER_NAME")"</code>
+            right after cluster creation/reuse in <code>local-up.sh</code>, making the script correct
+            regardless of which <code>kubectl</code> binary ends up on <code>PATH</code>.</li>
+          <li><strong>Verified the full cycle twice:</strong> once reusing an existing cluster after
+            the fix, and once genuinely from scratch — <code>local-down.sh</code> fully destroying the
+            cluster, then <code>local-up.sh</code> recreating it. Both times every pod reached
+            <code>Running</code>/<code>Completed</code> and both host-exposed services responded
+            correctly (<code>backend</code> <code>200</code>, <code>grafana</code> <code>302</code>
+            redirect-to-login).</li>
+          <li><strong>The other "5 bugs" D43 claims were mostly already fixed inline:</strong> checked
+            git history against D43's own live-verified narrative — 3 of those 5
+            (<code>SPARK_MASTER_PORT</code> collision, the <code>Recreate</code> deadlock fix,
+            <code>SPARK_LOCAL_IP</code> via the Downward API) are already correctly present in the
+            current manifests, committed as part of D43 itself rather than left broken. Only 2 became
+            separate follow-up commits (<code>.env</code> comment-stripping, the Kafka probe
+            <code>tcpSocket</code> fix) — both already verified working here too. This <code>KUBECONFIG</code>
+            issue was the only genuinely new, previously-undiscovered bug in this path.</li>
         </ul>
       </div>
     </section>

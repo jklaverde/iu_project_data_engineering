@@ -5,12 +5,11 @@
 # (REQUIREMENTS.md D43) and still works on its own for anyone who wants it,
 # but this is now the primary path.
 #
-# NOTE (fork-authored, not live-verified): this script was written without
-# access to a live Docker/k3d/kubectl environment in the implementing
-# sandbox - the k3d cluster-create flags and `kubectl wait` sequencing below
-# are best-effort, based on k3d/kubectl's documented syntax, not a
-# successful end-to-end run. See docs/operations.html's D43 section for
-# what to check first if this doesn't work cleanly.
+# Live-verified (D46): a full down -> up cycle (local-down.sh, then this
+# script creating the k3d cluster from scratch) completes cleanly, every
+# pod reaches Running/Completed, and both host-exposed services respond
+# (backend 200, grafana 302-to-login). See docs/operations.html's D46
+# section for the KUBECONFIG bug this run surfaced and fixed.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,6 +41,19 @@ if ! k3d cluster list "$CLUSTER_NAME" >/dev/null 2>&1; then
 else
   echo "==> Reusing existing k3d cluster '$CLUSTER_NAME'"
 fi
+
+# k3d cluster create/kubeconfig write merge this cluster's config into the
+# standard ~/.kube/config, but every kubectl call below needs to actually
+# read it - on a host that also has k3s installed (this project's own
+# production path, D18), /usr/local/bin/kubectl is commonly a symlink to
+# the k3s binary itself (`k3s kubectl`), whose bundled kubectl subcommand
+# defaults to /etc/rancher/k3s/k3s.yaml and silently ignores ~/.kube/config
+# unless KUBECONFIG is set - found live running this script on exactly such
+# a host: every kubectl call below failed with a connection-refused error
+# against the (stopped) native k3s API server instead of touching k3d at
+# all. Explicitly writing and pointing at this cluster's own kubeconfig
+# sidesteps that regardless of which kubectl binary ends up on PATH.
+export KUBECONFIG="$(k3d kubeconfig write "$CLUSTER_NAME")"
 
 # 2. Build every locally-built image and import it into the cluster (k3d
 # nodes don't share the host's Docker image store, so a plain `docker build`
