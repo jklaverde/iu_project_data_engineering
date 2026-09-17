@@ -441,7 +441,7 @@
             iot-pipeline get pods</code> confirming every workload <code>1/1 Running</code>/
             <code>Completed</code> and the app exercised end to end in the browser (live row counts
             flowing through the Pipeline Console, the new Kubernetes status panel reading real pod
-            health). Four real bugs only a live control plane could surface, all fixed:
+            health). Five real bugs only a live control plane could surface, all fixed:
             <ol>
               <li><code>k8s/local-up.sh</code>'s Secret-generation step used to <code>source .env</code>
                 directly — breaks on this project's own pre-existing space-containing values
@@ -469,6 +469,23 @@
             Also found: <code>spark-worker</code> was the one component missing its own Service, so the
             backend's health check to it always failed — added <code>k8s/base/deployment-spark-worker.yaml</code>'s
             <code>Service</code>.</li>
+          <li><strong>Fifth bug, found after a longer live run:</strong> Kafka's readiness/liveness
+            probes ran <code>kafka-broker-api-versions.sh</code> — the full Kafka CLI tool, which
+            launches a brand-new JVM on every single invocation — every 10s, for both probes
+            independently. On a CPU/memory-constrained single-node k3d host already running
+            Cassandra/Spark JVMs alongside it, that extra JVM launch routinely missed its own 10s
+            timeout, so Kubernetes killed an otherwise-healthy broker and it never got a long enough
+            uninterrupted run to stabilize — a self-inflicted <code>CrashLoopBackOff</code> from the
+            probes themselves, not a real Kafka failure, which then cascaded into backend/spark-job/
+            kafka-exporter all crash-looping on <code>KafkaException: ... Broker transport failure</code>
+            (they depend on Kafka being reachable at startup). Fixed by switching both probes to a
+            plain <code>tcpSocket: 19092</code> check — instant, no JVM spawn, and matches what every
+            other pod's own <code>wait-for-deps</code> initContainer already uses to decide "is Kafka
+            up" (<code>nc -z kafka 19092</code>), so this keeps the same readiness semantics
+            project-wide without the resource cost. <code>statefulset-cassandra.yaml</code>'s
+            <code>cqlsh</code>-exec-based probes are the same class of risk (a Python CLI launch
+            instead of a JVM one, lighter but not free) and haven't caused a real failure yet — worth
+            the same fix if one shows up under sustained load.</li>
         </ul>
       </div>
     </section>

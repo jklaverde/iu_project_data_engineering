@@ -77,18 +77,31 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/kafka/kafka_data
+          # Found live: kafka-broker-api-versions.sh launches a brand-new JVM on
+          # every single invocation (it's the full Kafka CLI tool, not a
+          # lightweight check). Both probes ran it independently every 10s, so
+          # this container was spawning up to 2 extra JVMs every 10s just to
+          # health-check itself - on a CPU/memory-constrained single-node k3d
+          # host already running Cassandra/Spark JVMs alongside it, that
+          # extra JVM launch routinely missed the 10s timeout on its own,
+          # killing an otherwise-healthy broker and never letting it
+          # stabilize (CrashLoopBackOff from the probes, not a real failure).
+          # A plain TCP check is instant and matches what every other pod's
+          # initContainer already uses to decide "is Kafka up"
+          # (`nc -z kafka 19092`), so this keeps the same readiness semantics
+          # project-wide without the self-inflicted resource cost.
           readinessProbe:
-            exec:
-              command: ["/bin/sh", "-c", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092"]
+            tcpSocket: { port: 19092 }
+            initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 10
-            failureThreshold: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
-            exec:
-              command: ["/bin/sh", "-c", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092"]
+            tcpSocket: { port: 19092 }
+            initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 10
-            failureThreshold: 5
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               memory: 768Mi

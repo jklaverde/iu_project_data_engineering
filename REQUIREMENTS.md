@@ -44,13 +44,17 @@ Quick Start now describes the k3d path); nothing about the pipeline's own logic 
 backend business logic) changes — this is a deployment-mechanism swap, not a rewrite. §2, §3, §4, §5,
 §6, §7, §8, §13, and §14 updated accordingly.
 **D43 is live-verified**, not just statically checked: a full `k8s/local-up.sh` run on a real k3d
-cluster surfaced and fixed four real bugs a live control plane is needed to catch — a `.env`-parsing
+cluster surfaced and fixed five real bugs a live control plane is needed to catch — a `.env`-parsing
 crash in the Secret-generation step, Kubernetes' automatic per-Service env-var injection colliding with
-Spark's own `SPARK_MASTER_PORT`, a RollingUpdate-vs-single-spark-worker deadlock (now `Recreate`), and
-the Spark driver advertising an unresolvable bare pod hostname to its executors instead of its pod IP.
-With those fixed, `kubectl -n iot-pipeline get pods` shows every workload `1/1 Running`/`Completed`,
-and the app was confirmed end-to-end in the browser: live row counts flowing through the Pipeline
-Console's Deployment/Cassandra steps and the new Kubernetes status panel reading real pod health.
+Spark's own `SPARK_MASTER_PORT`, a RollingUpdate-vs-single-spark-worker deadlock (now `Recreate`), the
+Spark driver advertising an unresolvable bare pod hostname to its executors instead of its pod IP, and —
+found after a longer run — Kafka's own readiness/liveness probes spawning a fresh JVM every 10s
+(`kafka-broker-api-versions.sh`) that missed its own timeout under host resource pressure and
+self-inflicted a `CrashLoopBackOff` (now a plain `tcpSocket` check, matching every other pod's own
+`nc -z kafka 19092` readiness assumption). With those fixed, `kubectl -n iot-pipeline get pods` shows
+every workload `1/1 Running`/`Completed`, and the app was confirmed end-to-end in the browser: live row
+counts flowing through the Pipeline Console's Deployment/Cassandra steps and the new Kubernetes status
+panel reading real pod health.
 
 ---
 
