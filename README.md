@@ -6,13 +6,14 @@ Spark Structured Streaming → Cassandra underneath, with two web app roles on t
 **environmental/planner** role (a live sensor map, air quality scoring, behavior-over-time
 charts, and an out-of-range log) and an **infrastructure/admin** role (the pipeline health
 tour, centralized logs, Grafana-fired alerts with log drill-down) — plus a Grafana KPI
-dashboard, all running end to end from one `docker compose up -d`. See `REQUIREMENTS.md`
-for the full project scope and phase roadmap, and **`docs/index.html`** for everything
-else — open it directly in a browser (no server needed) for the full documentation site:
-how the system is built (every module explained, animated data-flow/boot-order diagrams,
-a per-container reference), how to deploy it on a public VPS, current status and
-non-obvious bugs/gotchas found while building and operating the stack, and a
-file-by-file reference for the whole repo.
+dashboard, all running end to end from one `./k8s/local-up.sh` (a local Kubernetes/k3d
+cluster) or, still supported as a legacy fallback, one `docker compose up -d`. See
+`REQUIREMENTS.md` for the full project scope and phase roadmap, and **`docs/index.html`**
+for everything else — open it directly in a browser (no server needed) for the full
+documentation site: how the system is built (every module explained, animated
+data-flow/boot-order diagrams, a per-container reference), how to deploy it on a public
+VPS, current status and non-obvious bugs/gotchas found while building and operating the
+stack, and a file-by-file reference for the whole repo.
 
 ## Prerequisites
 
@@ -153,8 +154,9 @@ no service failure. To run it:
    (100 GB free disk minimum — retention has no TTL, so usage grows for the whole run).
 2. Set `PRODUCER_RATE_MSGS_PER_SEC=500` in `.env` before starting (or restart the
    `producer` service after changing it).
-3. Start the stack fresh (`docker compose down -v && docker compose up -d --build`) so
-   the 48-hour window starts from a clean baseline.
+3. Start the stack fresh so the 48-hour window starts from a clean baseline: either
+   `./k8s/local-down.sh && ./k8s/local-up.sh` (k3d) or `docker compose down -v && docker
+   compose up -d --build` (legacy).
 4. Watch Grafana throughout — KPI-1 (lag), KPI-2 (latency), and KPI-4 (disk growth) are
    the ones most likely to reveal a problem before it becomes a failure.
 5. At the 48-hour mark, check the acceptance criteria in `REQUIREMENTS.md` §10 (no
@@ -164,12 +166,12 @@ no service failure. To run it:
 ## Dataset
 
 The Kaggle source dataset (§5.1 of `REQUIREMENTS.md`, `garystafford/environmental-sensor-data-132k`)
-is not committed to the repo — it's ~62 MB and public. `docker compose up -d` fetches
-it automatically via the one-shot `dataset-init` service (same pattern as
-`kafka-topic-init`/`cassandra-schema-init`): it downloads into a named volume
-(`kaggle_dataset`) that `producer`, `spark-job`, and `spark-worker` all mount
-read-only, and skips the download entirely on future restarts once the volume already
-has the file.
+is not committed to the repo — it's ~62 MB and public. Both `./k8s/local-up.sh` and
+`docker compose up -d` fetch it automatically via the one-shot `dataset-init`
+service/Job (same pattern as `kafka-topic-init`/`cassandra-schema-init`): it downloads
+into a `kaggle_dataset` volume/PVC that `producer`, `spark-job`, and `spark-worker` all
+mount read-only, and skips the download entirely on future restarts once the volume
+already has the file.
 
 The dataset is public, so this needs **no credentials** in the common case. If Kaggle
 ever requires auth for it, set `KAGGLE_USERNAME`/`KAGGLE_KEY` in `.env` (from
@@ -182,4 +184,9 @@ To run the fetch by hand outside Docker (e.g. to inspect the CSV locally), see
 ## Deploying for real users
 
 For putting this on a public VPS instead of running it locally — server hardening,
-firewall rules, TLS, backups, and updates — see `docs/deployment.html`.
+firewall rules, TLS, backups, and updates — see `docs/deployment.html`. That guide is
+still `docker compose`-based, not the k3d path above: it documents the interim
+single-VPS deployment that's actually been exercised on a real machine, not the
+3-VPS k3s production target (`REQUIREMENTS.md` §4.1, "full P6"), which D43's local k3d
+work is a real step toward but hasn't reached yet — see `docs/operations.html`'s
+"Where to pick this up next" for exactly what's still missing.

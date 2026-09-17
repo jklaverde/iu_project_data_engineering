@@ -41,7 +41,7 @@
       </div>
     </nav>
 
-    <p class="sidebar-foot">Covers the deployment that exists today — a single hardened VPS. The 3-VPS k3s target is Phase 6, not yet built.</p>
+    <p class="sidebar-foot">Covers the interim single-VPS Compose deployment that's actually been exercised on a real machine. The full 3-VPS k3s target (Phase 6) isn't built yet, but D43's local Kubernetes manifests (<code>k8s/base/</code>) are now a real, live-verified starting point toward it — see the scope note below.</p>
   </aside>
 
   <main class="prose">
@@ -49,22 +49,30 @@
       <p class="eyebrow">Runbook</p>
       <h1 class="hero-title">Deploy this to a public VPS.</h1>
       <p class="hero-lede">
-        This guide walks through deploying the project's existing <code>docker compose</code>
-        stack — the same one used for local development — onto a single Linux VPS, so
-        it's reachable from the internet instead of just <code>localhost</code>. See
-        <a href="containers.html">Architecture &amp; Containers</a> first if you want to
-        understand what you're deploying before you deploy it.
+        This guide walks through deploying the project's <code>docker compose</code> stack —
+        still the actual, exercised path for a public VPS, distinct from the
+        <code>k3d</code>/Kubernetes path <a href="index.html">local development</a> moved to under
+        D43 — onto a single Linux VPS, so it's reachable from the internet instead of just
+        <code>localhost</code>. See <a href="containers.html">Architecture &amp; Containers</a>
+        first if you want to understand what you're deploying before you deploy it.
       </p>
     </section>
 
     <div class="callout warn">
       <strong>Scope note.</strong> The formal spec (<code>REQUIREMENTS.md</code> §4.1) describes a
       larger production target — three VPS running k3s, with Kafka/Cassandra replicated across
-      nodes. That's Phase 6 of the project roadmap and hasn't been built yet (see
-      <a href="operations.html#status">Operations — Status</a>). This guide covers the deployment
-      that <em>does</em> exist today: the same single-host Docker Compose stack, hardened enough to
-      sit on a public VPS safely. It's a legitimate, complete way to run this project for real users
-      — just not the eventual multi-node target.
+      nodes. That's still "full P6" and still not built (see
+      <a href="operations.html#status">Operations — Status</a>) — but it's no longer starting from
+      nothing: D43 migrated local development from this same Compose stack to Kubernetes
+      (<strong>k3d</strong> locally, the same distribution as the production target), live-verified
+      end to end, and its manifests (<code>k8s/base/</code>) are a real starting point for full P6 —
+      StatefulSets for Kafka/Cassandra and the RBAC design are done; ingress/TLS, inter-node
+      networking, and multi-node storage classing are what's left (see
+      <a href="operations.html#next">Operations — Where to pick this up next</a>). Until that
+      lands, this guide covers the deployment that <em>does</em> run on a real public VPS today:
+      the same single-host Docker Compose stack, hardened enough to sit there safely. It's a
+      legitimate, complete way to run this project for real users — just not the eventual
+      multi-node target.
     </div>
 
     <div class="prose-body">
