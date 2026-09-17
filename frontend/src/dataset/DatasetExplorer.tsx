@@ -27,6 +27,18 @@ function fmt(ms: number): string {
   return new Date(ms).toISOString().replace("T", " ").slice(0, 19) + " UTC";
 }
 
+// A spinner (not just static text) so the first paint of this modal - before
+// the device summary or any chart data has arrived - reads as "working" and
+// not as a broken/empty screen.
+function LoadingBlock({ label, height }: { label: string; height?: number }) {
+  return (
+    <div className="dataset-loading-block" style={height ? { height } : undefined}>
+      <span className="dataset-spinner" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 // D38 - reachable by both roles (FR-W8, FR-P2): browses the original Kaggle
 // CSV directly, independent of Kafka/Spark/Cassandra, on its own real 2020
 // timeline. A scrub control (not a raw grid) drives the chart, so moving
@@ -36,6 +48,7 @@ function fmt(ms: number): string {
 // window.
 export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
   const [summary, setSummary] = useState<DatasetDeviceSummary[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [metric, setMetric] = useState<MetricKey>("co");
   const [cursorMs, setCursorMs] = useState<number | null>(null);
@@ -58,7 +71,8 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
         setSummary(res.devices);
         if (res.devices.length > 0) setSelectedDevice((cur) => cur ?? res.devices[0].device_id);
       })
-      .catch(() => setSummary([]));
+      .catch(() => setSummary([]))
+      .finally(() => setSummaryLoading(false));
   }, []);
 
   const range = useMemo(() => {
@@ -164,20 +178,31 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
           live/synthetic pipeline. Every value here is genuine, dated to when it was actually collected.
         </p>
 
-        <div className="dataset-device-picker">
-          {summary.map((d) => (
-            <button
-              key={d.device_id}
-              className={`dataset-device-btn ${d.device_id === selectedDevice ? "dataset-device-btn-active" : ""}`}
-              onClick={() => setSelectedDevice(d.device_id)}
-            >
-              <span className="dataset-device-id">{d.device_id}</span>
-              <span className="dataset-device-meta">
-                {d.row_count.toLocaleString()} rows · {d.min_source_ts.slice(0, 10)} → {d.max_source_ts.slice(0, 10)}
-              </span>
-            </button>
-          ))}
-        </div>
+        {summaryLoading && <LoadingBlock label="Loading dataset summary…" />}
+
+        {!summaryLoading && summary.length === 0 && (
+          <p className="waiting dataset-loading-block">
+            Couldn't load the dataset summary — the backend may still be starting up. Try reopening
+            this in a moment.
+          </p>
+        )}
+
+        {!summaryLoading && summary.length > 0 && (
+          <div className="dataset-device-picker">
+            {summary.map((d) => (
+              <button
+                key={d.device_id}
+                className={`dataset-device-btn ${d.device_id === selectedDevice ? "dataset-device-btn-active" : ""}`}
+                onClick={() => setSelectedDevice(d.device_id)}
+              >
+                <span className="dataset-device-id">{d.device_id}</span>
+                <span className="dataset-device-meta">
+                  {d.row_count.toLocaleString()} rows · {d.min_source_ts.slice(0, 10)} → {d.max_source_ts.slice(0, 10)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {range && cursorMs !== null && (
           <>
@@ -224,36 +249,38 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
               </p>
             )}
 
-            {loading && windowReadings.length === 0 && <p className="waiting">Loading…</p>}
-
-            <EChartWrapper
-              height={260}
-              option={{
-                grid: { left: 48, right: 16, top: 16, bottom: 40 },
-                xAxis: {
-                  type: "category",
-                  data: windowReadings.map((r) => r.source_ts.slice(11, 19)),
-                  axisLabel: { fontSize: 10 },
-                },
-                yAxis: { type: "value" },
-                tooltip: { trigger: "axis" },
-                series: [
-                  {
-                    type: "line",
-                    data: windowReadings.map((r) => r[metric]),
-                    smooth: true,
-                    symbol: "none",
-                    lineStyle: { width: 2, color: "#7dd3fc" },
-                    markLine: {
-                      symbol: "none",
-                      label: { show: false },
-                      lineStyle: { color: "#fb5a6e", width: 2 },
-                      data: nearestIndex !== null ? [{ xAxis: nearestIndex }] : [],
-                    },
+            {loading && windowReadings.length === 0 ? (
+              <LoadingBlock label="Loading readings for this window…" height={260} />
+            ) : (
+              <EChartWrapper
+                height={260}
+                option={{
+                  grid: { left: 48, right: 16, top: 16, bottom: 40 },
+                  xAxis: {
+                    type: "category",
+                    data: windowReadings.map((r) => r.source_ts.slice(11, 19)),
+                    axisLabel: { fontSize: 10 },
                   },
-                ],
-              }}
-            />
+                  yAxis: { type: "value" },
+                  tooltip: { trigger: "axis" },
+                  series: [
+                    {
+                      type: "line",
+                      data: windowReadings.map((r) => r[metric]),
+                      smooth: true,
+                      symbol: "none",
+                      lineStyle: { width: 2, color: "#7dd3fc" },
+                      markLine: {
+                        symbol: "none",
+                        label: { show: false },
+                        lineStyle: { color: "#fb5a6e", width: 2 },
+                        data: nearestIndex !== null ? [{ xAxis: nearestIndex }] : [],
+                      },
+                    },
+                  ],
+                }}
+              />
+            )}
           </>
         )}
       </div>
