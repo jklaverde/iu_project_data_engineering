@@ -664,6 +664,28 @@
             <code>tcpSocket</code> fix) — both already verified working here too. This <code>KUBECONFIG</code>
             issue was the only genuinely new, previously-undiscovered bug in this path.</li>
         </ul>
+
+        <h4 class="doc-h4"><code>k8s/local-down.sh</code> left orphaned Docker resources on every
+          run (D47)</h4>
+        <ul>
+          <li><strong>Found immediately after D46</strong>, running <code>local-down.sh</code> a
+            second time: <code>k3d cluster delete</code> spins up its own
+            <code>k3d-&lt;name&gt;-tools</code> helper container to handle volume/network cleanup,
+            but doesn't reliably stop that container before trying to remove the very network/volume
+            it's still attached to. <code>docker network rm</code>/<code>docker volume rm</code>
+            failed with "has active endpoints"/"volume is in use" — a real ordering bug in k3d
+            v5.9.0 itself, confirmed <em>not</em> a leftover from an earlier run (the tools container
+            was freshly created seconds before by that same delete call).</li>
+          <li><strong>Silent, not loud:</strong> the script still printed "Successfully deleted
+            cluster" and exited <code>0</code> despite the orphaned container/network/volume — the
+            <code>noop</code>-command tools container never exits on its own, so without a fix these
+            accumulate on every run.</li>
+          <li><strong>Fix:</strong> force-remove the tools container, network, and volume by name
+            after <code>k3d cluster delete</code> returns, each suffixed <code>|| true</code> since a
+            clean k3d run may have already removed them. Verified directly: reproduced the stuck
+            resources, ran the fixed script, confirmed all three gone via <code>docker ps</code>/
+            <code>network ls</code>/<code>volume ls</code>.</li>
+        </ul>
       </div>
     </section>
 
