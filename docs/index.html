@@ -59,8 +59,10 @@
         municipality of Lingen (Ems): a Python producer replays a public IoT dataset
         into Kafka, Spark Structured Streaming validates and scores it, Cassandra
         stores it, and a role-based web app plus a Grafana KPI deck put it in front of
-        two audiences — city planners and infrastructure operators. Nineteen Docker
-        containers, one <code>docker compose up -d</code>.
+        two audiences — city planners and infrastructure operators. Nineteen containers,
+        one <code>./k8s/local-up.sh</code> — a local Kubernetes (k3d) cluster as of D43,
+        live-verified end to end; <code>docker compose up -d</code> still works as a
+        legacy fallback.
       </p>
       <p class="hero-lede">
         This documentation set explains how it's built and how to run, deploy, and

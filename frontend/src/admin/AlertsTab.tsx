@@ -82,11 +82,11 @@ export default function AlertsTab({ grafanaPort }: { grafanaPort: number | null 
         })}
       </ul>
 
-      <h3 className="section-title">Disk capacity — archive & trim (D40, UC-11)</h3>
+      <h3 className="section-title">Disk capacity — archive & trim</h3>
       <p className="waiting">
         Exports the oldest raw-event partitions (default: the oldest 10% by time) to a local archive
         file, then drops them from Cassandra — the sanctioned way to free space without a full,
-        destructive reset (NFR-4). Irreversible against the live store; the exported file is the only
+        destructive reset. Irreversible against the live store; the exported file is the only
         remaining copy.
       </p>
 

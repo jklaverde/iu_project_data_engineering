@@ -45,7 +45,9 @@ URLs the host can actually reach when it's done: the backend at
 **http://localhost:8000** and Grafana at **http://localhost:3000** — see
 `REQUIREMENTS.md` §4.4 for why nothing else (Spark UIs, kafka-ui, Prometheus, ...) is
 exposed to the host anymore; use `kubectl -n iot-pipeline port-forward` for those during
-development. See `docs/operations.html`'s D43 section if anything looks different.
+development. This path is live-verified end to end (see `docs/operations.html`'s D43
+section for the real bugs a live cluster surfaced and fixed) — see that section if
+anything looks different.
 
 Tear down (deletes the whole local cluster, including its data — the k3d equivalent of
 `docker compose down -v`):

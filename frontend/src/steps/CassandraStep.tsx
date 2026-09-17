@@ -35,7 +35,7 @@ function StorageControl({ deploying, onDeploy }: { deploying: boolean; onDeploy:
 
   return (
     <div className="cassandra-storage-control">
-      <h3 className="section-title">Storage capacity (D42, UC-12)</h3>
+      <h3 className="section-title">Storage capacity</h3>
       <p className="waiting">
         Each node's <code>Storage_Load</code> against a configured budget — a monitored threshold this
         admin UI compares Cassandra's own reported usage to, not a kernel-enforced disk quota (Docker
@@ -66,7 +66,7 @@ function StorageControl({ deploying, onDeploy }: { deploying: boolean; onDeploy:
       <p className="demo-only-notice">
         ⚠ Demo/illustration only: deploying a database node straight from a web UI is not a safe
         production practice, even now that it goes through a narrowly-scoped Kubernetes RBAC Role
-        instead of a Docker socket (D43, NFR-16) — the backend can only scale this one StatefulSet by
+        instead of a Docker socket — the backend can only scale this one StatefulSet by
         name, nothing else in the cluster. A real deployment scales Cassandra through its own cluster
         tooling, not an app button.
       </p>

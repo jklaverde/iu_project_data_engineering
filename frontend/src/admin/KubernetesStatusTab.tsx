@@ -27,7 +27,7 @@ export default function KubernetesStatusTab() {
         if (!cancelled) {
           setError(
             err instanceof Error && err.message.includes("503")
-              ? "Kubernetes API not available — this backend is running under the historical docker-compose.yml (D43), not the k3d/k3s deployment."
+              ? "Kubernetes API not available — this backend is running under the historical docker-compose.yml, not the k3d/k3s deployment."
               : "Could not reach the Kubernetes status endpoint.",
           );
         }
@@ -43,10 +43,10 @@ export default function KubernetesStatusTab() {
 
   return (
     <div className="step">
-      <h3>Kubernetes status (D43, UC-13)</h3>
+      <h3>Kubernetes status</h3>
       <p className="waiting">
         Pod and workload health read directly from the Kubernetes API, via the same narrowly-scoped
-        RBAC Role (NFR-16) the Cassandra node-deploy action uses — the same "is the deployment actually
+        RBAC Role the Cassandra node-deploy action uses — the same "is the deployment actually
         healthy" question the Deployment step answers per-service, now answerable at the orchestration
         layer too.
       </p>

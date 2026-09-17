@@ -80,7 +80,11 @@
         <strong>P1–P5 done, committed.</strong> Interim single-VPS deployment done and
         live-validated on a real VPS. P8 (role-based redirect, R0–R5) implemented
         <strong>and</strong> live-verified end to end locally (one real bug found and
-        fixed: the <code>loki</code> healthcheck — see <a href="#p8">P8 §1</a>). Full
+        fixed: the <code>loki</code> healthcheck — see <a href="#p8">P8 §1</a>). D38-D42
+        (external-feedback response, Cassandra storage control) also done. D43
+        (Kubernetes migration, local k3d) is done <strong>and</strong> live-verified on a
+        real cluster — four real bugs found and fixed, see
+        <a href="#decisions">Implementation decisions beyond the spec</a>. Full
         P6 (3-VPS k3s) and P7 (endurance) not started.
       </p>
       <div class="table-wrap">
@@ -432,6 +436,39 @@
             narrowing versus Compose, which also published kafka-ui/Prometheus/the Spark UIs/etc. to
             host ports for dev convenience. Reach those via <code>kubectl -n iot-pipeline
             port-forward</code> instead.</li>
+          <li><strong>D43 is live-verified</strong>, not just statically checked — a full
+            <code>k8s/local-up.sh</code> run on a real k3d cluster, with <code>kubectl -n
+            iot-pipeline get pods</code> confirming every workload <code>1/1 Running</code>/
+            <code>Completed</code> and the app exercised end to end in the browser (live row counts
+            flowing through the Pipeline Console, the new Kubernetes status panel reading real pod
+            health). Four real bugs only a live control plane could surface, all fixed:
+            <ol>
+              <li><code>k8s/local-up.sh</code>'s Secret-generation step used to <code>source .env</code>
+                directly — breaks on this project's own pre-existing space-containing values
+                (<code>SPARK_JOB_TRIGGER_INTERVAL=30 seconds</code>, valid for Compose's env-file
+                parser, not for bash). Now extracts just the needed keys with <code>grep</code>/
+                <code>cut</code>.</li>
+              <li>Kubernetes auto-injects a <code>&lt;SERVICE&gt;_PORT</code> env var per Service into
+                every pod in the namespace; it collided with Spark's own <code>SPARK_MASTER_PORT</code>
+                and crashed <code>spark-master</code> with a <code>NumberFormatException</code> on the
+                injected <code>tcp://&lt;clusterIP&gt;:7077</code> value. Fixed with
+                <code>enableServiceLinks: false</code> cluster-wide.</li>
+              <li>The default <code>RollingUpdate</code> strategy let two Structured Streaming driver
+                generations run at once during a deploy, both competing for the single
+                <code>spark-worker</code>'s fixed memory — the second driver's executor kept getting
+                killed and relaunched in a loop, deadlocking the rollout. Switched
+                <code>spark-master</code>/<code>spark-worker</code>/<code>spark-job</code> to
+                <code>Recreate</code>.</li>
+              <li>Spark's driver advertised its own bare pod hostname to executors — unlike a Compose
+                container name, a plain Deployment pod has no DNS record for its own hostname in
+                Kubernetes, so the executor got <code>UnknownHostException</code> trying to dial back
+                and register. Fixed via <code>SPARK_LOCAL_IP</code> (Downward API <code>status.podIP</code>)
+                plumbed through to <code>spark.driver.host</code> in <code>spark_job/entrypoint.sh</code>
+                (required rebuilding and re-importing the <code>spark-job</code> image).</li>
+            </ol>
+            Also found: <code>spark-worker</code> was the one component missing its own Service, so the
+            backend's health check to it always failed — added <code>k8s/base/deployment-spark-worker.yaml</code>'s
+            <code>Service</code>.</li>
         </ul>
       </div>
     </section>
@@ -484,10 +521,11 @@
             Loki/Grafana behavior across a <code>down && up</code> cycle). Low priority unless P7 or a
             real VPS deployment surfaces something.</li>
           <li><strong>Full P6 (3-VPS k3s cluster)</strong> — the actual next roadmap phase. D43 (local
-            k3d) already produced the manifest starting point (<code>k8s/base/</code>) — StatefulSets
-            for Kafka/Cassandra (D19, no operators) are done, as is the RBAC design. What's still
-            needed for the real multi-node target: Traefik ingress + real TLS (D25, self-signed was
-            the interim-VPS-only choice), flannel WireGuard inter-node traffic, NFR-11 firewall rules,
+            k3d) is now <strong>done and live-verified</strong>, producing a real, exercised manifest
+            starting point (<code>k8s/base/</code>) — StatefulSets for Kafka/Cassandra (D19, no
+            operators) are done, as is the RBAC design. What's still needed for the real multi-node
+            target: Traefik ingress + real TLS (D25, self-signed was the interim-VPS-only choice),
+            flannel WireGuard inter-node traffic, NFR-11 firewall rules,
             NFR-12 node sizing, and re-checking every PVC's <code>local-path</code>
             <code>storageClassName</code> — that only works because k3d's default local cluster is
             single-node (<code>k8s/base/pvc.yaml</code>'s own comment), and a real 3-node cluster needs

@@ -37,6 +37,7 @@
           <a href="#spark-job" data-name="spark_job directory processing">spark_job/</a>
           <a href="#kaggle-repository" data-name="kaggle_repository directory dataset">kaggle_repository/</a>
           <a href="#infra" data-name="infra directory cassandra grafana prometheus">infra/</a>
+          <a href="#k8s" data-name="k8s directory kubernetes kustomize k3d">k8s/</a>
         </div>
       </div>
     </nav>
@@ -156,6 +157,7 @@
           <tr data-name="src/planner/MetricGauge.tsx"><td>src/planner/MetricGauge.tsx</td><td>Actual-vs-acceptable range bar for one metric.</td></tr>
           <tr data-name="src/admin/AlertsTab.tsx"><td>src/admin/AlertsTab.tsx</td><td>Admin role's Alerts tab — polls <code>/api/admin/alerts</code>, links to a scoped Grafana Explore URL.</td></tr>
           <tr data-name="src/admin/DocsTab.tsx"><td>src/admin/DocsTab.tsx</td><td>Admin role's Docs tab — lists and embeds this documentation site from inside the running app (D36/D37).</td></tr>
+          <tr data-name="src/admin/KubernetesStatusTab.tsx"><td>src/admin/KubernetesStatusTab.tsx</td><td>Admin role's Kubernetes tab (D43) — polls <code>/api/admin/kubernetes/status</code>, lists every workload and pod's live health via the same RBAC Role the Cassandra node-deploy action uses.</td></tr>
         </tbody></table>
       </div>
     </section>
@@ -251,12 +253,47 @@
           <tr data-name="grafana/provisioning/alerting/rules.yaml"><td>grafana/provisioning/alerting/rules.yaml</td><td>Provisioned-as-code alert rules: Kafka consumer lag, Cassandra write latency, elevated ERROR log rate, service down.</td></tr>
           <tr data-name="grafana/provisioning/alerting/contactpoints.yaml"><td>grafana/provisioning/alerting/contactpoints.yaml</td><td>One webhook contact point → backend's <code>/api/admin/alerts/webhook</code>.</td></tr>
           <tr data-name="grafana/provisioning/alerting/policies.yaml"><td>grafana/provisioning/alerting/policies.yaml</td><td>Root notification policy routing every alert to that contact point.</td></tr>
+          <tr data-name="promtail/promtail-config-k8s.yml"><td>promtail/promtail-config-k8s.yml</td><td>D43's Kubernetes-native promtail scrape config — <code>kubernetes_sd_configs</code> discovery instead of the Docker-socket-based <code>promtail-config.yml</code>, which stays for the historical <code>docker-compose.yml</code> deployment.</td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <section class="doc-section" id="k8s">
+      <div class="category-head"><h2><span class="swatch" style="background:var(--cat-deploy)"></span>k8s/</h2></div>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">D43's Kubernetes manifests (Kustomize, no Helm) and the k3d local runtime scripts — live-verified end to end, see <a href="operations.html#decisions">Implementation decisions</a>.</p>
+      <div class="table-wrap">
+        <table class="data-table"><tbody data-filter-group>
+          <tr data-name="local-up.sh"><td>local-up.sh</td><td>Local entrypoint: creates/reuses the k3d cluster, builds and imports the 7 custom images, stages <code>base/generated/</code> from <code>infra/</code>, generates the <code>app-secrets</code> Secret from <code>.env</code>, applies <code>k8s/base</code>, best-effort waits for readiness.</td></tr>
+          <tr data-name="local-down.sh"><td>local-down.sh</td><td>Tears down the local k3d cluster entirely — the k3d equivalent of <code>docker compose down -v</code>, deletes all data.</td></tr>
+          <tr data-name="base/kustomization.yaml"><td>base/kustomization.yaml</td><td>The Kustomize base: lists every resource file plus the <code>configMapGenerator</code> entries that read from a gitignored <code>base/generated/</code> (kustomize refuses paths outside its own root).</td></tr>
+          <tr data-name="base/namespace.yaml"><td>base/namespace.yaml</td><td>The <code>iot-pipeline</code> namespace everything else lives in.</td></tr>
+          <tr data-name="base/rbac.yaml"><td>base/rbac.yaml</td><td>The <code>backend</code> ServiceAccount + namespaced Role + RoleBinding (NFR-16) — replaces D42's Docker-socket mount with narrow, named-resource Kubernetes API access; also the <code>promtail</code> ServiceAccount/ClusterRole for pod-log discovery.</td></tr>
+          <tr data-name="base/pvc.yaml"><td>base/pvc.yaml</td><td>Every non-StatefulSet PersistentVolumeClaim (kaggle dataset, archive, Spark checkpoints, Grafana/Prometheus/Loki data) — all <code>local-path</code>, which only works on k3d's single-node default; a real multi-node cluster needs a genuine RWX StorageClass.</td></tr>
+          <tr data-name="base/statefulset-cassandra.yaml"><td>base/statefulset-cassandra.yaml</td><td>Cassandra as a StatefulSet — headless Service doubling as governing + client DNS, <code>volumeClaimTemplates</code>, <code>securityContext.fsGroup</code> replacing the old chown-init-container pattern.</td></tr>
+          <tr data-name="base/statefulset-kafka.yaml"><td>base/statefulset-kafka.yaml</td><td>Kafka as a StatefulSet, same pattern as Cassandra's.</td></tr>
+          <tr data-name="base/deployment-backend.yaml"><td>base/deployment-backend.yaml</td><td>The web app Deployment + <code>LoadBalancer</code> Service (host port 8000) — <code>serviceAccountName: backend</code> is the whole point of D43.</td></tr>
+          <tr data-name="base/deployment-spark-master.yaml"><td>base/deployment-spark-master.yaml</td><td>Spark standalone master Deployment + Service. <code>SPARK_LOCAL_IP</code> (Downward API pod IP) found live-necessary here too, alongside spark-job/spark-worker.</td></tr>
+          <tr data-name="base/deployment-spark-worker.yaml"><td>base/deployment-spark-worker.yaml</td><td>Spark worker Deployment + Service — the Service was missing in the first live-verification pass (backend's health check to it 404'd until added).</td></tr>
+          <tr data-name="base/deployment-spark-job.yaml"><td>base/deployment-spark-job.yaml</td><td>The Structured Streaming driver Deployment. <code>Recreate</code> strategy (not the default RollingUpdate) — found live-necessary: two driver generations briefly overlapping during a rollout deadlocked on the single worker's fixed memory.</td></tr>
+          <tr data-name="base/deployment-producer.yaml"><td>base/deployment-producer.yaml</td><td>Producer Deployment + Service, <code>busybox</code> initContainer TCP-waits for Kafka.</td></tr>
+          <tr data-name="base/deployment-kafka-exporter.yaml"><td>base/deployment-kafka-exporter.yaml</td><td>kafka-exporter Deployment + Service.</td></tr>
+          <tr data-name="base/deployment-kafka-ui.yaml"><td>base/deployment-kafka-ui.yaml</td><td>kafka-ui Deployment + Service (cluster-internal only — reach via <code>kubectl port-forward</code>).</td></tr>
+          <tr data-name="base/deployment-prometheus.yaml"><td>base/deployment-prometheus.yaml</td><td>Prometheus Deployment + Service, config from the <code>prometheus-config</code> ConfigMap.</td></tr>
+          <tr data-name="base/deployment-loki.yaml"><td>base/deployment-loki.yaml</td><td>Loki Deployment + Service.</td></tr>
+          <tr data-name="base/deployment-grafana.yaml"><td>base/deployment-grafana.yaml</td><td>Grafana Deployment + <code>LoadBalancer</code> Service (host port 3000), provisioning ConfigMaps mounted in.</td></tr>
+          <tr data-name="base/daemonset-node-exporter.yaml"><td>base/daemonset-node-exporter.yaml</td><td>node-exporter as a DaemonSet — genuinely per-node, unlike its single-replica Deployment under Compose.</td></tr>
+          <tr data-name="base/daemonset-promtail.yaml"><td>base/daemonset-promtail.yaml</td><td>promtail as a DaemonSet, using <code>promtail-config-k8s.yml</code>'s Kubernetes-native pod-log discovery.</td></tr>
+          <tr data-name="base/job-dataset-init.yaml"><td>base/job-dataset-init.yaml</td><td>One-shot Kaggle dataset fetch — a Kubernetes Job doesn't block downstream pod scheduling the way Compose's <code>depends_on: condition: service_completed_successfully</code> did, a known simplification (see operations.html).</td></tr>
+          <tr data-name="base/job-kafka-topic-init.yaml"><td>base/job-kafka-topic-init.yaml</td><td>One-shot Kafka topic creation Job.</td></tr>
+          <tr data-name="base/job-cassandra-schema-init.yaml"><td>base/job-cassandra-schema-init.yaml</td><td>One-shot Cassandra schema Job, from the <code>cassandra-schema</code> ConfigMap.</td></tr>
+          <tr data-name="base/config.env"><td>base/config.env</td><td>All non-secret app config as hardcoded local-dev defaults for the <code>app-config</code> ConfigMap — independent of the repo-root <code>.env</code>, which only supplies the genuinely-secret values at apply time.</td></tr>
+          <tr data-name="base/secret.example.yaml"><td>base/secret.example.yaml</td><td>Documents the <code>app-secrets</code> Secret's expected shape only — not applied, not in <code>kustomization.yaml</code>'s resources. The real Secret is generated by <code>local-up.sh</code> from <code>.env</code>.</td></tr>
         </tbody></table>
       </div>
     </section>
 
     <footer class="page-foot">
-      <span>174 files, one line each.</span>
+      <span>201 files, one line each.</span>
       <span><a href="index.html">&larr; Back to documentation hub</a></span>
     </footer>
   </main>

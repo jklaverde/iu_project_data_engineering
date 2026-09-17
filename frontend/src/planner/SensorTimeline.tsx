@@ -189,7 +189,7 @@ export default function SensorTimeline({ sensor }: { sensor: SensorEntry }) {
       </p>
       <label className="compare-toggle">
         <input type="checkbox" checked={showCompare} onChange={(e) => setShowCompare(e.target.checked)} />
-        Compare to an earlier period (D39)
+        Compare to an earlier period
       </label>
       <div className="timeline-grid">
         {GRANULARITIES.map((g) => (
