@@ -41,7 +41,7 @@
       </div>
     </nav>
 
-    <p class="sidebar-foot">Covers the interim single-VPS Compose deployment that's actually been exercised on a real machine. The full 3-VPS k3s target (Phase 6) isn't built yet, but D43's local Kubernetes manifests (<code>k8s/base/</code>) are now a real, live-verified starting point toward it — see the scope note below.</p>
+    <p class="sidebar-foot">Covers the interim single-VPS Compose deployment that's actually been exercised on a real machine. The full 3-VPS k3s target (Phase 6) isn't built yet, but D43's Kubernetes manifests (<code>k8s/base/</code>) are now a real, live-verified starting point toward it — proven on k3d, and since D44, the actual FR-N2 Cassandra scaling scenario has been live-verified on a real single-node k3s VPS too — see the scope note below.</p>
   </aside>
 
   <main class="prose">
@@ -65,14 +65,20 @@
       <a href="operations.html#status">Operations — Status</a>) — but it's no longer starting from
       nothing: D43 migrated local development from this same Compose stack to Kubernetes
       (<strong>k3d</strong> locally, the same distribution as the production target), live-verified
-      end to end, and its manifests (<code>k8s/base/</code>) are a real starting point for full P6 —
-      StatefulSets for Kafka/Cassandra and the RBAC design are done; ingress/TLS, inter-node
-      networking, and multi-node storage classing are what's left (see
-      <a href="operations.html#next">Operations — Where to pick this up next</a>). Until that
-      lands, this guide covers the deployment that <em>does</em> run on a real public VPS today:
-      the same single-host Docker Compose stack, hardened enough to sit there safely. It's a
-      legitimate, complete way to run this project for real users — just not the eventual
-      multi-node target.
+      end to end, and D44 went further: it exercised those manifests' actual purpose — an admin
+      scaling out a Cassandra node under storage pressure (FR-N2) — end to end on a real
+      single-node k3s VPS, finding and fixing three real bugs (two RBAC gaps and a
+      <code>CASSANDRA_SEEDS</code> omission that let a scaled node silently fail to join the ring)
+      along the way. StatefulSets for Kafka/Cassandra and the RBAC design are done, and now
+      real-k3s-verified, not just k3d-verified; ingress/TLS, multi-node/WireGuard networking,
+      multi-node storage classing, and NFR-11's firewall/fail2ban hardening are what's left (see
+      <a href="operations.html#next">Operations — Where to pick this up next</a>). D44's VPS is a
+      feature-proving spike, not a hardened deployment — it firewalls only its own OS ports
+      (<code>ufw</code>) and exposes backend/Grafana the same unhardened, no-TLS way local dev does,
+      which NFR-11 explicitly disallows in production. Until full P6 lands, this guide covers the
+      deployment that's actually meant to serve real users today: the same single-host Docker
+      Compose stack, hardened enough to sit there safely. It's a legitimate, complete way to run
+      this project for real users — just not the eventual multi-node target.
     </div>
 
     <div class="prose-body">

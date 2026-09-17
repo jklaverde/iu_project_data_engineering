@@ -21,6 +21,15 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  # cassandra_nodes.py's _wait_pod_ready_sync polls read_namespaced_pod_status
+  # during node-deploy (FR-N2) - a genuinely separate RBAC resource from
+  # "pods" above, not covered by the rule above (D44, live-verified: the
+  # underlying scale + Cassandra bootstrap/ring-join succeeded regardless,
+  # but deploy_node()'s own readiness poll 403'd on every attempt, so the
+  # admin-facing feature itself reported failure over the WebSocket).
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get"]
   - apiGroups: ["apps"]
     resources: ["statefulsets", "deployments"]
     verbs: ["get", "list", "watch"]
@@ -32,9 +41,14 @@ rules:
   # nodetool exec against the cassandra pods for storage/ring queries
   # (cassandra_nodes.py's _exec_sync) - pods/exec has no resourceNames
   # support, so this is scoped as tightly as RBAC allows (namespace + verb).
+  # "create" is the documented verb for this subresource, but a real k3s
+  # v1.36.4 control plane (D44) authorizes the python client's
+  # connect_get_namespaced_pod_exec() call against "get" instead - both are
+  # granted so this doesn't depend on which convention a given API server
+  # version actually enforces.
   - apiGroups: [""]
     resources: ["pods/exec"]
-    verbs: ["create"]
+    verbs: ["create", "get"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

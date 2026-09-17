@@ -83,9 +83,14 @@
         fixed: the <code>loki</code> healthcheck — see <a href="#p8">P8 §1</a>). D38-D42
         (external-feedback response, Cassandra storage control) also done. D43
         (Kubernetes migration, local k3d) is done <strong>and</strong> live-verified on a
-        real cluster — four real bugs found and fixed, see
-        <a href="#decisions">Implementation decisions beyond the spec</a>. Full
-        P6 (3-VPS k3s) and P7 (endurance) not started.
+        real cluster — five real bugs found and fixed, see
+        <a href="#decisions">Implementation decisions beyond the spec</a>. D44 went
+        further: it ran the actual Cassandra horizontal-scale-out feature (FR-N2) end
+        to end on real k3s infrastructure for the first time, found and fixed three
+        more real bugs (two RBAC gaps, and a missing <code>CASSANDRA_SEEDS</code> that
+        let a scaled-out node silently fail to join the ring while reporting healthy),
+        and confirmed it genuinely works — a de-risking step for P6, not P6 itself. Full
+        P6 (3-VPS k3s, hardened per NFR-11) and P7 (endurance) not started.
       </p>
       <div class="table-wrap">
         <table class="data-table">
@@ -97,6 +102,7 @@
           <tr><td>P5 — Web app</td><td>FastAPI read-only API + React (TypeScript) guided UI + basic login</td><td><span class="pill pill--done">Done</span></td></tr>
           <tr><td>Interim VPS deployment</td><td><code>dataset-init</code>, reboot-safe restart policies, a real Grafana dashboard bug found and fixed on a live deploy</td><td><span class="pill pill--done">Done</span> — actually deployed and used on a real Linux VPS</td></tr>
           <tr><td>P6 (full) — VPS deployment</td><td>3 Contabo VPS, k3s, hardening, Kafka/Cassandra replicated across nodes</td><td><span class="pill pill--todo">Not started</span></td></tr>
+          <tr><td>P6 — Cassandra scale-out verified on real k3s (D44)</td><td>FR-N2 (admin node-deploy) run end-to-end on a real Contabo VPS; found/fixed 2 RBAC gaps + a silent ring-join bug</td><td><span class="pill pill--done">Done</span> — de-risks P6's core scaling story; not P6 itself (one node, no TLS/ingress/WireGuard, NFR-11 unaddressed)</td></tr>
           <tr><td>P7 — Endurance</td><td>48-hour run against §10 acceptance criteria</td><td><span class="pill pill--todo">Not started</span></td></tr>
           <tr><td>P8 — Role-based redirect</td><td>Two roles, <code>device_metadata</code>/<code>device_thresholds</code>, Leaflet map, Loki+Promtail, Grafana alerting + webhook + Alerts tab, D34/D35 timeline+log</td><td><span class="pill pill--done">Done — live-verified</span> against a real <code>docker compose up</code></td></tr>
         </table>
@@ -487,6 +493,58 @@
             instead of a JVM one, lighter but not free) and haven't caused a real failure yet — worth
             the same fix if one shows up under sustained load.</li>
         </ul>
+
+        <h4 class="doc-h4">Cassandra horizontal-scale-out, actually verified end-to-end (D44)</h4>
+        <ul>
+          <li><strong>Why this exists:</strong> the whole reason D42/D43 exist is FR-N2/UC-12 — an
+            admin, watching Cassandra's storage climb toward its budget, clicks a button and a new
+            Cassandra node joins the ring. That specific end-to-end path had never actually succeeded:
+            D42's Docker-socket version OOM-killed a second Cassandra JVM on a 7.7 GiB Docker Desktop
+            VM before completing; D43 verified the Kubernetes plumbing structurally on k3d but didn't
+            re-confirm this exact scenario. Installed real k3s on one of the project's actual Contabo
+            VPS and ran it for real.</li>
+          <li><strong>Bug 1 — RBAC, <code>pods/exec</code>:</strong> the Role's <code>create</code>
+            grant (the documented convention) wasn't enough; this real k3s
+            (<code>v1.36.4+k3s1</code>) authorizes the exec-connect call against <code>get</code>
+            instead. <code>nodetool status</code>/<code>exec</code>-backed endpoints (<code>GET
+            /api/admin/cassandra/storage</code>) 403'd until both verbs were granted.</li>
+          <li><strong>Bug 2 — the real one, <code>CASSANDRA_SEEDS</code> was never set:</strong>
+            <code>k8s/base/statefulset-cassandra.yaml</code> had no <code>CASSANDRA_SEEDS</code>, so
+            the official Cassandra image's entrypoint defaulted it to each pod's own address. The
+            scaled-out <code>cassandra-1</code> came up <code>1/1 Ready</code> — passed its own local
+            <code>cqlsh</code> readiness probe — while actually bootstrapping as a completely separate
+            single-node cluster: its own fresh <code>system_auth</code> superuser role, its own Host
+            ID, and <code>nodetool status</code> on either pod showing only itself. A green pod, zero
+            ring capacity added — the exact failure mode this feature exists to prevent, and one that
+            k3d's own live-verification in D43 didn't happen to catch (that run never actually scaled
+            Cassandra past 1 replica). Fixed with <code>CASSANDRA_SEEDS:
+            cassandra-0.cassandra.iot-pipeline.svc.cluster.local</code> on every replica.</li>
+          <li><strong>Bug 3 — RBAC, <code>pods/status</code>:</strong> <code>cassandra_nodes.py</code>'s
+            own readiness-wait (<code>_wait_pod_ready_sync</code>) polls
+            <code>read_namespaced_pod_status</code>, a distinct RBAC resource from plain
+            <code>pods</code>. Even with bugs 1 and 2 fixed and the real scale-up/ring-join genuinely
+            succeeding underneath, the admin feature's own orchestration 403'd on this call every time
+            and reported failure over the WebSocket. Fixed by granting <code>pods/status</code>
+            <code>get</code>.</li>
+          <li><strong>Verified clean after all three fixes:</strong> <code>POST
+            /api/admin/cassandra/nodes</code> against a fresh single-node cluster ran
+            <code>creating → healthy → joining_ring → done</code> with no manual steps —
+            <code>cassandra-1</code> bootstrap-streamed real data, both nodes reached
+            <code>nodetool status</code> <code>UN</code> with the ring split ~49/51%, and the
+            storage-summary endpoint correctly reported both nodes' load.</li>
+          <li><strong>Resource contention, again, this time on real hardware:</strong> running the
+            whole stack plus a second Cassandra node pushed this 11 GiB VPS to ~200 MiB available
+            memory, <code>OOMKilled</code> the unrelated <code>backend</code> pod, and cascaded into a
+            <code>py4j</code> connection failure in <code>spark-job</code>. Both self-recovered via
+            Kubernetes' normal pod restart with no data loss — but it reconfirms D42's original finding
+            wasn't a Docker-Desktop-only artifact; a second Cassandra node has a real memory cost worth
+            sizing for explicitly in full P6 (NFR-12).</li>
+          <li><strong>Operational note, not a product bug:</strong> FR-N2 only ever scales up — D42
+            deliberately left decommissioning as a manual step. Removing a test node by deleting its
+            pod/PVC directly (rather than <code>nodetool removenode</code> first) leaves the ring
+            believing that node still owns half the token range. Hit this firsthand resetting state
+            between test runs; worth knowing before repeating.</li>
+        </ul>
       </div>
     </section>
 
@@ -538,7 +596,9 @@
             Loki/Grafana behavior across a <code>down && up</code> cycle). Low priority unless P7 or a
             real VPS deployment surfaces something.</li>
           <li><strong>Full P6 (3-VPS k3s cluster)</strong> — the actual next roadmap phase. D43 (local
-            k3d) is now <strong>done and live-verified</strong>, producing a real, exercised manifest
+            k3d) is now <strong>done and live-verified</strong>, and D44 went further, actually running
+            the Cassandra scale-out feature end-to-end on real k3s and fixing three real bugs it
+            surfaced (two RBAC gaps and a silent ring-join failure), producing a real, exercised manifest
             starting point (<code>k8s/base/</code>) — StatefulSets for Kafka/Cassandra (D19, no
             operators) are done, as is the RBAC design. What's still needed for the real multi-node
             target: Traefik ingress + real TLS (D25, self-signed was the interim-VPS-only choice),

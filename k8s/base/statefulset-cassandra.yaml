@@ -62,6 +62,16 @@ spec:
               value: rack1
             - name: CASSANDRA_ENDPOINT_SNITCH
               value: GossipingPropertyFileSnitch
+            # Without this, docker-entrypoint.sh defaults CASSANDRA_SEEDS to
+            # the pod's own broadcast address (D44, live-verified the hard
+            # way: cassandra-1 bootstrapped as its own independent
+            # single-node cluster - separate Host ID, its own fresh
+            # system_auth superuser role - instead of joining cassandra-0's
+            # ring). Same value on every replica, including cassandra-0
+            # itself, is the standard StatefulSet pattern - a node listing
+            # itself as a seed is normal.
+            - name: CASSANDRA_SEEDS
+              value: cassandra-0.cassandra.iot-pipeline.svc.cluster.local
             - name: MAX_HEAP_SIZE
               value: 1G
             - name: HEAP_NEWSIZE
