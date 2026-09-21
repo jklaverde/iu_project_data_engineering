@@ -68,7 +68,8 @@ minutes on a cold start (pre-warming Spark's dependency cache, fetching the Kagg
 dataset). When done it prints **http://localhost:8000** (backend) and
 **http://localhost:3000** (Grafana) and a pod summary. Nothing else is exposed to the host
 (`REQUIREMENTS.md` §4.4); use `kubectl -n iot-pipeline port-forward` for Spark UIs,
-kafka-ui, Prometheus, etc.
+Prometheus, etc. (`kafka-ui` is scaled to 0 by default to save memory — `kubectl -n
+iot-pipeline scale deployment kafka-ui --replicas=1` first).
 
 Tear down (deletes the whole cluster and every PVC's data — a clean slate):
 ```
@@ -309,6 +310,14 @@ Grafana (**http://localhost:3000** locally, `:3000` on the host in production; u
 `k8s/base/config.env`, password from `.env`) has the full KPI
 dashboard (`REQUIREMENTS.md` §9: throughput/lag, latency, business aggregates, disk
 growth, anomaly drill-down, and now logs) auto-provisioned — no manual setup needed.
+
+## Continuing development
+
+Picking this project up (as a person or a new Claude Code session)? Start with
+[`CLAUDE.md`](CLAUDE.md): the catch-up checklist, the current state, the conventions that
+keep the decision log honest, playbooks for a new requirement / milestone / incident, and the
+gotchas that have already cost time. The prioritized backlog is `docs/operations.html` →
+"Where to pick this up next"; the decision log is `REQUIREMENTS.md` §11.
 
 ## Endurance-run procedure
 

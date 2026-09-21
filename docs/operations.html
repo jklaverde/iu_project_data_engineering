@@ -98,7 +98,10 @@
         confirmed the other five are genuinely fixed. D48 unified local and production
         deployment behind one script (<code>k8s/deploy.sh</code>) and corrected several documentation
         defects (see <a href="#d48">D48</a>) — including that the production runbook still described
-        <code>docker compose</code>. Full P6 (3-VPS k3s, hardened per NFR-11) and P7 (endurance) not
+        <code>docker compose</code>. D49 (a poisoned Kafka message and a backend OOM) and D50 (memory
+        limits resized for the 11 GB node; <code>kafka-ui</code> off by default) were recorded
+        retroactively — those two commits had landed without decision-log entries
+        (<a href="#d49">D49</a>, <a href="#d50">D50</a>). Full P6 (3-VPS k3s, hardened per NFR-11) and P7 (endurance) not
         started.
       </p>
       <div class="table-wrap">
@@ -759,6 +762,51 @@
             automated backups, and the restore procedure (never rehearsed). A production Kustomize overlay
             is the intended home for the first three.</li>
         </ul>
+
+        <h4 class="doc-h4" id="d49">Production hardening after go-live: a poisoned Kafka message and a
+          backend OOM (D49)</h4>
+        <ul>
+          <li><strong>Provenance:</strong> commit <code>6e0f87b</code>, recorded here retroactively
+            from its commit message (it had no decision-log entry). Its live-verification claims were
+            not re-checked when this was written.</li>
+          <li><strong>Incident 1 — one bad message crash-looped the whole pipeline.</strong> A Kafka
+            message that failed JSON parsing, or parsed but lacked
+            <code>event_id</code>/<code>device_id</code>/<code>event_ts</code>/<code>ingest_ts</code>,
+            reached <code>applyInPandasWithState</code> and crashed all three streaming queries with an
+            Arrow null-timestamp error. The checkpoint always resumed at the same offset, so it never
+            self-healed. <strong>Fix:</strong> <code>spark_job/spark_job/schema.py</code> drops such
+            messages before the stateful stage. <strong>Known trade-off:</strong> they are dropped
+            silently — there is no dead-letter topic and no alert, so a misbehaving producer would lose
+            events without anyone being told.</li>
+          <li><strong>Incident 2 — the backend was OOM-killed by "compare to an earlier period".</strong>
+            That toggle fires up to three Dataset Explorer queries at once (day/week/month), and each
+            re-scanned the whole Kaggle CSV; three concurrent full scans exceeded the pod's memory.
+            <strong>Fix:</strong> <code>backend/app/dataset_reader.py</code> parses the CSV once and
+            caches it; the backend limit went 384Mi → 512Mi for headroom around the cache.</li>
+        </ul>
+
+        <h4 class="doc-h4" id="d50">Memory limits resized to fit the 11 GB production node (D50)</h4>
+        <ul>
+          <li><strong>Provenance:</strong> commit <code>908c1dd</code>, recorded retroactively from its
+            commit message; not re-verified here.</li>
+          <li><strong>Why:</strong> the sum of container limits was ~12.4 GiB across the 14 steady-state
+            workloads — already over the VPS's 11 GB before OS/k3s overhead, matching D44/D45's
+            observation of only ~200 MiB–1.6 GiB free with everything running.</li>
+          <li><strong>What changed:</strong> peripheral services (grafana, prometheus, loki,
+            kafka-exporter, producer, node-exporter, promtail) trimmed to observed usage plus margin;
+            spark-job and spark-master moderately trimmed; cassandra, kafka, spark-worker and backend
+            <em>deliberately untouched</em> (each tied to a real OOM/stall incident). New totals
+            ≈ 9.6 GiB limits, ≈ 4.8 GiB requests, ≈ 5.5 GiB real usage.</li>
+          <li><strong><code>kafka-ui</code> is now off by default</strong> (0 replicas). Turn it on with
+            <code>kubectl -n iot-pipeline scale deployment kafka-ui --replicas=1</code>; a later
+            <code>deploy.sh up</code> resets it to 0 because the manifest declares 0.</li>
+          <li><strong>A subtle coupling:</strong> shrinking spark-master's limit also required setting
+            <code>SPARK_DAEMON_MEMORY</code>. Spark daemons default to a 1 GiB heap regardless of the
+            container limit, so lowering the limit alone would have made it self-OOM on every start.</li>
+          <li><strong>Consequence to remember:</strong> only ~1.4 GiB sits between the limit total and
+            the host's RAM. Anything that adds a pod, raises a limit or scales Cassandra must re-check
+            <code>kubectl top nodes</code> first.</li>
+        </ul>
       </div>
     </section>
 
@@ -809,7 +857,26 @@
     <section class="doc-section" id="next">
       <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ops)"></span>Where to pick this up next</h2></div>
       <div class="prose-body">
+        <p>Working from a fresh session? Start with <code>CLAUDE.md</code> at the repo root: it holds
+          the catch-up checklist, conventions and a dated state snapshot; this list is the canonical
+          backlog it points to.</p>
         <ol>
+          <li><strong>Close out D48 (highest value, small).</strong> <code>deploy.sh prod up</code>'s
+            end-to-end result was never recorded by the session that wrote it. The current production
+            namespace was created on 2026-09-21 at ~18:14 CEST in an order that matches the script, but
+            that has not been confirmed with whoever ran it. Confirm, record the outcome in
+            <a href="#d48">D48</a>, then exercise <code>update</code> and (with explicit go-ahead —
+            it destroys data) the prod <code>down</code> confirmation prompt.</li>
+          <li><strong>Verify the firewall from outside.</strong> Whether <code>ufw</code> alone can
+            close a port that k3s' servicelb publishes is unverified
+            (<a href="deployment.html#firewall">deployment §6</a>): run <code>nc -vz &lt;vps-ip&gt; 8000
+            3000 6443 10250</code> from another machine and correct the docs either way.</li>
+          <li><strong>TLS, then the cookie flag.</strong> Caddy in front (deployment §6b) and only then
+            <code>BACKEND_COOKIE_SECURE=true</code> in <code>k8s/base/config.env</code>.</li>
+          <li><strong>Rehearse a backup restore</strong> (<a href="deployment.html#backups">deployment §9</a>)
+            — the procedure is written but never exercised.</li>
+          <li><strong>Silent drops (D49):</strong> consider a dead-letter topic or a Grafana alert on
+            dropped-message count in <code>spark_job</code>.</li>
           <li><strong>P8 is now live-verified locally</strong> — what's not yet confirmed: a
             sustained/restart-cycled run (Promtail's Docker-socket bind-mount on a different host OS,
             Loki/Grafana behavior across a <code>down && up</code> cycle). Low priority unless P7 or a

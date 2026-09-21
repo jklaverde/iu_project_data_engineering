@@ -331,8 +331,9 @@ print_urls() {
 
 ==> Backend:  http://${host}:8000
 ==> Grafana:  http://${host}:3000
-==> Everything else (Spark UIs, kafka-ui, Prometheus, ...) is cluster-internal only;
+==> Everything else (Spark UIs, Prometheus, ...) is cluster-internal only;
     reach it with: kubectl -n $NAMESPACE port-forward svc/<name> <port>
+==> kafka-ui is off by default (memory budget): kubectl -n $NAMESPACE scale deployment kafka-ui --replicas=1
 EOF
   if [ "$ENV_NAME" = prod ]; then
     echo "==> prod is plain HTTP until TLS is set up - see docs/deployment.html section 6."

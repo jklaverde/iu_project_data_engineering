@@ -396,7 +396,7 @@
               <div><dt>Ports</dt><dd><code>8080</code> host → <code>8080</code></dd></div>
               <div><dt>Limits</dt><dd>512m · restart: unless-stopped</dd></div>
             </dl>
-            <p class="unit-note">Safe to leave out of a production deployment entirely — nothing else depends on it.</p>
+            <p class="unit-note">Safe to leave out of a production deployment entirely — nothing else depends on it. On Kubernetes it is <strong>scaled to 0 replicas by default</strong> (memory budget); to browse topics run <code>kubectl -n iot-pipeline scale deployment kafka-ui --replicas=1</code>, then <code>port-forward</code> to it. Re-running <code>deploy.sh up</code> returns it to 0. The limits and ports above are the legacy Compose values.</p>
           </div>
         </article>
 

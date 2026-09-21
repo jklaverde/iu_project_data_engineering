@@ -66,6 +66,7 @@
       <div class="table-wrap">
         <table class="data-table"><tbody data-filter-group>
           <tr data-name="README.md"><td>README.md</td><td>User-facing quick start: prerequisites, one-command start, walkthrough guide, endurance-run procedure.</td></tr>
+          <tr data-name="CLAUDE.md claude handoff catch up conventions"><td>CLAUDE.md</td><td>Loaded automatically at the start of every Claude Code session: catch-up checklist, a dated state snapshot, where things live, conventions and playbooks (new requirement / milestone / incident / catch-up / end-of-session), known gotchas. A map that points to the canonical docs — refresh its state snapshot at the end of every session.</td></tr>
           <tr data-name="REQUIREMENTS.md"><td>REQUIREMENTS.md</td><td>The specification — scope, architecture, decision log, phase roadmap. Do not edit casually; see its own changelog header.</td></tr>
           <tr data-name="docker-compose.yml"><td>docker-compose.yml</td><td>The entire stack: every service, port mapping, volume, healthcheck, and dependency ordering. Start here to see how any two services actually connect.</td></tr>
           <tr data-name=".env.example"><td>.env.example</td><td>Every runtime config variable, documented inline, with safe placeholder values. Copy to <code>.env</code> and fill in real secrets.</td></tr>
@@ -278,7 +279,7 @@
           <tr data-name="base/deployment-spark-job.yaml"><td>base/deployment-spark-job.yaml</td><td>The Structured Streaming driver Deployment. <code>Recreate</code> strategy (not the default RollingUpdate) — found live-necessary: two driver generations briefly overlapping during a rollout deadlocked on the single worker's fixed memory.</td></tr>
           <tr data-name="base/deployment-producer.yaml"><td>base/deployment-producer.yaml</td><td>Producer Deployment + Service, <code>busybox</code> initContainer TCP-waits for Kafka.</td></tr>
           <tr data-name="base/deployment-kafka-exporter.yaml"><td>base/deployment-kafka-exporter.yaml</td><td>kafka-exporter Deployment + Service.</td></tr>
-          <tr data-name="base/deployment-kafka-ui.yaml"><td>base/deployment-kafka-ui.yaml</td><td>kafka-ui Deployment + Service (cluster-internal only — reach via <code>kubectl port-forward</code>).</td></tr>
+          <tr data-name="base/deployment-kafka-ui.yaml"><td>base/deployment-kafka-ui.yaml</td><td>kafka-ui Deployment + Service. <strong>0 replicas by default</strong> (D50, memory budget) — scale to 1 to use it, then reach it via <code>kubectl port-forward</code> (cluster-internal only).</td></tr>
           <tr data-name="base/deployment-prometheus.yaml"><td>base/deployment-prometheus.yaml</td><td>Prometheus Deployment + Service, config from the <code>prometheus-config</code> ConfigMap.</td></tr>
           <tr data-name="base/deployment-loki.yaml"><td>base/deployment-loki.yaml</td><td>Loki Deployment + Service.</td></tr>
           <tr data-name="base/deployment-grafana.yaml"><td>base/deployment-grafana.yaml</td><td>Grafana Deployment + <code>LoadBalancer</code> Service (host port 3000), provisioning ConfigMaps mounted in.</td></tr>
