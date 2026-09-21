@@ -66,9 +66,9 @@ spec:
               mountPath: /run/promtail
           resources:
             requests:
-              memory: 128Mi
+              memory: 48Mi
             limits:
-              memory: 256Mi
+              memory: 96Mi
       volumes:
         - name: config
           configMap:

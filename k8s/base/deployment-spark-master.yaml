@@ -59,6 +59,15 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            # bin/spark-class defaults every Spark daemon class (Master,
+            # Worker, ...) to a 1g heap via SPARK_DAEMON_MEMORY, regardless
+            # of the container's own memory limit below - so shrinking the
+            # limit without also capping this would self-OOM the JVM on
+            # every single start. Same explicit-heap-paired-with-limit
+            # pattern as statefulset-kafka.yaml's KAFKA_HEAP_OPTS and
+            # statefulset-cassandra.yaml's MAX_HEAP_SIZE.
+            - name: SPARK_DAEMON_MEMORY
+              value: "384m"
           ports:
             - containerPort: 7077
               name: rpc
@@ -76,6 +85,6 @@ spec:
             failureThreshold: 5
           resources:
             requests:
-              memory: 512Mi
+              memory: 256Mi
             limits:
-              memory: 1Gi
+              memory: 512Mi

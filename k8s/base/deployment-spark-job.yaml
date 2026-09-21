@@ -124,9 +124,9 @@ spec:
             failureThreshold: 10
           resources:
             requests:
-              memory: 1000Mi
+              memory: 768Mi
             limits:
-              memory: 2000Mi
+              memory: 1536Mi
       volumes:
         - name: kaggle-dataset
           persistentVolumeClaim:

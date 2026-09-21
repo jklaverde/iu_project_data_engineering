@@ -54,9 +54,9 @@ spec:
               readOnly: true
           resources:
             requests:
-              memory: 64Mi
+              memory: 32Mi
             limits:
-              memory: 128Mi
+              memory: 64Mi
       volumes:
         - name: proc
           hostPath: { path: /proc }

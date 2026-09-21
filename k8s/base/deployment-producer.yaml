@@ -74,9 +74,9 @@ spec:
             failureThreshold: 5
           resources:
             requests:
-              memory: 192Mi
+              memory: 64Mi
             limits:
-              memory: 384Mi
+              memory: 128Mi
       volumes:
         - name: kaggle-dataset
           persistentVolumeClaim:

@@ -20,7 +20,13 @@ metadata:
   name: kafka-ui
   namespace: iot-pipeline
 spec:
-  replicas: 1
+  # Scaled to 0 by default (11 GB production memory budget): kafka-ui is a
+  # topic/message browsing convenience for debugging, not exposed to the
+  # host, not referenced by any FR/UC or by the backend's own health grid -
+  # zero standing memory cost this way. Scale up on demand when actually
+  # debugging Kafka:
+  #   kubectl -n iot-pipeline scale deploy/kafka-ui --replicas=1
+  replicas: 0
   selector:
     matchLabels:
       app: kafka-ui
