@@ -12,7 +12,7 @@
   <aside class="sidebar">
     <div class="brand">
       <span class="brand-mark">VPS<br><span class="accent">Deployment</span></span>
-      <span class="brand-sub">local · v1</span>
+      <span class="brand-sub">local · v2</span>
     </div>
     <a class="hub-link" href="index.html">&larr; All documentation</a>
 
@@ -23,25 +23,32 @@
 
     <nav class="toc" id="tocNav">
       <div data-group>
-        <p class="toc-group-label">Guide</p>
+        <p class="toc-group-label">Production runbook (k3s)</p>
         <div class="toc-links">
           <a href="#choose-size" data-name="choose and size a vps">1. Choose &amp; size a VPS</a>
           <a href="#hardening" data-name="initial server hardening ssh firewall">2. Initial hardening</a>
-          <a href="#docker" data-name="install docker">3. Install Docker</a>
+          <a href="#install" data-name="install docker k3s kubectl">3. Install Docker &amp; k3s</a>
           <a href="#get-project" data-name="get the project onto the vps clone">4. Get the project on the VPS</a>
-          <a href="#secrets" data-name="configure secrets env">5. Configure secrets</a>
+          <a href="#secrets" data-name="configure secrets env config.env settings">5. Configure secrets &amp; settings</a>
           <a href="#firewall" data-name="firewall public ports tls reverse proxy caddy">6. Firewall &amp; TLS</a>
-          <a href="#start" data-name="start the stack">7. Start the stack</a>
-          <a href="#reboot" data-name="survives a reboot restart policy">8. Survive a reboot</a>
-          <a href="#backups" data-name="backups volumes">9. Backups</a>
-          <a href="#updating" data-name="updating git pull">10. Updating</a>
-          <a href="#monitoring" data-name="monitoring logs troubleshooting">11. Monitoring &amp; logs</a>
-          <a href="#teardown" data-name="tearing down">12. Tearing down</a>
+          <a href="#start" data-name="start the stack deploy.sh check up">7. Start the stack</a>
+          <a href="#reboot" data-name="survives a reboot restart k3s images">8. Survive a reboot</a>
+          <a href="#backups" data-name="backups persistent volumes cassandra">9. Backups</a>
+          <a href="#updating" data-name="updating git pull update rollout">10. Updating</a>
+          <a href="#monitoring" data-name="monitoring logs troubleshooting kubectl">11. Monitoring &amp; logs</a>
+          <a href="#teardown" data-name="tearing down uninstall">12. Tearing down</a>
+        </div>
+      </div>
+      <div data-group>
+        <p class="toc-group-label">Reference</p>
+        <div class="toc-links">
+          <a href="#why-differ" data-name="local vs production differences justification">Local vs production: what differs, and why</a>
+          <a href="#legacy-compose" data-name="legacy docker compose appendix ufw bypass">Appendix: legacy docker compose</a>
         </div>
       </div>
     </nav>
 
-    <p class="sidebar-foot">Covers the interim single-VPS Compose deployment that's actually been exercised on a real machine. The full 3-VPS k3s target (Phase 6) isn't built yet, but D43's Kubernetes manifests (<code>k8s/base/</code>) are now a real, live-verified starting point toward it — proven on k3d, and since D44, the actual FR-N2 Cassandra scaling scenario has been live-verified on a real single-node k3s VPS too — see the scope note below.</p>
+    <p class="sidebar-foot">Production is a k3s host deployed with <code>k8s/deploy.sh prod</code> — the same script and manifests as local development (D48). Still unbuilt: TLS/ingress, multi-node, a registry ("full P6"). The old single-host Compose runbook now lives in the appendix.</p>
   </aside>
 
   <main class="prose">
@@ -49,36 +56,33 @@
       <p class="eyebrow">Runbook</p>
       <h1 class="hero-title">Deploy this to a public VPS.</h1>
       <p class="hero-lede">
-        This guide walks through deploying the project's <code>docker compose</code> stack —
-        still the actual, exercised path for a public VPS, distinct from the
-        <code>k3d</code>/Kubernetes path <a href="index.html">local development</a> moved to under
-        D43 — onto a single Linux VPS, so it's reachable from the internet instead of just
-        <code>localhost</code>. See <a href="containers.html">Architecture &amp; Containers</a>
-        first if you want to understand what you're deploying before you deploy it.
+        This guide takes a fresh Linux VPS to a running, internet-reachable deployment of the stack on
+        <strong>k3s</strong>, using the same command you use locally:
+        <code>k8s/deploy.sh prod up</code>. Everything <em>around</em> that command — sizing, hardening,
+        installing k3s, TLS, backups, reboots, updates — is a one-time or ongoing operator task on one
+        specific machine, so it lives here rather than in the script. See
+        <a href="containers.html">Architecture &amp; Containers</a> first if you want to understand what
+        you're deploying before you deploy it.
       </p>
     </section>
 
     <div class="callout warn">
-      <strong>Scope note.</strong> The formal spec (<code>REQUIREMENTS.md</code> §4.1) describes a
-      larger production target — three VPS running k3s, with Kafka/Cassandra replicated across
-      nodes. That's still "full P6" and still not built (see
-      <a href="operations.html#status">Operations — Status</a>) — but it's no longer starting from
-      nothing: D43 migrated local development from this same Compose stack to Kubernetes
-      (<strong>k3d</strong> locally, the same distribution as the production target), live-verified
-      end to end, and D44 went further: it exercised those manifests' actual purpose — an admin
-      scaling out a Cassandra node under storage pressure (FR-N2) — end to end on a real
-      single-node k3s VPS, finding and fixing three real bugs (two RBAC gaps and a
-      <code>CASSANDRA_SEEDS</code> omission that let a scaled node silently fail to join the ring)
-      along the way. StatefulSets for Kafka/Cassandra and the RBAC design are done, and now
-      real-k3s-verified, not just k3d-verified; ingress/TLS, multi-node/WireGuard networking,
-      multi-node storage classing, and NFR-11's firewall/fail2ban hardening are what's left (see
-      <a href="operations.html#next">Operations — Where to pick this up next</a>). D44's VPS is a
-      feature-proving spike, not a hardened deployment — it firewalls only its own OS ports
-      (<code>ufw</code>) and exposes backend/Grafana the same unhardened, no-TLS way local dev does,
-      which NFR-11 explicitly disallows in production. Until full P6 lands, this guide covers the
-      deployment that's actually meant to serve real users today: the same single-host Docker
-      Compose stack, hardened enough to sit there safely. It's a legitimate, complete way to run
-      this project for real users — just not the eventual multi-node target.
+      <strong>Scope and honesty note.</strong> This is the single-node k3s deployment that D44–D47
+      exercised on a real VPS. It is <strong>not</strong> the full <code>REQUIREMENTS.md</code> §4.1
+      target (three VPS, HA etcd, WireGuard, ingress with TLS) — that is still "full P6" and unbuilt (see
+      <a href="operations.html#next">Operations — Where to pick this up next</a>). Concretely, today:
+      traffic is <strong>plain HTTP</strong> (a reverse proxy in §6 is the interim fix), there is one
+      node, images are loaded straight into k3s' containerd rather than pulled from a registry, and
+      backups are a manual procedure (§9). The script refuses to run against a multi-node cluster
+      instead of half-deploying to one.
+      <br><br>
+      <strong>What has and hasn't been run.</strong> <code>deploy.sh</code>'s <code>check</code>, argument
+      handling and config validation were exercised on the production VPS (D48). Its <code>up</code>,
+      <code>update</code> and prod <code>down</code> paths reuse the logic of the live-verified
+      <code>local-up.sh</code>/<code>local-down.sh</code> plus new prod-specific branches
+      (<a href="#why-differ">below</a>); those new branches had <em>not yet</em> been run end to end when
+      this was written — treat your first <code>prod up</code> as the verification, and see
+      <a href="operations.html#d48">Operations — D48</a> for the result once recorded.
     </div>
 
     <div class="prose-body">
@@ -95,6 +99,10 @@
             <tr><td>48-hour endurance run at 500 msg/s (§10)</td><td>8</td><td>16 GB+</td><td>100 GB minimum, monitor growth live</td></tr>
           </table>
         </div>
+        <p>The VPS this project was verified on has 11 GiB of RAM; with the full stack plus extra
+          Cassandra nodes its available memory dropped to a few hundred MiB and pods were OOM-killed
+          (<code>REQUIREMENTS.md</code> D44/D45) — treat 16 GB as the practical floor for anything you
+          plan to leave running.</p>
         <p>Use Ubuntu 22.04 or 24.04 LTS (or any current Debian-family distro — the steps below
           assume <code>apt</code>). Point a DNS A record at the VPS's IP now if you plan to do the
           TLS step in §6; it can take a while to propagate.</p>
@@ -127,16 +135,35 @@ sudo ufw enable
 sudo systemctl enable --now fail2ban
 sudo dpkg-reconfigure -plow unattended-upgrades</code></pre>
         <p>This matches <code>REQUIREMENTS.md</code> NFR-11's baseline expectations (key-only SSH,
-          default-deny firewall, fail2ban, automatic security updates) even though this guide is a
-          single-host deployment, not the full multi-VPS hardening in that section.</p>
+          default-deny firewall, fail2ban, automatic security updates), on a single host rather than the
+          full multi-VPS hardening in that section. <strong>Note:</strong> because you'll administer k3s
+          as root in §3–§10, you'll use <code>sudo</code> for the <code>deploy.sh</code> commands even
+          though root SSH login is disabled.</p>
       </section>
 
-      <section class="doc-section" id="docker">
-        <h3 class="doc-h3">3. Install Docker</h3>
-        <pre><code>curl -fsSL https://get.docker.com | sudo sh
+      <section class="doc-section" id="install">
+        <h3 class="doc-h3">3. Install Docker and k3s</h3>
+        <p>Two separate runtimes, and it matters that they are separate: <strong>Docker</strong> only
+          <em>builds</em> the project's seven custom images; <strong>k3s</strong> <em>runs</em> everything,
+          using its own containerd image store. That is why <code>docker ps</code> is empty while the
+          stack is running, and why <code>deploy.sh prod up</code> has to copy the built images across
+          (see <a href="#why-differ">why it differs</a>).</p>
+        <pre><code># Docker (for building images)
+curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker deploy
 # log out and back in for the group change to take effect
-docker compose version   # confirm the Compose plugin is present</code></pre>
+
+# k3s (the cluster) - single node, default settings
+curl -sfL https://get.k3s.io | sudo sh -
+sudo k3s kubectl get nodes          # should list this host as Ready
+systemctl is-enabled k3s            # should print "enabled" (starts on boot)</code></pre>
+        <p><strong>Gotcha (D46):</strong> the k3s installer symlinks <code>/usr/local/bin/kubectl</code>
+          to the <code>k3s</code> binary. That bundled <code>kubectl</code> always defaults to
+          <code>/etc/rancher/k3s/k3s.yaml</code> (readable by root only) and ignores
+          <code>~/.kube/config</code>. <code>deploy.sh</code> sets <code>KUBECONFIG</code> explicitly so
+          it can't be fooled by this, but if you run <code>kubectl</code> yourself as a normal user you'll
+          see a permission error — use <code>sudo</code>, or copy the file and export
+          <code>KUBECONFIG</code>.</p>
       </section>
 
       <section class="doc-section" id="get-project">
@@ -144,75 +171,70 @@ docker compose version   # confirm the Compose plugin is present</code></pre>
         <pre><code>git clone https://github.com/&lt;your-fork-or-org&gt;/iu_project_data_engineering.git
 cd iu_project_data_engineering</code></pre>
         <p>The Kaggle dataset (~62 MB, public) is <strong>not</strong> committed and needs no manual
-          fetch step — the <code>dataset-init</code> service in <code>docker-compose.yml</code>
-          downloads it automatically into a named volume the first time you run
-          <code>docker compose up -d</code> (§7). Nothing to install on the VPS itself for this; it
-          runs inside its own container.</p>
+          fetch step — the <code>dataset-init</code> Job downloads it into a PersistentVolumeClaim
+          the first time the stack starts (§7), and skips the download on later restarts. Nothing to
+          install on the VPS for this.</p>
       </section>
 
       <section class="doc-section" id="secrets">
-        <h3 class="doc-h3">5. Configure secrets</h3>
-        <pre><code>cp .env.example .env</code></pre>
-        <p>Edit <code>.env</code> and set real values for every credential — do not ship the example placeholders to a public VPS:</p>
-        <ul>
-          <li><code>GRAFANA_ADMIN_PASSWORD</code></li>
-          <li><code>BACKEND_ADMIN_USERNAME</code> / <code>BACKEND_ADMIN_PASSWORD</code></li>
-          <li><code>BACKEND_SESSION_SECRET</code> — generate with <code>openssl rand -hex 32</code></li>
-        </ul>
-        <p>If you're putting the app behind TLS (§6, recommended for any public-facing use), also
-          set <code>BACKEND_COOKIE_SECURE=true</code> — otherwise the session cookie won't get the
-          <code>Secure</code> flag and the login can be sent in cleartext.</p>
-        <p>All other <code>.env</code> values (rates, ports, watermarks) can stay at their defaults
-          for a first deployment. <code>KAGGLE_USERNAME</code>/<code>KAGGLE_KEY</code> can stay empty
-          — the dataset is public and <code>dataset-init</code> only needs them if Kaggle ever starts
-          requiring auth for it.</p>
+        <h3 class="doc-h3">5. Configure secrets and settings</h3>
+        <p>Two files, two different jobs — mixing them up is the most common mistake here:</p>
+        <div class="table-wrap">
+          <table class="data-table">
+            <tr><th>File</th><th>Holds</th><th>Read by</th><th>Apply changes with</th></tr>
+            <tr><td><code>.env</code> (never committed)</td><td>The four secrets + optional Kaggle credentials</td><td><code>deploy.sh</code> → Kubernetes Secret <code>app-secrets</code></td><td><code>deploy.sh prod up</code>, then restart pods that read a changed secret</td></tr>
+            <tr><td><code>k8s/base/config.env</code> (committed)</td><td>Every non-secret setting: rates, watermarks, <code>BACKEND_COOKIE_SECURE</code>, storage budget…</td><td>ConfigMap <code>app-config</code></td><td><code>deploy.sh prod up</code> (the ConfigMap is content-hashed, so referencing pods roll on their own)</td></tr>
+          </table>
+        </div>
+        <pre><code>cp .env.example .env
+# edit .env and set REAL values for:
+#   GRAFANA_ADMIN_PASSWORD
+#   BACKEND_ADMIN_PASSWORD
+#   BACKEND_PLANNER_PASSWORD
+#   BACKEND_SESSION_SECRET      -&gt; generate with: openssl rand -hex 32</code></pre>
+        <p><code>deploy.sh prod</code> <strong>refuses</strong> to continue if any of those four is empty, still
+          a <code>changeme…</code> placeholder, or (for the session secret) shorter than 32 characters.
+          Locally, placeholders are allowed; on an internet-facing host a default credential is a
+          vulnerability.</p>
+        <p><strong>On Kubernetes, <code>.env</code> is read only for those secrets.</strong> Everything else
+          in <code>.env</code> (host ports, <code>PRODUCER_RATE_MSGS_PER_SEC</code>, even
+          <code>BACKEND_COOKIE_SECURE</code>) is used by <code>docker compose</code> alone and is silently
+          ignored here — change those in <code>k8s/base/config.env</code>. <code>deploy.sh</code> prints a
+          warning whenever a key exists in both files with different values. The
+          <code>BACKEND_COOKIE_SECURE</code> case is the one that bites: see §6b.
+          <code>KAGGLE_USERNAME</code>/<code>KAGGLE_KEY</code> can stay empty — the dataset is public.</p>
       </section>
 
       <section class="doc-section" id="firewall">
         <h3 class="doc-h3">6. Firewall: decide what's actually public</h3>
-        <p>Everything in <code>docker-compose.yml</code> publishes a host port by default (that's
-          what makes local development convenient), but <strong>not everything should be reachable
-          from the internet on a real VPS</strong>. Following the same principle
-          <code>REQUIREMENTS.md</code> NFR-11 uses for the production k3s target ("only ingress ports
-          open, everything else cluster-internal"):</p>
-        <div class="table-wrap">
-          <table class="data-table">
-            <tr><th>Should be public</th><th>Port</th><th>Why</th></tr>
-            <tr><td>Web app (guided walkthrough)</td><td>8000 (or your TLS reverse-proxy port, §6b)</td><td>This is the actual product</td></tr>
-            <tr><td>Grafana</td><td>3000 (or via reverse proxy)</td><td>KPI dashboards for end users</td></tr>
-          </table>
-        </div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <tr><th>Should stay internal-only</th><th>Port(s)</th></tr>
-            <tr><td>Kafka</td><td>9092</td></tr>
-            <tr><td>Cassandra</td><td>9042, 7070 (JMX exporter)</td></tr>
-            <tr><td>Spark master/worker UI, driver UI</td><td>7077, 8090, 8091, 4040</td></tr>
-            <tr><td>Producer / Spark job <code>/state</code></td><td>8001, 8002</td></tr>
-            <tr><td>Prometheus</td><td>9090</td></tr>
-            <tr><td>kafka-exporter, node-exporter</td><td>9308, 9100</td></tr>
-            <tr><td>kafka-ui (dev convenience only)</td><td>8080</td></tr>
-          </table>
-        </div>
-        <p>Do this with the host firewall — <code>ufw</code> — rather than editing every port
-          mapping in <code>docker-compose.yml</code> out of caution (Docker's own iptables rules can
-          otherwise bypass <code>ufw</code>; the explicit rules below close that gap):</p>
-        <pre><code># Only open what's actually meant to be public.
-sudo ufw allow 8000/tcp    # web app (or skip this and only allow 443 - see §6b)
-sudo ufw allow 3000/tcp    # Grafana (or skip this too if proxying both - see §6b)
+        <p>Under Kubernetes, only two things are published on the host — the <code>backend</code> and
+          <code>grafana</code> Services, which are <code>type: LoadBalancer</code> so k3s' built-in
+          servicelb binds host ports <strong>8000</strong> and <strong>3000</strong>. Everything else
+          (Kafka, Cassandra, Spark, Prometheus, kafka-ui, exporters) is cluster-internal — unlike the
+          legacy Compose stack, there's nothing extra to close. k3s' own API (6443) and kubelet (10250)
+          are open to the internet by default; the default-deny firewall from §2 is what closes them
+          (D44).</p>
+        <pre><code>sudo ufw allow 8000/tcp    # web app  (or skip this and only allow 443 - see 6b)
+sudo ufw allow 3000/tcp    # Grafana  (or skip this too if proxying both - see 6b)
 sudo ufw reload
 sudo ufw status verbose    # confirm nothing else is open</code></pre>
-        <p>If you don't need <code>kafka-ui</code> in production, comment out its service in
-          <code>docker-compose.yml</code> entirely rather than just leaving its port firewalled — one
-          less container running as root-adjacent debug tooling on a public box.</p>
+        <div class="callout warn">
+          <strong>Verify from a different machine.</strong> This exact rule set is what the D44 VPS ran,
+          and the stack was reachable and 6443/10250 were closed. But ports that Kubernetes publishes
+          itself are NAT'd by iptables rules k3s manages, which can be evaluated before
+          <code>ufw</code>'s normal inbound rules — so <em>closing</em> a published port with
+          <code>ufw</code> alone has <strong>not</strong> been verified on this project's VPS. After any
+          firewall change, test from outside: <code>nc -vz &lt;vps-ip&gt; 8000</code> (and 3000, 6443, 10250).
+          Don't rely on <code>ufw status</code> alone.
+        </div>
 
-        <h4 class="doc-h4">6b. Recommended: put a TLS reverse proxy in front (optional, but do this for real use)</h4>
-        <p>Plain HTTP means the login form for the web app and Grafana sends credentials in
-          cleartext over the public internet. <code>REQUIREMENTS.md</code>'s Phase-1 NFR-6 doesn't
-          strictly require TLS for the local-development stack, but for anything actually facing real
-          users on a public VPS, terminate TLS.
-          <a href="https://caddyserver.com" target="_blank" rel="noopener">Caddy</a> is the
-          lowest-effort option — automatic Let's Encrypt certificates, one file, no manual renewal:</p>
+        <h4 class="doc-h4">6b. Recommended: a TLS reverse proxy</h4>
+        <p>Plain HTTP sends the login forms of the web app and Grafana in cleartext over the public
+          internet. <code>REQUIREMENTS.md</code> NFR-11 explicitly disallows that for production, and
+          native ingress/TLS on k3s (it ships Traefik, unused by this project) is part of unbuilt "full
+          P6". Until then, terminate TLS in front with
+          <a href="https://caddyserver.com/docs/">Caddy</a> — automatic Let's Encrypt certificates, one
+          file:</p>
         <pre><code>sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
@@ -221,116 +243,236 @@ sudo apt update &amp;&amp; sudo apt install -y caddy</code></pre>
         <pre><code>app.your-domain.com {
     reverse_proxy localhost:8000
 }
-
 grafana.your-domain.com {
     reverse_proxy localhost:3000
 }</code></pre>
-        <pre><code>sudo systemctl reload caddy</code></pre>
-        <p>Then update the firewall to only expose Caddy, not the raw app ports:</p>
-        <pre><code>sudo ufw delete allow 8000/tcp
-sudo ufw delete allow 3000/tcp
+        <pre><code>sudo systemctl reload caddy
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
+sudo ufw delete allow 8000/tcp     # then VERIFY from outside that 8000/3000 are really closed
+sudo ufw delete allow 3000/tcp
 sudo ufw reload</code></pre>
-        <p>Set <code>BACKEND_COOKIE_SECURE=true</code> in <code>.env</code> and restart the
-          <code>backend</code> service (§8) once this is in place.</p>
+        <p>If, per the warning above, 8000/3000 are <em>still</em> reachable from outside after removing
+          the rules, <code>ufw</code> isn't governing them; the real fix is to stop publishing them on the
+          host (change the two Services to <code>ClusterIP</code> and route through Traefik — the
+          unbuilt overlay work), not more <code>ufw</code> rules.</p>
+        <p><strong>Then set the cookie flag</strong> — in <code>k8s/base/config.env</code>, <em>not</em>
+          <code>.env</code>:</p>
+        <pre><code># k8s/base/config.env
+BACKEND_COOKIE_SECURE=true</code></pre>
+        <p>and run <code>sudo ./k8s/deploy.sh prod up</code>. Do <strong>not</strong> set it before TLS
+          works: with <code>true</code> the browser refuses to send the session cookie over plain HTTP, so
+          nobody can log in. (A <code>BACKEND_COOKIE_SECURE=true</code> in <code>.env</code> does nothing
+          on Kubernetes — this is exactly the mismatch <code>deploy.sh</code> warns about.)</p>
       </section>
 
       <section class="doc-section" id="start">
         <h3 class="doc-h3">7. Start the stack</h3>
-        <pre><code>docker compose up -d --build</code></pre>
-        <p>First start builds the custom images (<code>producer</code>,
-          <code>spark_job</code>/<code>spark-worker</code>, <code>cassandra</code>,
-          <code>grafana</code>, <code>backend</code>) and pre-warms Spark's dependency cache — expect
-          this to take several minutes. Watch it come up:</p>
-        <pre><code>docker compose ps</code></pre>
-        <p>Every long-running service should reach <code>healthy</code>; the
-          <code>*-init</code>/<code>*-schema-init</code> one-shot containers should show
-          <code>Exited (0)</code> — that's success, not a crash (see
-          <a href="operations.html#troubleshooting">Operations — Troubleshooting</a> if anything
-          looks different). Cold start details (baseline recomputation, catching up on a backlog) are
-          in <a href="operations.html#resuming-locally">Operations — Resuming locally</a> — the same
-          behavior applies on first VPS start.</p>
-        <p>Then open (through your firewall/proxy from §6):</p>
-        <ul>
-          <li><code>https://app.your-domain.com</code> (or <code>http://&lt;vps-ip&gt;:8000</code>) —
-            log in with <code>BACKEND_ADMIN_USERNAME</code>/<code>PASSWORD</code> from
-            <code>.env</code>.</li>
-          <li><code>https://grafana.your-domain.com</code> (or
-            <code>http://&lt;vps-ip&gt;:3000</code>) — log in with
-            <code>GRAFANA_ADMIN_USER</code>/<code>GRAFANA_ADMIN_PASSWORD</code>.</li>
-        </ul>
+        <pre><code>sudo ./k8s/deploy.sh prod check     # read-only: k3s active? API reachable? storage class? .env sane?
+sudo ./k8s/deploy.sh prod up</code></pre>
+        <p><code>check</code> changes nothing — run it whenever something seems off. <code>up</code> is
+          idempotent and safe to re-run. It builds the seven custom images, loads them into k3s'
+          containerd, stages <code>k8s/base/generated/</code> from <code>infra/</code>, creates the
+          namespace, generates <code>app-secrets</code> from <code>.env</code>, runs
+          <code>kubectl apply -k k8s/base</code>, then waits and prints a verdict. First start takes
+          several minutes (Spark dependency pre-warm, Kaggle download). Watch it:</p>
+        <pre><code>sudo ./k8s/deploy.sh prod status
+sudo kubectl -n iot-pipeline get pods -w</code></pre>
+        <p>Long-running pods should reach <code>Running</code>; the three one-shot Jobs
+          (<code>dataset-init</code>, <code>kafka-topic-init</code>, <code>cassandra-schema-init</code>)
+          should show <code>Completed</code> — that's success, not a crash. A restart or two of
+          <code>backend</code>, <code>kafka-exporter</code> or <code>spark-job</code> while the stack is
+          starting is expected: they can start before their dependencies are ready and recover by
+          themselves (init-wait loops plus normal restart backoff). A pod that keeps restarting after
+          several minutes is not. Then open
+          <code>http://&lt;vps-ip&gt;:8000</code> (or your TLS hostname) and log in as the admin or planner.</p>
+        <p><strong>Want to run each step yourself?</strong> The README's
+          <em>"What <code>deploy.sh up</code> does, step by step"</em> lists the raw
+          <code>docker build</code> / <code>k3s ctr images import</code> / <code>kubectl</code> commands, in
+          order, for both environments.</p>
       </section>
 
       <section class="doc-section" id="reboot">
         <h3 class="doc-h3">8. Make sure it survives a reboot</h3>
-        <p>Every long-running service in <code>docker-compose.yml</code> is set to
-          <code>restart: unless-stopped</code>, so as long as the Docker daemon itself starts on
-          boot, the whole stack comes back after an unattended VPS reboot (provider maintenance,
-          kernel update, etc.) with no manual step — the <code>get.docker.com</code> installer
-          already enables the <code>docker</code> systemd service by default; confirm with:</p>
-        <pre><code>systemctl is-enabled docker   # should print "enabled"</code></pre>
-        <p>This satisfies <code>REQUIREMENTS.md</code> NFR-8 (recoverability) unattended, which is
-          stronger than the local-dev expectation of manually re-running
-          <code>docker compose up -d</code>.</p>
+        <pre><code>systemctl is-enabled k3s     # must print "enabled"  (deploy.sh check verifies this)
+systemctl is-enabled docker  # only needed for building; harmless either way</code></pre>
+        <p>k3s starts on boot and Kubernetes recreates every pod, so the stack returns on its own
+          (<code>REQUIREMENTS.md</code> NFR-8). Persistent data survives because it lives on the host disk
+          under <code>/var/lib/rancher/k3s/storage</code>, not in the pods.</p>
+        <p><strong>One trap:</strong> the manifests reference images tagged <code>:local</code> that exist
+          <em>only</em> in this host's k3s containerd — there's no registry to pull them from. If those
+          images are ever removed, a recreated pod fails with <code>ErrImagePull</code>. Two things do that:
+          <code>k3s crictl rmi --prune</code>, and kubelet's automatic image garbage collection once the disk
+          passes ~85% full. Keep the disk well below that, and if it happens, just re-run
+          <code>sudo ./k8s/deploy.sh prod up</code> — it rebuilds and reloads every image.
+          (<code>docker system prune</code> is <em>safe</em> for this: Docker's store is separate from
+          k3s'.)</p>
       </section>
 
       <section class="doc-section" id="backups">
         <h3 class="doc-h3">9. Backups</h3>
-        <p>All stateful data lives in named Docker volumes: <code>kafka_data</code>,
-          <code>cassandra_data</code>, <code>prometheus_data</code>, <code>grafana_data</code>,
-          <code>spark_checkpoints</code>, <code>kaggle_dataset</code>. Back up the ones worth backing
-          up with the volume stopped (or accept a slightly-inconsistent live snapshot for a
-          lower-stakes demo deployment):</p>
-        <pre><code>docker compose stop
-sudo tar czf backup-$(date +%F).tar.gz \
-  -C /var/lib/docker/volumes \
-  iu-sensor-pipeline_cassandra_data \
-  iu-sensor-pipeline_grafana_data \
-  iu-sensor-pipeline_prometheus_data
-docker compose start</code></pre>
-        <p>(Kafka's <code>kafka_data</code> and <code>spark_checkpoints</code> are consumer/checkpoint
-          state, and <code>kaggle_dataset</code> is a public dataset <code>dataset-init</code>
-          re-fetches automatically if it's ever missing — none of those three are worth backing up.
-          Cassandra's data is the actual sensor history and is worth backing up for real.) Copy the
-          archive off the VPS (<code>scp</code>/<code>rsync</code> to another machine, or your
-          provider's snapshot feature on the whole disk) — a backup that only lives on the box it's
-          protecting against isn't a backup.</p>
+        <p>All state lives in PersistentVolumeClaims backed by <code>local-path</code> directories on this
+          host. Deleting the namespace (<code>deploy.sh prod down</code>) destroys them, and nothing
+          replicates them (single node) — so a backup that never leaves the VPS isn't a backup.
+          Only the Cassandra data is worth backing up for real: it's the sensor history. Kafka data and
+          Spark checkpoints are consumer state, and the Kaggle dataset is re-fetched automatically.
+          Grafana and Prometheus data are optional.</p>
+        <pre><code># The directories are named pvc-&lt;uid&gt;_iot-pipeline_&lt;claim&gt;; confirm with:
+sudo ls /var/lib/rancher/k3s/storage
+
+# 1. Stop the only writer to Cassandra (Kafka retains the backlog; spark-job catches up
+#    from its checkpoint afterwards)
+sudo kubectl -n iot-pipeline scale deployment spark-job --replicas=0
+# 2. Flush memtables to disk on every Cassandra pod (adjust for the pods that exist)
+sudo kubectl -n iot-pipeline exec cassandra-0 -- nodetool flush
+# 3. Archive the Cassandra (and optionally Grafana/Prometheus) volumes
+cd /var/lib/rancher/k3s/storage
+sudo tar czf ~/backup-$(date +%F).tar.gz $(ls | grep -E '_iot-pipeline_(data-cassandra-|grafana-data|prometheus-data)')
+# 4. Resume
+sudo kubectl -n iot-pipeline scale deployment spark-job --replicas=1</code></pre>
+        <p>Copy the archive off the VPS (<code>scp</code>/<code>rsync</code>, or your provider's
+          whole-disk snapshot). Caveats: this is a flushed, writers-stopped copy of a live Cassandra —
+          good enough for a demo-grade deployment, not a substitute for <code>nodetool snapshot</code>-based
+          backups on anything critical. The restore procedure (stop the Cassandra pods, place the
+          directories into the new volumes) has <strong>not</strong> been rehearsed on this project — do a
+          test restore before you rely on it.</p>
       </section>
 
       <section class="doc-section" id="updating">
         <h3 class="doc-h3">10. Updating</h3>
         <pre><code>cd iu_project_data_engineering
 git pull
-docker compose up -d --build</code></pre>
-        <p>Compose only recreates containers whose image or config actually changed — this is safe to
-          run repeatedly. If a <code>pip-compile</code>d <code>requirements.txt</code> changed,
-          <code>--require-hashes</code> still applies automatically at build time (see
-          <a href="containers.html">Architecture &amp; Containers</a>' supply-chain notes).</p>
+sudo ./k8s/deploy.sh prod check</code></pre>
+        <p>Then apply what changed. <strong>These are different commands on purpose</strong> — images are
+          tagged <code>:local</code>, and re-loading an image under the same tag isn't a change Kubernetes
+          can see in the pod spec, so <code>up</code> alone would leave the <em>old</em> container running:</p>
+        <div class="table-wrap">
+          <table class="data-table">
+            <tr><th>What changed</th><th>Run</th></tr>
+            <tr><td><code>backend/</code> (incl. the frontend it bundles)</td><td><code>sudo ./k8s/deploy.sh prod update backend</code></td></tr>
+            <tr><td><code>producer/</code></td><td><code>… update producer</code></td></tr>
+            <tr><td><code>spark_job/</code> (both images are built from it)</td><td><code>… update spark-job spark-worker</code></td></tr>
+            <tr><td><code>infra/cassandra/</code> (restarts the database, one pod at a time)</td><td><code>… update cassandra</code></td></tr>
+            <tr><td><code>infra/grafana/</code></td><td><code>… update grafana</code></td></tr>
+            <tr><td><code>k8s/base/*.yaml</code>, <code>k8s/base/config.env</code>, or <code>infra/</code> config (Prometheus/Loki/Grafana provisioning)</td><td><code>sudo ./k8s/deploy.sh prod up</code> (settings roll their pods automatically)</td></tr>
+            <tr><td>A secret in <code>.env</code></td><td><code>… up</code>, then <code>kubectl -n iot-pipeline rollout restart deployment/&lt;name&gt;</code> for pods that read it (a changed Secret doesn't roll pods)</td></tr>
+          </table>
+        </div>
+        <p>If <code>up</code> fails with a Job field being <em>immutable</em>, delete that Job
+          (<code>kubectl -n iot-pipeline delete job &lt;name&gt;</code>) and re-run <code>up</code> — the init
+          Jobs are idempotent. If a <code>pip-compile</code>d <code>requirements.txt</code> changed,
+          <code>--require-hashes</code> still applies at build time (see
+          <a href="containers.html">Architecture &amp; Containers</a>' supply-chain notes). Never repeat
+          the full <code>down</code>/<code>up</code> cycle for a code change — it deletes the data.</p>
       </section>
 
       <section class="doc-section" id="monitoring">
         <h3 class="doc-h3">11. Monitoring, logs, and troubleshooting</h3>
-        <pre><code>docker compose ps                    # health at a glance
-docker compose logs -f backend       # tail one service
-docker compose logs --since 1h       # everything, last hour</code></pre>
+        <pre><code>sudo ./k8s/deploy.sh prod status                       # pods, PVCs, Services
+sudo kubectl -n iot-pipeline get pods                  # health at a glance
+sudo kubectl -n iot-pipeline logs -f deploy/backend    # tail one service
+sudo kubectl -n iot-pipeline logs statefulset/kafka --since=1h
+sudo kubectl -n iot-pipeline describe pod &lt;name&gt;       # why is it Pending / CrashLoopBackOff?
+sudo kubectl top nodes                                 # headroom (metrics-server ships with k3s)</code></pre>
         <p>Grafana's dashboards (KPI-1 through KPI-5) are the primary operational view once running —
-          see <code>REQUIREMENTS.md</code> §9. For anything that looks wrong at the infrastructure
-          level (a container crash-looping, an unexpected timing issue), check
-          <a href="operations.html#troubleshooting">Operations — Troubleshooting</a> first — most
-          non-obvious issues hit during local development apply identically on a VPS.</p>
+          see <code>REQUIREMENTS.md</code> §9 — and the admin role's Kubernetes tab shows the same pod health
+          inside the web app, with centralized logs available alongside it. For anything that looks wrong at the
+          infrastructure level, check
+          <a href="operations.html#troubleshooting">Operations — Troubleshooting</a> first.</p>
       </section>
 
       <section class="doc-section" id="teardown">
         <h3 class="doc-h3">12. Tearing down</h3>
-        <pre><code>docker compose down        # stop everything, keep data (volumes survive)
-docker compose down -v     # stop everything AND delete all data - irreversible</code></pre>
+        <pre><code>sudo ./k8s/deploy.sh prod down          # lists the PVCs to be destroyed, asks you to type the namespace
+sudo ./k8s/deploy.sh prod down --yes    # same, non-interactive (scripts only)</code></pre>
+        <p>This deletes the <code>iot-pipeline</code> namespace and, with it, every PVC and all its data
+          — irreversible. It deliberately leaves <strong>k3s itself</strong> (and its system pods, Traefik,
+          the storage provisioner) running, so a later <code>up</code> starts from a healthy cluster.
+          Verify the volumes are gone with <code>du -sh /var/lib/rancher/k3s/storage</code>. Optional
+          cleanup it does not do: the loaded images (<code>k3s crictl rmi …</code>) and Docker's build
+          cache (<code>docker system prune -a</code>).</p>
+        <p>To remove <em>everything</em>, including k3s and every namespace on it:
+          <code>sudo /usr/local/bin/k3s-uninstall.sh</code> — this is the cluster, not the project, so it
+          is intentionally not part of <code>deploy.sh</code>.</p>
+      </section>
+
+      <!-- ===================== WHY LOCAL AND PROD DIFFER ===================== -->
+      <section class="doc-section" id="why-differ">
+        <h3 class="doc-h3">Local vs production: what differs, and why</h3>
+        <p>Both environments run <code>k8s/deploy.sh</code> against the same manifests
+          (<code>k8s/base</code>) with the same steps: build images → load them into the cluster → stage
+          <code>generated/</code> config → namespace → Secret from <code>.env</code> →
+          <code>kubectl apply -k</code> → wait. Manifests, the Secret flow, <code>config.env</code>, image
+          tags, RBAC and readiness checks are <strong>identical</strong>. Only what has to differ does
+          (each is a commented branch in the script):</p>
+        <div class="table-wrap">
+          <table class="data-table">
+            <tr><th>Aspect</th><th>Local</th><th>Production</th><th>Why it differs</th></tr>
+            <tr><td>Who owns the cluster</td><td>Creates it on <code>up</code>, deletes it on <code>down</code></td><td>Never creates or deletes k3s; manages only the <code>iot-pipeline</code> namespace</td><td>A dev cluster is disposable and a clean slate is the point. The prod cluster is long-lived host infrastructure (installed once, possibly running other workloads); a project script must not be able to remove it.</td></tr>
+            <tr><td>Kubernetes flavor</td><td>k3d (k3s in Docker containers)</td><td>Native k3s (systemd service)</td><td>Same k3s distribution (D43), so manifests behave the same. k3d needs only Docker and is throwaway; on a server, native k3s avoids Docker-in-Docker and has its own lifecycle (D18).</td></tr>
+            <tr><td>How images get in</td><td><code>k3d image import</code></td><td><code>docker save … | k3s ctr images import -</code></td><td>Different image stores: k3d nodes are containers with their own; native k3s has its <em>own</em> containerd, separate from Docker's. No registry exists yet.</td></tr>
+            <tr><td>Which kubeconfig</td><td><code>k3d kubeconfig write</code></td><td><code>/etc/rancher/k3s/k3s.yaml</code> (<code>PROD_KUBECONFIG</code> to override)</td><td>Explicit in both, never ambient (the D46 bug): a k3s host's <code>kubectl</code> silently ignores <code>~/.kube/config</code>, which would aim a "local" deploy at production or vice versa.</td></tr>
+            <tr><td>How ports reach the host</td><td><code>-p 8000:8000@loadbalancer</code> at cluster creation</td><td>servicelb binds host 8000/3000; <code>ufw</code> gates them</td><td>Same <code>LoadBalancer</code> Services in both. k3d's "node" is a container, so its ports must be mapped up front; native k3s binds directly on the host.</td></tr>
+            <tr><td>Config validation</td><td>Placeholder secrets allowed</td><td>Placeholders and &lt;32-char session secret are fatal</td><td>Local is reachable only from your machine; prod is internet-facing, where a default credential is a vulnerability.</td></tr>
+            <tr><td><code>down</code></td><td>No confirmation; deletes the cluster</td><td>Lists PVCs, requires typing the namespace (or <code>--yes</code>); refuses without a terminal</td><td>Local data is disposable. Prod's Cassandra volumes are the only copy of the sensor history; deletion is irreversible.</td></tr>
+            <tr><td>Node count</td><td>1</td><td>1 today; multi-node <strong>refused</strong></td><td>Images are loaded into one host and PVCs are <code>local-path</code> (one node's disk); on 3 nodes pods would land where neither exists. Fix = registry + RWX storage + ingress/TLS + WireGuard = the unbuilt production overlay ("full P6").</td></tr>
+            <tr><td>Not in <code>deploy.sh</code></td><td>—</td><td>Host hardening, installing k3s, TLS, backups, reboot survival</td><td>One-time or ongoing operator tasks on a specific machine — not part of a repeatable app deploy. Documented in this runbook instead.</td></tr>
+          </table>
+        </div>
+        <p><strong>Known gaps, not intentional differences:</strong> no TLS/ingress (plain HTTP), single
+          node, no image registry, manual backups. These are unbuilt work
+          (<code>REQUIREMENTS.md</code> §4.1 / D48), and <code>deploy.sh</code> is structured so a
+          production Kustomize overlay can add them without changing how you run it.</p>
+      </section>
+
+      <!-- ===================== APPENDIX: LEGACY COMPOSE ===================== -->
+      <section class="doc-section" id="legacy-compose">
+        <h3 class="doc-h3">Appendix: legacy docker compose</h3>
+        <p>Before D43 this project deployed to a VPS with <code>docker compose</code>, and that is what
+          this guide used to describe. It still works, but it is <strong>no longer the production
+          path</strong>, and it differs in ways that matter:</p>
+        <ul>
+          <li>The admin's Cassandra node-deploy and Kubernetes-status tabs return <code>503</code> —
+            they need the Kubernetes API.</li>
+          <li>It reads <em>all</em> its settings from <code>.env</code> (unlike Kubernetes, where
+            non-secret settings live in <code>k8s/base/config.env</code>).</li>
+          <li>Volumes are named Docker volumes; <code>docker compose down -v</code> deletes them.</li>
+        </ul>
+        <div class="callout warn">
+          <strong>Security: the firewall does not protect Compose's ports.</strong>
+          <code>docker-compose.yml</code> publishes <em>every</em> service on all interfaces — Kafka
+          (9092), Cassandra (9042, 7070), Spark (7077, 8090, 8091, 4040), the producer/spark-job state
+          ports (8001, 8002), Prometheus (9090), Loki (3100), the exporters (9308, 9100) and kafka-ui
+          (8080), besides the app on 8000 and Grafana on 3000. Docker writes its own iptables rules,
+          which are evaluated <strong>before</strong> <code>ufw</code>, so <code>ufw default deny
+          incoming</code> and <code>ufw allow 8000</code> do <em>not</em> keep those other ports off the
+          internet. (An earlier version of this guide claimed <code>ufw allow</code> rules "close that
+          gap" — they don't; that was wrong.) Before running Compose on a public host, either bind the
+          internal ports to loopback in <code>docker-compose.yml</code> (<code>"127.0.0.1:9092:9092"</code>
+          instead of <code>"9092:9092"</code>, for every port except the app and Grafana) or add rules to
+          Docker's <code>DOCKER-USER</code> chain — then verify with a port scan from another machine.
+          Comment out <code>kafka-ui</code> entirely if you don't need it.
+        </div>
+        <pre><code>docker compose up -d --build --wait     # up (needs Docker + the compose plugin; no k3s)
+docker compose ps                       # every long-running service healthy; *-init = Exited (0)
+docker compose logs -f backend          # logs
+git pull &amp;&amp; docker compose up -d --build   # update (recreates only what changed)
+docker compose down                     # stop, keep volumes
+docker compose down -v                  # stop AND delete all data - irreversible</code></pre>
+        <p>Sizing (§1), server hardening (§2) and the Caddy TLS proxy (§6b, pointing at
+          <code>localhost:8000</code>/<code>3000</code>) apply unchanged. Every long-running service has
+          <code>restart: unless-stopped</code>, so the stack returns after a reboot as long as the Docker
+          service is enabled (<code>systemctl is-enabled docker</code>). Backups are the named volumes:
+          <code>docker compose stop</code>, then <code>tar</code> the
+          <code>iu-sensor-pipeline_cassandra_data</code> (and optionally
+          <code>grafana_data</code>/<code>prometheus_data</code>) directories under
+          <code>/var/lib/docker/volumes</code>, then <code>docker compose start</code>.</p>
       </section>
 
     </div>
 
     <footer class="page-foot">
-      <span>Deployment guide · single-host Compose on a hardened VPS.</span>
+      <span>Deployment guide · single-node k3s via <code>k8s/deploy.sh prod</code> (legacy Compose in the appendix).</span>
       <span><a href="index.html">&larr; Back to documentation hub</a></span>
     </footer>
   </main>

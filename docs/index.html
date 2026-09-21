@@ -60,8 +60,9 @@
         into Kafka, Spark Structured Streaming validates and scores it, Cassandra
         stores it, and a role-based web app plus a Grafana KPI deck put it in front of
         two audiences — city planners and infrastructure operators. Nineteen containers,
-        one <code>./k8s/local-up.sh</code> — a local Kubernetes (k3d) cluster as of D43,
-        live-verified end to end; <code>docker compose up -d</code> still works as a
+        one <code>./k8s/deploy.sh &lt;local|prod&gt; up</code> — a local Kubernetes (k3d)
+        cluster for development, a native k3s host for production, both from the same
+        manifests (D43, D48); <code>docker compose up -d</code> still works as a
         legacy fallback.
       </p>
       <p class="hero-lede">
@@ -87,9 +88,9 @@
         <p class="hub-card-eyebrow">Runbook</p>
         <h3>Deployment</h3>
         <p>
-          Putting this on a real, public Linux VPS: sizing, hardening, secrets, the
-          firewall/TLS decision, backups, updates, and tearing it down again — the
-          exact guide used for the project's own live VPS deploy.
+          Putting this on a real, public Linux VPS with k3s: sizing, hardening, secrets
+          vs settings, the firewall/TLS decision, <code>deploy.sh prod</code>, backups,
+          updates, and tearing it down again — plus why local and production differ.
         </p>
       </a>
 

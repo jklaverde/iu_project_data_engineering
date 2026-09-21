@@ -80,7 +80,7 @@
         <table class="data-table"><tbody data-filter-group>
           <tr data-name="index.html"><td>index.html</td><td>This documentation site's hub — links to every page below.</td></tr>
           <tr data-name="containers.html containers-data.js containers-charts.js"><td>containers.html (+ *-data.js, *-charts.js)</td><td>Every module explained, interactive animated data-flow/boot-order diagrams, per-container reference, security model, supply-chain policy.</td></tr>
-          <tr data-name="deployment.html"><td>deployment.html</td><td>Step-by-step guide to deploying the stack on a single public VPS — hardening, firewall, optional TLS reverse proxy, backups, updates.</td></tr>
+          <tr data-name="deployment.html"><td>deployment.html</td><td>Production runbook for a single-node k3s VPS — hardening, installing k3s, secrets vs settings, firewall/TLS, <code>deploy.sh prod</code>, reboots, backups, updates, teardown — plus why local and production differ and a legacy-Compose appendix.</td></tr>
           <tr data-name="operations.html"><td>operations.html</td><td>Status/continuation notes (what's done, implementation decisions beyond the spec, where to pick this up next) plus the full troubleshooting log, by phase.</td></tr>
           <tr data-name="reference.html"><td>reference.html</td><td>This file.</td></tr>
           <tr data-name="assets docs.css docs.js"><td>assets/docs.css, assets/docs.js</td><td>The shared design system and sidebar filter/scroll-spy behavior every page above uses — change the look or the nav logic once, here.</td></tr>
@@ -260,11 +260,12 @@
 
     <section class="doc-section" id="k8s">
       <div class="category-head"><h2><span class="swatch" style="background:var(--cat-deploy)"></span>k8s/</h2></div>
-      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">D43's Kubernetes manifests (Kustomize, no Helm) and the k3d local runtime scripts — live-verified end to end, see <a href="operations.html#decisions">Implementation decisions</a>.</p>
+      <p class="category-desc" style="text-align:left; margin-bottom:1rem;">D43's Kubernetes manifests (Kustomize, no Helm) and the deploy scripts (D48: one <code>deploy.sh</code> for local k3d and production k3s) — live-verified end to end, see <a href="operations.html#decisions">Implementation decisions</a>.</p>
       <div class="table-wrap">
         <table class="data-table"><tbody data-filter-group>
-          <tr data-name="local-up.sh"><td>local-up.sh</td><td>Local entrypoint: creates/reuses the k3d cluster, builds and imports the 7 custom images, stages <code>base/generated/</code> from <code>infra/</code>, generates the <code>app-secrets</code> Secret from <code>.env</code>, applies <code>k8s/base</code>, best-effort waits for readiness.</td></tr>
-          <tr data-name="local-down.sh"><td>local-down.sh</td><td>Tears down the local k3d cluster entirely — the k3d equivalent of <code>docker compose down -v</code>, deletes all data.</td></tr>
+          <tr data-name="deploy.sh"><td>deploy.sh</td><td>The single deploy entrypoint (D48): <code>deploy.sh &lt;local|prod&gt; &lt;check|up|update|status|down&gt;</code>. Same steps for both environments (build the 7 custom images, load them into the cluster, stage <code>base/generated/</code> from <code>infra/</code>, create the namespace, generate <code>app-secrets</code> from <code>.env</code>, <code>kubectl apply -k</code>, wait + verdict); each local/prod difference is an isolated, commented branch — see <a href="deployment.html#why-differ">Local vs production</a>.</td></tr>
+          <tr data-name="local-up.sh"><td>local-up.sh</td><td>One-line wrapper for <code>deploy.sh local up</code>, kept so older references keep working.</td></tr>
+          <tr data-name="local-down.sh"><td>local-down.sh</td><td>One-line wrapper for <code>deploy.sh local down</code> (deletes the k3d cluster and its data).</td></tr>
           <tr data-name="base/kustomization.yaml"><td>base/kustomization.yaml</td><td>The Kustomize base: lists every resource file plus the <code>configMapGenerator</code> entries that read from a gitignored <code>base/generated/</code> (kustomize refuses paths outside its own root).</td></tr>
           <tr data-name="base/namespace.yaml"><td>base/namespace.yaml</td><td>The <code>iot-pipeline</code> namespace everything else lives in.</td></tr>
           <tr data-name="base/rbac.yaml"><td>base/rbac.yaml</td><td>The <code>backend</code> ServiceAccount + namespaced Role + RoleBinding (NFR-16) — replaces D42's Docker-socket mount with narrow, named-resource Kubernetes API access; also the <code>promtail</code> ServiceAccount/ClusterRole for pod-log discovery.</td></tr>

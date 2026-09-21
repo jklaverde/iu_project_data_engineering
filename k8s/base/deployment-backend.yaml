@@ -6,9 +6,11 @@ metadata:
   labels:
     app: backend
 spec:
-  # LoadBalancer so k3d's built-in servicelb can bind the host port mapping
-  # k8s/local-up.sh passes at cluster-create time (`-p 8000:8000@loadbalancer`)
-  # - see k8s/local-up.sh for the exact k3d syntax and its confidence caveat.
+  # LoadBalancer so k3s' built-in servicelb binds the host port: under k3d via
+  # the `-p 8000:8000@loadbalancer` mapping k8s/deploy.sh passes at
+  # cluster-create time, under native k3s directly on the host (gated by ufw).
+  # One manifest serves both - see k8s/deploy.sh and docs/deployment.html
+  # ("Local vs production").
   type: LoadBalancer
   selector:
     app: backend

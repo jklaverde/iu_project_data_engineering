@@ -95,8 +95,11 @@
         onboarding script D43's "five bugs" claim describes — had never once been run on
         this VPS; running it for real surfaced a sixth bug (a <code>kubectl</code>/
         <code>KUBECONFIG</code> conflict on hosts that also have native k3s installed) and
-        confirmed the other five are genuinely fixed. Full P6 (3-VPS k3s, hardened per
-        NFR-11) and P7 (endurance) not started.
+        confirmed the other five are genuinely fixed. D48 unified local and production
+        deployment behind one script (<code>k8s/deploy.sh</code>) and corrected several documentation
+        defects (see <a href="#d48">D48</a>) — including that the production runbook still described
+        <code>docker compose</code>. Full P6 (3-VPS k3s, hardened per NFR-11) and P7 (endurance) not
+        started.
       </p>
       <div class="table-wrap">
         <table class="data-table">
@@ -686,12 +689,87 @@
             resources, ran the fixed script, confirmed all three gone via <code>docker ps</code>/
             <code>network ls</code>/<code>volume ls</code>.</li>
         </ul>
+
+        <h4 class="doc-h4" id="d48"><code>k8s/deploy.sh</code>: one deploy mechanism for local and production,
+          and the documentation that didn't match reality (D48)</h4>
+        <ul>
+          <li><strong>The problem:</strong> D43 promised one manifest set for local (k3d) and production
+            (k3s), but only half was built. Local had <code>local-up.sh</code>; production had a
+            hand-typed list of <code>kubectl</code> commands in the README that silently omitted steps
+            <code>local-up.sh</code> performs. <code>docs/deployment.html</code> was never updated after
+            D43 and still called <code>docker compose</code> the production path — while the VPS was in
+            fact running k3s (D44–D47).</li>
+          <li><strong>Fix:</strong> <code>k8s/deploy.sh &lt;local|prod&gt; &lt;check|up|update|status|down&gt;</code>
+            — the shared steps once, with each local/prod difference isolated in a commented branch
+            (<a href="deployment.html#why-differ">justified here</a>). <code>local-up.sh</code>/<code>local-down.sh</code>
+            remain as one-line wrappers so existing references keep working.</li>
+          <li><strong>Documentation defects found and fixed while doing it</strong> (each was misleading a
+            reader, not just incomplete):
+            <ul>
+              <li><strong><code>.env</code> vs <code>k8s/base/config.env</code>.</strong> The README told you
+                to set <code>PRODUCER_RATE_MSGS_PER_SEC</code>/<code>PRODUCER_REPLAY_ROW_LIMIT</code> in
+                <code>.env</code>. On Kubernetes <code>.env</code> is read only for six secrets; those keys
+                live in <code>config.env</code>, so the documented endurance-run and demo-hand-over
+                procedures did nothing. Found live: this VPS's <code>.env</code> had
+                <code>BACKEND_COOKIE_SECURE=true</code> while <code>config.env</code> says
+                <code>false</code> — silently ignored. <code>deploy.sh</code> now warns on any such
+                mismatch.</li>
+              <li><strong>The prod path skipped required steps:</strong> staging the gitignored
+                <code>k8s/base/generated/</code> (without it <code>kubectl apply -k</code> fails on a fresh
+                clone), creating the namespace before the Secret, stripping trailing <code># comments</code>
+                from <code>.env</code> values, and loading the images into k3s' <em>own</em> containerd
+                (Docker's image store is not visible to k3s).</li>
+              <li><strong>"Picks up a code change automatically, every <code>local-up.sh</code> run" was
+                wrong.</strong> Images are tagged <code>:local</code>; re-importing under the same tag isn't
+                a pod-spec change, so <code>kubectl apply</code> leaves the old container running. Code
+                changes need a rollout restart in local and prod alike — now <code>deploy.sh update
+                &lt;service&gt;</code>. (Derived from how Kubernetes decides to replace a pod and from the
+                README's own explanation for the prod path; not separately re-run on k3d.)</li>
+              <li><strong>Stale images:</strong> when this was written, k3s' containerd held images built
+                before commit <code>6e0f87b</code> (<code>backend</code>, <code>spark_job</code>)
+                — a plain re-apply would have redeployed the old code.</li>
+              <li><strong>The compose firewall claim was false.</strong> <code>deployment.html</code> said
+                <code>ufw allow</code> rules "close the gap" that Docker's iptables rules open. They don't:
+                Docker's rules are evaluated before ufw's, so every port <code>docker-compose.yml</code>
+                publishes (Kafka, Cassandra, Prometheus, Spark UIs, …) is reachable from the internet
+                regardless. Corrected, with the real mitigation (bind to <code>127.0.0.1</code> or use the
+                <code>DOCKER-USER</code> chain).</li>
+              <li><strong>Missing k3s operations guidance:</strong> the deployment guide's backups, updates,
+                monitoring, teardown and reboot sections described Docker volumes and
+                <code>docker compose</code> commands. Rewritten for PVCs under
+                <code>/var/lib/rancher/k3s/storage</code>, <code>kubectl</code>, and the
+                <code>:local</code>-image-GC trap (a recreated pod can't pull an image that only ever
+                existed in this host's containerd).</li>
+            </ul>
+          </li>
+          <li><strong>Deliberate safety behavior in <code>prod</code>:</strong> refuses placeholder or short
+            secrets; <code>down</code> touches only the namespace and needs a typed confirmation; refuses
+            multi-node clusters (images and <code>local-path</code> PVCs are single-host); always uses an
+            explicit kubeconfig (D46). There is no <code>set -x</code> trace mode because it would print the
+            secrets read from <code>.env</code>.</li>
+          <li><strong>Verification status — read this:</strong> <code>deploy.sh check</code> (both
+            environments, against the real k3s API), argument handling, the config-validation failure paths
+            and the drift warning were run on the production VPS, and the <code>kubectl</code>/<code>k3s
+            ctr</code> command shapes were confirmed. <code>up</code>, <code>update</code> and
+            production <code>down</code> were <strong>not</strong> run end to end when this was written: their
+            shared steps are ported unchanged from the live-verified D46/D47 scripts, but the new prod
+            branches (image load via <code>k3s ctr</code>, namespace-only <code>down</code>, the
+            confirmation prompt) are unproven until the first real run. Update this entry with the outcome.</li>
+          <li><strong>Not fixed (unbuilt, called out instead):</strong> TLS/ingress, multi-node, a registry,
+            automated backups, and the restore procedure (never rehearsed). A production Kustomize overlay
+            is the intended home for the first three.</li>
+        </ul>
       </div>
     </section>
 
     <section class="doc-section" id="interim-vps">
       <div class="category-head"><h2><span class="swatch" style="background:var(--cat-ops)"></span>Interim VPS deployment</h2></div>
       <div class="prose-body">
+        <p><strong>Historical (pre-D43).</strong> This section records the first VPS deployment, which
+          used <code>docker compose</code>. That VPS has since moved to single-node k3s (D44–D47), and
+          <a href="deployment.html">the deployment guide</a> now documents the k3s path
+          (<code>k8s/deploy.sh prod</code>, D48) with Compose only as a legacy appendix. What follows is
+          kept because the lessons still apply.</p>
         <p>Not the full <code>REQUIREMENTS.md</code> §4.1 target (3-VPS k3s — that's "full P6," not
           started). This is smaller, real work: making the existing single-host Compose stack actually
           deployable on a public VPS — and <strong>it has genuinely been deployed to and exercised on a
@@ -741,7 +819,12 @@
             the Cassandra scale-out feature end-to-end on real k3s and fixing three real bugs it
             surfaced (two RBAC gaps and a silent ring-join failure), producing a real, exercised manifest
             starting point (<code>k8s/base/</code>) — StatefulSets for Kafka/Cassandra (D19, no
-            operators) are done, as is the RBAC design. What's still needed for the real multi-node
+            operators) are done, as is the RBAC design. D48 added <code>k8s/deploy.sh</code>, so the
+            remaining P6 work should land as a <strong>production Kustomize overlay</strong>
+            (<code>k8s/overlays/prod</code>: registry image references, Traefik ingress + TLS, the
+            <code>BACKEND_COOKIE_SECURE=true</code> setting, replica counts) that <code>deploy.sh prod</code>
+            applies — not as a second deploy procedure, and <code>deploy.sh</code>'s multi-node refusal
+            should be lifted only once that overlay exists. What's still needed for the real multi-node
             target: Traefik ingress + real TLS (D25, self-signed was the interim-VPS-only choice),
             flannel WireGuard inter-node traffic, NFR-11 firewall rules,
             NFR-12 node sizing, and re-checking every PVC's <code>local-path</code>
