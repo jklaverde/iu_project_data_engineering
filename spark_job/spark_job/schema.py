@@ -51,9 +51,15 @@ def parse_and_cast(kafka_df):
     """Kafka raw rows (key/value bytes) -> a typed DataFrame matching the
     producer's canonical event schema, with numeric metrics as double and
     timestamps parsed as Spark TimestampType."""
-    parsed = kafka_df.select(
-        F.from_json(F.col("value").cast("string"), EVENT_SCHEMA).alias("event")
-    ).select("event.*")
+    parsed = (
+        kafka_df.select(F.from_json(F.col("value").cast("string"), EVENT_SCHEMA).alias("event"))
+        # from_json returns a null struct for a value that isn't parseable
+        # JSON at all (as opposed to valid-but-schema-mismatched JSON, which
+        # PERMISSIVE mode tolerates field-by-field) - drop those here, before
+        # event.* expands a null struct into an all-null row.
+        .filter(F.col("event").isNotNull())
+        .select("event.*")
+    )
 
     for metric in NUMERIC_METRICS:
         parsed = parsed.withColumn(metric, F.col(metric).cast("double"))
@@ -66,5 +72,22 @@ def parse_and_cast(kafka_df):
         # nullable - to_timestamp(null) is null, matching synthetic rows' lack
         # of a real-world collection moment (D38).
         .withColumn("source_ts", F.to_timestamp("source_ts", _TIMESTAMP_FORMAT))
+    )
+
+    # Belt-and-braces: a message that parsed as JSON but doesn't actually
+    # carry a usable event_id/device_id/event_ts/ingest_ts (missing field, or
+    # an event_ts string that didn't match _TIMESTAMP_FORMAT) must still be
+    # dropped here. anomaly_state.py's OUTPUT_SCHEMA declares event_ts and
+    # ingest_ts non-nullable; letting a null through crashes Arrow's columnar
+    # encoder (IllegalStateException: Value at index is null) inside
+    # applyInPandasWithState, taking down all three streaming queries in a
+    # checkpoint-persistent crash loop that never self-heals since the next
+    # restart just resumes at the same poisoned offset. One malformed message
+    # on the wire must never be able to do that.
+    parsed = parsed.filter(
+        F.col("event_id").isNotNull()
+        & F.col("device_id").isNotNull()
+        & F.col("event_ts").isNotNull()
+        & F.col("ingest_ts").isNotNull()
     )
     return parsed

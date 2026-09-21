@@ -1,4 +1,5 @@
 import csv
+import threading
 from datetime import datetime, timezone
 
 
@@ -22,6 +23,44 @@ class DatasetReader:
     def __init__(self, csv_path: str):
         self._csv_path = csv_path
         self._summary_cache: dict | None = None
+        self._rows_cache: list[dict] | None = None
+        self._rows_lock = threading.Lock()
+
+    def _rows(self) -> list[dict]:
+        """Parses the CSV once and caches every row for the reader's
+        lifetime - the file is static and small enough (~405K rows) to hold
+        in memory outright. Without this, every query() call re-scans the
+        whole file from disk; the "compare to an earlier period" toggle
+        (D39/FR-E6) fires up to three of these concurrently in one
+        Promise.all (one per day/week/month granularity), and three
+        concurrent full-file scans each building their own ~135K-row list
+        OOM-killed the backend under real memory pressure. The lock only
+        guards the first build - a query() arriving mid-build blocks briefly
+        rather than racing its own redundant scan."""
+        if self._rows_cache is not None:
+            return self._rows_cache
+        with self._rows_lock:
+            if self._rows_cache is not None:
+                return self._rows_cache
+            rows: list[dict] = []
+            with open(self._csv_path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    ts = _parse_ts(row["ts"])
+                    rows.append({
+                        "ts": ts,
+                        "source_ts": _iso(ts),
+                        "device_id": row["device"],
+                        "co": float(row["co"]),
+                        "humidity": float(row["humidity"]),
+                        "lpg": float(row["lpg"]),
+                        "smoke": float(row["smoke"]),
+                        "temp": float(row["temp"]),
+                        "light": row["light"].strip().lower() == "true",
+                        "motion": row["motion"].strip().lower() == "true",
+                    })
+            self._rows_cache = rows
+            return rows
 
     def query(
         self,
@@ -31,29 +70,16 @@ class DatasetReader:
         limit: int,
     ) -> list[dict]:
         rows: list[dict] = []
-        with open(self._csv_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                ts = _parse_ts(row["ts"])
-                if until is not None and ts > until:
-                    break
-                if since is not None and ts < since:
-                    continue
-                if device_id and row["device"] != device_id:
-                    continue
-                rows.append({
-                    "source_ts": _iso(ts),
-                    "device_id": row["device"],
-                    "co": float(row["co"]),
-                    "humidity": float(row["humidity"]),
-                    "lpg": float(row["lpg"]),
-                    "smoke": float(row["smoke"]),
-                    "temp": float(row["temp"]),
-                    "light": row["light"].strip().lower() == "true",
-                    "motion": row["motion"].strip().lower() == "true",
-                })
-                if len(rows) >= limit:
-                    break
+        for row in self._rows():
+            if until is not None and row["ts"] > until:
+                break
+            if since is not None and row["ts"] < since:
+                continue
+            if device_id and row["device_id"] != device_id:
+                continue
+            rows.append({k: v for k, v in row.items() if k != "ts"})
+            if len(rows) >= limit:
+                break
         return rows
 
     def summary(self) -> dict:
@@ -65,18 +91,16 @@ class DatasetReader:
             return self._summary_cache
 
         devices: dict[str, dict] = {}
-        with open(self._csv_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                ts = _parse_ts(row["ts"])
-                d = devices.setdefault(row["device"], {
-                    "device_id": row["device"], "row_count": 0, "min_ts": ts, "max_ts": ts,
-                })
-                d["row_count"] += 1
-                if ts < d["min_ts"]:
-                    d["min_ts"] = ts
-                if ts > d["max_ts"]:
-                    d["max_ts"] = ts
+        for row in self._rows():
+            ts = row["ts"]
+            d = devices.setdefault(row["device_id"], {
+                "device_id": row["device_id"], "row_count": 0, "min_ts": ts, "max_ts": ts,
+            })
+            d["row_count"] += 1
+            if ts < d["min_ts"]:
+                d["min_ts"] = ts
+            if ts > d["max_ts"]:
+                d["max_ts"] = ts
 
         self._summary_cache = {
             "devices": [
