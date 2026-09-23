@@ -63,12 +63,19 @@ function StorageControl({ deploying, onDeploy }: { deploying: boolean; onDeploy:
         </div>
       )}
 
-      <p className="demo-only-notice">
-        ⚠ Demo/illustration only: deploying a database node straight from a web UI is not a safe
-        production practice, even now that it goes through a narrowly-scoped Kubernetes RBAC Role
-        instead of a Docker socket — the backend can only scale this one StatefulSet by
-        name, nothing else in the cluster. A real deployment scales Cassandra through its own cluster
-        tooling, not an app button.
+      {/* Was worded as "Demo/illustration only" - misleading: this button drives a real Kubernetes
+          scale-up (real pod, real 5 GiB PersistentVolumeClaim, real ring join), previously confirmed
+          against production-shaped infrastructure. There is also no matching remove-a-node action, so
+          a deploy here is a standing resource commitment, not something to undo with another click.
+          Rewritten to state that plainly instead of implying it's a toy. */}
+      <p className="cassandra-deploy-warning">
+        ⚠ Real action, not a simulation: this scales the actual Cassandra StatefulSet by one, so a
+        genuine pod is created with its own 5&nbsp;GiB persistent volume and streamed with live ring
+        data — the same effect as scaling it from the command line, just kept narrowly scoped (this
+        button can only touch this one StatefulSet, nothing else in the cluster). There is no
+        matching "remove a node" action here — taking one back out safely needs a manual operator
+        step outside this UI. Only deploy a node when there's a genuine capacity need, and check the
+        cluster's available memory first.
       </p>
 
       {!confirming && (

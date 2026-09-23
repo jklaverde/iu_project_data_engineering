@@ -30,11 +30,11 @@ trust a snapshot, including section 3 below — verify.
    up and down" and `docs/deployment.html` first; both explain *why* local and production
    differ.
 
-## 3. State snapshot — dated 2026-09-21 (update this at the end of every session)
+## 3. State snapshot — dated 2026-09-23 (update this at the end of every session)
 
 | Item | State |
 |---|---|
-| Latest decision | **D50** (D48 = unified deploy script, D49/D50 = post-go-live hardening and memory resize). Next free number: **D51**. |
+| Latest decision | **D51** (D48 = unified deploy script, D49/D50 = post-go-live hardening and memory resize, D51 = Cassandra node-deploy notice reworded; not yet deployed). Next free number: **D52**. |
 | Phases | P1–P5, P8–P11 done and live-verified. Interim VPS done (now single-node k3s). **Full P6 (3-VPS, HA, TLS) and P7 (48 h endurance) not started.** |
 | Production | Single-node k3s on this host; `iot-pipeline` namespace deployed 2026-09-21 ~18:14 CEST, all pods `Running`, 0 restarts, ~3.7 GiB memory available. `kafka-ui` intentionally scaled to 0. |
 | `deploy.sh` verification | `check`, argument handling and validation paths: run. **`up`/`update`/prod `down` were not run by the session that wrote them.** The timestamps (images built → `generated/` staged → Secret created within 1 s) match `deploy.sh prod up` having been run at ~18:14 CEST, but nobody has confirmed it. **Confirm with the user, then record the result in D48.** |

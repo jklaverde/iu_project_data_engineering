@@ -232,9 +232,10 @@
           container, waiting for it to report healthy, waiting for it to join the ring
           (<code>nodetool status</code> shows it as <code>UN</code>), then done — each step lighting up
           in turn rather than a static "please wait." A visible notice on this control says plainly that
-          deploying a database node from a web UI is a demo convenience, not a safe production practice
-          (NFR-15) — a real deployment would scale through Cassandra's own cluster tooling or, in this
-          project's production plan (§4.1), the Kubernetes API.
+          this is a real action, not a simulation: it scales the actual Cassandra StatefulSet through a
+          narrowly-scoped Kubernetes RBAC Role (NFR-16), creating a real pod with its own 5 GiB volume,
+          and there is no matching "remove a node" button — taking a node back out is a manual operator
+          step (D51; the original D42 notice called it a demo convenience).
         </p>
         <p>
           Once joined, the second node appears in the Deployment step's health grid automatically, and
@@ -806,6 +807,23 @@
           <li><strong>Consequence to remember:</strong> only ~1.4 GiB sits between the limit total and
             the host's RAM. Anything that adds a pod, raises a limit or scales Cassandra must re-check
             <code>kubectl top nodes</code> first.</li>
+        </ul>
+
+        <h4 class="doc-h4" id="d51">Cassandra node-deploy notice no longer calls it a demo (D51)</h4>
+        <ul>
+          <li><strong>Why:</strong> the notice on the admin "Deploy new Cassandra node" control still
+            carried D42-era "demo/illustration only" wording. Since D43 the button performs a real
+            Kubernetes scale-up (verified in D44/D45): a real pod, a real 5 GiB PVC, a real ring join,
+            and no remove-node counterpart. On a node with ~1.4 GiB of limit headroom (D50) that is a
+            standing commitment, not a toy.</li>
+          <li><strong>What changed:</strong> wording only — the notice now states it is a real action,
+            that removal needs a manual operator step, and to check available memory first. CSS class
+            renamed <code>.demo-only-notice</code> → <code>.cassandra-deploy-warning</code>. No backend,
+            RBAC or manifest change.</li>
+          <li><strong>Verified / not verified:</strong> the claims in the text were checked against
+            <code>k8s/base</code>; the frontend was <em>not</em> built or type-checked, and the change is
+            not deployed — production shows the old notice until
+            <code>sudo k8s/deploy.sh prod update backend</code>.</li>
         </ul>
       </div>
     </section>

@@ -1561,7 +1561,7 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-.demo-only-notice {
+.cassandra-deploy-warning {
   font-size: 0.76rem;
   color: var(--warn);
   background: color-mix(in srgb, var(--warn) 10%, transparent);
