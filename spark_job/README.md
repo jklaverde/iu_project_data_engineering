@@ -25,6 +25,12 @@ shipped `.env.example` default: temporarily set `SPARK_JOB_AGG_1H_WINDOW_DURATIO
 minutes` in your local `.env` to verify `agg_1h` output without waiting a
 real hour, then reset it to `1 hour`.
 
+The anomaly detector's EWMA seed is shifted to today's point on the seasonal
+curve (`baseline.seasonally_shifted()`, `spark_job/seasonal.py`, D52), because
+the producer shifts live temperature/humidity by the same curve.
+`device_thresholds` keeps the unshifted July baseline; the backend applies the
+curve itself.
+
 ## Why a separate `run.py`
 
 `spark-submit` executes the submitted script as `__main__`, outside any

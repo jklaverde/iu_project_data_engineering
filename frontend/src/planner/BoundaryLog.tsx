@@ -82,14 +82,22 @@ export default function BoundaryLog({
   if (range) {
     for (const p of points) {
       if (!p.unhealthy) continue;
-      const breach = worstBreach(p, range);
+      // Temperature and humidity follow the seasons, so each period is judged
+      // against the normal band of its own time (sent per point by the
+      // backend), not against today's band.
+      const periodRange: MetricRange = {
+        ...range,
+        normal_min: p.normal_min ?? range.normal_min,
+        normal_max: p.normal_max ?? range.normal_max,
+      };
+      const breach = worstBreach(p, periodRange);
       if (breach) entries.push({ point: p, breach });
     }
     entries.reverse(); // newest first - a log reads most-recent-first
   }
 
   return (
-    <div className="boundary-log">
+    <div className="boundary-log" data-tour="planner-log">
       <div className="timeline-heading">
         <h3>Out-of-range log — {metricLabel}</h3>
         <div className="metric-tabs">

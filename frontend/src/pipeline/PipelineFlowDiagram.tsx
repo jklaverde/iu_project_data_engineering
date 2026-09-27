@@ -54,7 +54,7 @@ export default function PipelineFlowDiagram({ state }: Props) {
   ];
 
   return (
-    <div className="pipeline-flow">
+    <div className="pipeline-flow" data-tour="admin-flow">
       <svg viewBox="0 0 980 150" width="100%" height="150">
         {paths.map((p, i) => {
           const x1 = boxCenterX(p.from.x) + BOX_W / 2;

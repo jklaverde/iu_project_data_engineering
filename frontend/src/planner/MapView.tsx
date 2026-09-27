@@ -3,6 +3,10 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import AboutModal from "../about/AboutModal";
 import DatasetExplorer from "../dataset/DatasetExplorer";
+import GuidedTour from "../tutorial/GuidedTour";
+import TourControls from "../tutorial/TourControls";
+import type { TourStep } from "../tutorial/tourContent";
+import { useGuidedTour } from "../tutorial/useGuidedTour";
 import { useSensors } from "../state/useSensors";
 import type { SensorEntry } from "../types";
 import SensorDetailPanel from "./SensorDetailPanel";
@@ -45,6 +49,13 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [showDataset, setShowDataset] = useState(false);
+  const tour = useGuidedTour("planner");
+
+  // Steps about a sensor's details need one selected; pick the first sensor
+  // if the user has not chosen one yet.
+  const onTourStep = (step: TourStep) => {
+    if (step.needsSensor && !selectedId && sensors.length > 0) setSelectedId(sensors[0].device_id);
+  };
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -94,7 +105,7 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
         <div>
           <p className="eyebrow">Environmental / Planner</p>
           <h1>Lingen (Ems) — Sensor Overview</h1>
-          <div className="status-bar">
+          <div className="status-bar" data-tour="planner-status">
             <span className="status-bar-item">{sensors.length} sensors</span>
             <span className="status-bar-item status-bar-ok">{counts.ok ?? 0} OK</span>
             <span className="status-bar-item status-bar-warning">{counts.warning ?? 0} warning</span>
@@ -102,7 +113,8 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
           </div>
         </div>
         <div className="header-right">
-          <button className="btn btn-ghost" onClick={() => setShowDataset(true)}>
+          <TourControls onStart={tour.start} autoStart={tour.autoStart} onAutoStartChange={tour.setAutoStart} />
+          <button className="btn btn-ghost" data-tour="dataset-explorer" onClick={() => setShowDataset(true)}>
             Dataset Explorer
           </button>
           <button className="btn btn-accent" onClick={() => setShowAbout(true)}>
@@ -116,10 +128,19 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
       {showDataset && <DatasetExplorer onClose={() => setShowDataset(false)} />}
+      {tour.open && (
+        <GuidedTour
+          steps={tour.steps}
+          lang={tour.lang}
+          onLangChange={tour.setLang}
+          onClose={tour.close}
+          onStepEnter={onTourStep}
+        />
+      )}
 
       <div className="planner-body">
-        <div className="map-container" ref={containerRef} />
-        <div className="planner-sidebar">
+        <div className="map-container" ref={containerRef} data-tour="planner-map" />
+        <div className="planner-sidebar" data-tour="planner-detail">
           <SensorDetailPanel sensor={selectedSensor} />
         </div>
       </div>

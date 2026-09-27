@@ -46,6 +46,7 @@
           <a href="#p9" data-name="p9 exited containers">P9 — Exited containers</a>
           <a href="#p10" data-name="p10 oom spark">P10 — Executor OOM</a>
           <a href="#p11" data-name="p11 volume init race">P11 — Volume-init race</a>
+          <a href="#p12" data-name="p12 history backfill oom d51">P12 — Backfill OOM</a>
         </div>
       </div>
     </nav>
@@ -102,7 +103,9 @@
         limits resized for the 11 GB node; <code>kafka-ui</code> off by default) were recorded
         retroactively — those two commits had landed without decision-log entries
         (<a href="#d49">D49</a>, <a href="#d50">D50</a>). Full P6 (3-VPS k3s, hardened per NFR-11) and P7 (endurance) not
-        started.
+        started. <a href="#d52">D52</a> (multi-month derived history, seasonal normal ranges) is
+        live-verified on a fresh local k3d cluster (one real bug found and fixed,
+        <a href="#p12-1">P12 §1</a>); <strong>not yet rolled out to production</strong>.
       </p>
       <div class="table-wrap">
         <table class="data-table">
@@ -116,6 +119,7 @@
           <tr><td>P6 (full) — VPS deployment</td><td>3 Contabo VPS, k3s, hardening, Kafka/Cassandra replicated across nodes</td><td><span class="pill pill--todo">Not started</span></td></tr>
           <tr><td>P6 — Cassandra scale-out verified on real k3s (D44/D45)</td><td>FR-N2 (admin node-deploy) run end-to-end on a real Contabo VPS to 2 nodes (D44, found/fixed 2 RBAC gaps + a silent ring-join bug) then 3 nodes (D45, found/fixed a client-sharing concurrency bug); D45 also simulated the full UC-12 approaching-budget scenario</td><td><span class="pill pill--done">Done</span> — de-risks P6's core scaling story; not P6 itself (no TLS/ingress/WireGuard, NFR-11 unaddressed)</td></tr>
           <tr><td>P7 — Endurance</td><td>48-hour run against §10 acceptance criteria</td><td><span class="pill pill--todo">Not started</span></td></tr>
+          <tr><td>P12 — Multi-month history (D52)</td><td><code>history-backfill</code> Job: ~25 months derived from the 8-day source (looped, seasonal curve), backfilled into <code>agg_1h</code>; seasonal normal ranges; Explorer on the derived file</td><td><span class="pill pill--done">Done locally</span> — live-verified on k3d; production rollout (<code>down</code> + <code>up</code>) pending (see <a href="#d52">D52</a>)</td></tr>
           <tr><td>P8 — Role-based redirect</td><td>Two roles, <code>device_metadata</code>/<code>device_thresholds</code>, Leaflet map, Loki+Promtail, Grafana alerting + webhook + Alerts tab, D34/D35 timeline+log</td><td><span class="pill pill--done">Done — live-verified</span> against a real <code>docker compose up</code></td></tr>
         </table>
       </div>
@@ -182,21 +186,25 @@
         </p>
         <p>
           They open the CO chart below the map and tick <strong>"Compare to an earlier period."</strong>
-          The per-day chart overlays a dashed line labeled <em>"compare (1 week ago, live)"</em> — CO
-          was similar a week ago, so this isn't a new pattern. Curious whether this is just how this
-          spot behaves in general, they check the per-month chart: its compare overlay is labeled
-          <em>"compare (1 year ago, dataset)"</em> instead of <em>live</em> — the deployment hasn't
-          been running for a year, so the backend fell back to the Dataset Explorer's real 2020 data
-          for that device automatically, and says so on the label rather than silently returning
-          nothing or, worse, a fabricated number.
+          The per-day chart overlays a dashed line labeled <em>"compare (1 week ago, stored
+          history)"</em> — CO was similar a week ago, so this isn't a new pattern. Curious whether this
+          is just how this spot behaves in general, they check the per-month chart: its overlay,
+          <em>"compare (1 year ago, stored history)"</em>, reaches back a full year. The caption under
+          the charts tells them that history from before the deployment went live is derived from the
+          2020 source dataset (its 8 days repeated, temperature and humidity adjusted for the season)
+          — illustrative, not measured (<a href="#d52">D52</a>). Only if Cassandra lacked the compared
+          period would the label read <em>"derived data"</em>, meaning the Dataset Explorer's file
+          answered instead.
         </p>
         <p>
-          Wanting to see the source data itself, they open <strong>Dataset Explorer</strong> from the
-          header, pick the same device, and see its real collection window (7 days, 2020) and a
-          genuine sample of readings, each timestamped to when it was actually collected — not
-          <code>event_ts</code>. They now have an answer to both halves of the brief's question: this
-          reading is elevated but not new, and the underlying device has always run a bit hot on CO
-          relative to the other two — exactly what its placement rationale (§5.6) predicted.
+          Wanting to see the data behind that history, they open <strong>Dataset Explorer</strong>
+          from the header, pick the same device, and scrub through ~25 months of derived readings; the
+          line under the chart names, for each reading, the original 2020 reading it came from. Winter
+          readings sit well below summer ones, and the out-of-range log judges each period against that
+          period's own seasonal normal range, so a cold January is not reported as "below normal". They
+          now have an answer to both halves of the brief's question: this reading is elevated but not
+          new, and the underlying device has always run a bit hot on CO relative to the other two —
+          exactly what its placement rationale (§5.6) predicted.
         </p>
 
         <h3 id="scenario-admin-disk">Admin: the disk-usage-critical alert fires</h3>
@@ -825,6 +833,111 @@
             not deployed — production shows the old notice until
             <code>sudo k8s/deploy.sh prod update backend</code>.</li>
         </ul>
+
+        <h4 class="doc-h4" id="d52">Multi-month derived history and seasonal normal ranges (D52)</h4>
+        <ul>
+          <li><strong>Why:</strong> the week/month charts, their "compare to" overlay and the Dataset
+            Explorer were nearly empty. The source dataset covers only 8 days (2020-07-12 → 07-20), and
+            Cassandra only holds what the pipeline wrote since the last deploy, because every event is
+            stamped with the current time (D28). Monthly "compare to a year ago" needs ~25 months.</li>
+          <li><strong>What it does:</strong> a new one-shot Job, <code>history-backfill</code> (backend
+            image, <code>backend/app/history_backfill.py</code>), repeats the 8-day source cycle across
+            770 days (time of day preserved, one reading per device every 10 min, small seeded noise),
+            shifts temperature and humidity along a seasonal curve (July unchanged; January 16 °C
+            colder, 15 points more humid by default), writes the result to
+            <code>/data/iot_telemetry_derived.csv</code> and backfills the hourly aggregates into
+            <code>agg_1h</code> directly — not through Kafka/Spark. The original CSV is untouched.</li>
+          <li><strong>Seasonal everywhere, one curve:</strong> <code>seasonal.py</code> exists three
+            times (backend, producer, spark_job — separate images) and must be kept identical. The
+            producer shifts live events by it, the Spark job seeds its anomaly baseline at today's point
+            on it, and the backend shifts the stored July baseline to the moment it judges — so a
+            January reading is compared with a January normal range, per reading and per chart period.
+            Settings live in <code>k8s/base/config.env</code> (<code>HISTORY_*</code>).</li>
+          <li><strong>Idempotent:</strong> the new <code>history_backfill</code> table records the time
+            anchor before writing. A re-run reuses it; after completion a re-run only restores a missing
+            derived file. Hours that already have real pipeline output are never overwritten.</li>
+          <li><strong>Rollout needs an empty keyspace:</strong> <code>deploy.sh &lt;env&gt; down</code>
+            then <code>up</code> (the user accepted losing the existing Cassandra data). A plain
+            <code>up</code> on an existing namespace fails on the changed, immutable
+            <code>cassandra-schema-init</code> Job, and the Spark checkpoints would keep pre-seasonal
+            anomaly state.</li>
+          <li><strong>Live-verified on local k3d</strong> (2026-09-27, Windows + Docker Desktop, 8 GiB):
+            <code>deploy.sh local down</code> then <code>up</code> on a fresh cluster, all four init Jobs
+            <code>Complete</code>. The first backfill attempt was OOM-killed and silently retried
+            (<a href="#p12-1">P12 §1</a>); after the fix a clean first attempt wrote all 55,440 hourly rows
+            with 0 restarts, sampled peak ~227 Mi of 512Mi, in ~2 min after Cassandra was up. In Cassandra:
+            the <code>history_backfill</code> row (anchor 2026-09-27 11:00 UTC, start 2024-08-18); no step at
+            the anchor (derived 10:00 → 16.5 °C, live 11:00 → 16.1 °C); January share of anomalous hours
+            22/744 for one device (offline: 24/744 with another anchor). Via the planner API: all three
+            sensors "ok" against September bands (one device 16.1 °C in a 15.6–17.5 °C band — critical
+            under the July band); per day/week/month timelines 31/27/14 points with per-point bands;
+            "compare" answered from Cassandra at every resolution, including 1 year ago; Explorer
+            available, 2024-08-18 → 2026-09-27, 110,880 rows per device. Backend ~208 Mi with the derived
+            file cached; first Explorer load 14 s. Producer and spark-job ran with 0 restarts and no
+            errors in their logs. <strong>Not verified:</strong> the UI rendered in a browser (only its
+            API), the production rollout, and the offline <code>docker compose</code> path beyond
+            <code>docker compose config</code>.</li>
+        </ul>
+
+        <h4 class="doc-h4" id="d53">Unit test suite for the multi-month history workflow (D53)</h4>
+        <ul>
+          <li><strong>What:</strong> <code>tests/</code>, a pytest suite (60 tests, ~13 s) for D52's
+            workflows — the seasonal curve, the <code>history-backfill</code> derivation and its idempotent
+            Job workflow against a fake Cassandra session (including the retry-after-partial-write case from
+            <a href="#p12-1">P12 §1</a>), the Dataset Explorer reader, seasonal normal ranges and the
+            compare-source decision, the producer's seasonal shift and the Spark seed.
+            <code>python -m pip install --require-hashes -r tests/requirements.txt</code>, then
+            <code>python -m pytest tests -q</code>.</li>
+          <li><strong>No services, no heavy libraries:</strong> Kafka/Cassandra/Spark client libraries are
+            stubbed only when missing (<code>tests/conftest.py</code>); the compare decision moved into the
+            pure <code>environment.stored_history_covers()</code> so it can be tested without FastAPI.</li>
+          <li><strong>Verified:</strong> 60 passed; deliberately removing the replay's seasonal shift and the
+            backfill's skip of existing hours made 3 targeted tests fail. <strong>Not covered:</strong> API
+            routes, Spark streaming, the UI, manifests and <code>deploy.sh</code> (live runs only); no CI runs
+            the suite.</li>
+        </ul>
+
+        <h4 class="doc-h4" id="d54">In-app guided tour per role (D54)</h4>
+        <ul>
+          <li><strong>What:</strong> both role screens have a spotlight tour that highlights each real
+            feature and says what it is and why it matters to that role; the planner tour also explains
+            what each sensor type is good for. English and German. It starts by itself the first time a
+            screen opens in a browser; finishing or skipping turns that off; the header's
+            <strong>Guided tour</strong> button reopens it and <strong>Show at login</strong> switches
+            the automatic start back on.</li>
+          <li><strong>Decisions (user, 2026-09-27):</strong> settings per browser, not per account (the
+            accounts are shared); automatic start once; spotlight over the real UI rather than a help
+            panel; English + German.</li>
+          <li><strong>Overlaps:</strong> the admin Pipeline view is already a six-step walkthrough — the
+            tour explains the workspace and points into it; "About the project" stays the project-level
+            explanation; the docs' role walkthroughs are admin-only, so planners get the short version in
+            the tour.</li>
+          <li><strong>How it's built:</strong> <code>frontend/src/tutorial/</code>, no new npm dependency.
+            Elements are found by <code>data-tour</code> attributes; a step whose element is missing shows
+            a centered card. Planner steps about a sensor select the first sensor if none is selected;
+            admin steps switch to the Pipeline tab.</li>
+          <li><strong>Tests:</strong> <code>cd frontend &amp;&amp; npm test</code> (Node's built-in
+            runner, 23 tests): content complete in both languages, no internal codes, every highlighted
+            element exists in the UI source, honesty about derived history and simulated pressure,
+            preferences (incl. blocked storage) and placement. Removing one <code>data-tour</code>
+            marker made the "element exists" test fail.</li>
+          <li><strong>Found in the browser check:</strong> the tour looked for each step's element with
+            <code>requestAnimationFrame</code>, which the browser never runs while the tab is hidden — a user
+            who switched tabs mid-tour would have come back to every later step stuck on a centered card
+            (reproduced: <code>document.visibilityState</code> "hidden", rAF not firing within 2 s). Now an
+            immediate lookup plus <code>setTimeout</code> polling.</li>
+          <li><strong>Also found in the browser:</strong> the long sensor-type card had no room above or below
+            the gauge panel and was pinned over the very panel it describes. The card now goes beside the
+            element (right, then left) before falling back to the bottom edge; two placement tests added
+            (23 in total).</li>
+          <li><strong>Verified in the browser</strong> (local k3d, planner account, 2026-09-27): the tour
+            started by itself on first load; every step framed its element (checked per step, including
+            with the tab hidden); detail steps selected a sensor; English/German switch and the choice
+            remembered across a reload; Esc/skip turned the automatic start off
+            (<code>tour.autostart.planner=off</code>) and a reload then did not start it; "Show at login"
+            and "Guided tour" switched it back on and reopened it. <strong>Not verified in a browser:</strong>
+            the admin tour (needs the admin password; covered by the unit tests only).</li>
+        </ul>
       </div>
     </section>
 
@@ -879,7 +992,14 @@
           the catch-up checklist, conventions and a dated state snapshot; this list is the canonical
           backlog it points to.</p>
         <ol>
-          <li><strong>Close out D48 (highest value, small).</strong> <code>deploy.sh prod up</code>'s
+          <li><strong>Roll D52 out to production (highest value).</strong> Live-verified locally; still
+            to do: look at the planner charts, out-of-range log and Dataset Explorer in a browser, then
+            <code>sudo k8s/deploy.sh prod down</code> and <code>up</code> (destroys the current
+            Cassandra data — agreed, but confirm at the time). Check
+            <code>kubectl -n iot-pipeline get pod -l job-name=history-backfill</code> shows 0 restarts
+            and the log ends with <code>history_backfill_complete</code>. Record the outcome in
+            <a href="#d52">D52</a>.</li>
+          <li><strong>Close out D48.</strong> <code>deploy.sh prod up</code>'s
             end-to-end result was never recorded by the session that wrote it. The current production
             namespace was created on 2026-09-21 at ~18:14 CEST in an order that matches the script, but
             that has not been confirmed with whoever ran it. Confirm, record the outcome in
@@ -1589,10 +1709,53 @@
           </div>
         </details>
       </div>
+
+      <div class="phase-group" id="p12">
+        <div class="phase-head"><h3>P12 — Multi-month history (D52): the backfill Job was OOM-killed on its first live run</h3><span class="phase-tag">1 incident</span></div>
+
+        <details class="incident" id="p12-1" data-name="history-backfill oom killed 512Mi execute_concurrent retry idempotent d51">
+          <summary><span class="incident-num">Incident</span> history-backfill OOM-killed at 512Mi while writing to Cassandra; the retry hid it</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>On the first <code>deploy.sh local up</code> with D52 (fresh k3d cluster, 2026-09-27) the
+              <code>history-backfill</code> Job reported <code>Complete</code>, but its final log line said
+              <code>agg_1h_rows: 13930, skipped_live_windows: 41513</code> — a fresh keyspace cannot hold
+              41,513 live hours. The pod showed <code>restartCount=1</code>, and sampled memory had dropped
+              from ~397 Mi to ~146 Mi between two samples.</p>
+            <h5>Cause</h5>
+            <p>The kernel log of the Docker VM (<code>dmesg</code>) recorded
+              <code>Memory cgroup out of memory: Killed process … (python) … anon-rss:521756kB</code> in the
+              cgroup of exactly this pod's UID. The write phase held everything at once: the ~405K source
+              rows (no longer needed by then), a list of all ~55K insert parameter tuples, and one result
+              object per insert from <code>execute_concurrent_with_args</code>. The first attempt died
+              part-way through the writes; <code>restartPolicy: OnFailure</code> started a second one, which
+              reused the anchor recorded in <code>history_backfill</code> and skipped the hours the first
+              attempt had written — so the data ended up complete (41,513 + 13,930 = 55,440 derived + 3
+              live hours), and the Job looked healthy.</p>
+            <h5>How it was found</h5>
+            <p>The implausible "skipped live" count, then the restart count, then the kernel log — the
+              previous container's own log was already gone once the pod completed, and Loki had not
+              ingested anything yet on this fresh cluster.</p>
+            <h5>Fix</h5>
+            <p><code>backend/app/history_backfill.py</code> frees the source rows before the write phase
+              and streams the inserts in chunks of 2,000 with <code>results_generator=True</code> instead of
+              materializing all parameters and results. The log field is now
+              <code>skipped_existing_windows</code> (it also counts rows a previous attempt wrote). The wait
+              loop also logs the exception type — the driver's "no host available" error prints as
+              <code>{}</code>. <strong>Verified:</strong> rebuilt with <code>deploy.sh local update
+              backend</code>, truncated <code>agg_1h</code>/<code>history_backfill</code>, re-ran the Job:
+              0 restarts, 55,440 rows written, 3 existing live hours skipped, sampled peak ~227 Mi.</p>
+            <h5>General lesson</h5>
+            <p>An idempotent, retrying Job can turn a crash into a quiet success. Check
+              <code>restartCount</code> and whether the reported counts add up, not only the
+              <code>Complete</code> status.</p>
+          </div>
+        </details>
+      </div>
     </section>
 
     <footer class="page-foot">
-      <span>Status, decisions, and 23 logged incidents across 9 phases.</span>
+      <span>Status, decisions, and 24 logged incidents across 10 phases.</span>
       <span><a href="index.html">&larr; Back to documentation hub</a></span>
     </footer>
   </main>

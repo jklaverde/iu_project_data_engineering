@@ -10,9 +10,17 @@ device_thresholds table (see docker-compose.yml / infra/cassandra/schema).
 "critical" here mirrors Spark's own is_anomaly rule (|z| > sigma_n or a
 ceiling crossing for co/lpg/smoke) by construction, so the planner map and
 the admin's anomaly log agree for the same device/metric/moment.
+
+Seasonal normal ranges (D52): device_thresholds holds the July baseline of
+the source data. For temp/humidity the expected mean moves along the
+seasonal curve (seasonal.py), so every status/range below is evaluated
+against the baseline shifted to the moment being judged - otherwise every
+winter reading would read as out of range.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+from . import seasonal
 
 # Must match producer/producer/device_stats.py's NUMERIC_METRICS and
 # spark_job/spark_job/baseline.py's CEILING_METRICS - kept in sync by hand
@@ -24,6 +32,32 @@ WARNING_SIGMA = 2.0
 CRITICAL_SIGMA = 3.0  # must match SPARK_JOB_ANOMALY_SIGMA_N's default
 
 MIN_STDDEV = 1e-9
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def parse_iso(value) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def seasonal_mean(metric: str, stats: dict, at: datetime) -> float:
+    """The device's baseline mean for `metric`, moved to `at` on the seasonal curve."""
+    return stats["mean"] + seasonal.offset(metric, at)
+
+
+def normal_band(metric: str, stats: dict, at: datetime) -> tuple[float, float]:
+    """(normal_min, normal_max) at `at` - mean +/- WARNING_SIGMA*stddev, the
+    exact ok/warning cutoff metric_status() uses."""
+    mean = seasonal_mean(metric, stats, at)
+    spread = WARNING_SIGMA * max(stats["stddev"], MIN_STDDEV)
+    low = mean - spread
+    return (low if metric == "temp" else max(0.0, low)), mean + spread
 
 
 def metric_status(value: float, mean: float, stddev: float, ceiling: float | None) -> str:
@@ -42,15 +76,17 @@ def metric_status(value: float, mean: float, stddev: float, ceiling: float | Non
 _STATUS_RANK = {"ok": 0, "warning": 1, "critical": 2}
 
 
-def device_status(readings: dict, thresholds: dict) -> dict:
+def device_status(readings: dict, thresholds: dict, at: datetime | None = None) -> dict:
     """readings: {metric: value} for one device's latest reading.
     thresholds: {metric: {mean, stddev, ceiling}} for that device.
 
     Returns {"overall": "ok"|"warning"|"critical", "reason": str | None,
     "metrics": {metric: "ok"|"warning"|"critical"}}. "reason" names the
     worst-offending metric for a citizen-facing plain-language message
-    (e.g. "elevated CO"), or None if everything is ok.
+    (e.g. "elevated CO"), or None if everything is ok. `at` is the moment
+    the reading was taken (defaults to now) - it picks the seasonal mean.
     """
+    at = at or _now()
     metrics: dict = {}
     worst_metric = None
     worst_rank = -1
@@ -60,7 +96,7 @@ def device_status(readings: dict, thresholds: dict) -> dict:
         if stats is None or value is None:
             continue
         ceiling = stats.get("ceiling") if metric in CEILING_METRICS else None
-        status = metric_status(value, stats["mean"], stats["stddev"], ceiling)
+        status = metric_status(value, seasonal_mean(metric, stats, at), stats["stddev"], ceiling)
         metrics[metric] = status
         if _STATUS_RANK[status] > worst_rank:
             worst_rank = _STATUS_RANK[status]
@@ -82,12 +118,14 @@ METRIC_UNITS = {
 }
 
 
-def metric_ranges(readings: dict, thresholds: dict) -> dict:
+def metric_ranges(readings: dict, thresholds: dict, at: datetime | None = None) -> dict:
     """Per-metric {value, unit, normal_min, normal_max, ceiling, status} so
     the UI can render an actual-vs-acceptable gauge, not just a traffic-light
     dot. normal_min/max = mean +/- WARNING_SIGMA*stddev - the exact boundary
     metric_status() already uses for the ok/warning cutoff, so the gauge and
-    the badge can never visually disagree."""
+    the badge can never visually disagree. Seasonal for temp/humidity: the
+    band is the one in force at `at` (defaults to now)."""
+    at = at or _now()
     out: dict = {}
     for metric in NUMERIC_METRICS:
         stats = thresholds.get(metric)
@@ -95,16 +133,14 @@ def metric_ranges(readings: dict, thresholds: dict) -> dict:
         if stats is None or value is None:
             continue
         ceiling = stats.get("ceiling") if metric in CEILING_METRICS else None
-        spread = WARNING_SIGMA * max(stats["stddev"], MIN_STDDEV)
-        normal_min = stats["mean"] - spread
-        normal_max = stats["mean"] + spread
+        normal_min, normal_max = normal_band(metric, stats, at)
         out[metric] = {
             "value": value,
             "unit": METRIC_UNITS.get(metric, ""),
-            "normal_min": max(0.0, normal_min) if metric != "temp" else normal_min,
+            "normal_min": normal_min,
             "normal_max": normal_max,
             "ceiling": ceiling,
-            "status": metric_status(value, stats["mean"], stats["stddev"], ceiling),
+            "status": metric_status(value, seasonal_mean(metric, stats, at), stats["stddev"], ceiling),
         }
     return out
 
@@ -149,9 +185,11 @@ def reading_provenance(reading: dict) -> dict:
     replayed rows (producer/producer/replay.py); is_synthetic distinguishes
     the remaining case from "replay, but before source_ts existed"."""
     if reading.get("source_ts"):
+        # D52: the producer shifts replayed temp/humidity along the seasonal
+        # curve, so the values are no longer the collected ones verbatim.
         return {
             "kind": "replayed",
-            "label": f"Replayed — originally collected {reading['source_ts']}",
+            "label": f"Replayed — originally collected {reading['source_ts']}, temperature and humidity seasonally adjusted",
         }
     if reading.get("is_synthetic"):
         return {
@@ -229,25 +267,26 @@ def _fine_bucket_start(source_ts_iso: str, granularity: str) -> str:
 
 
 def bucket_dataset_rows(rows: list, metric: str, granularity: str) -> list:
-    """Buckets raw Dataset Explorer rows (each a dict with source_ts + the
-    numeric metric fields, see backend/app/dataset_reader.py) into the same
+    """Buckets raw Dataset Explorer rows (each a dict with ts + the numeric
+    metric fields, see backend/app/dataset_reader.py) by their place on the
+    derived timeline (`ts`, D52 - not the original `source_ts`) into the same
     TimelinePoint shape metric_windows/rollup_metric_windows produce, so the
     frontend's one chart component can render a dataset-sourced comparison
     series exactly like a live-sourced one (D39's compare overlay, §5.7).
 
     No anomaly/threshold evaluation is applied to these rows (unhealthy is
-    always False) - the overlay's purpose is a value comparison against a
-    real historical period, not a second anomaly detector running over the
-    source CSV."""
+    always False) - the overlay's purpose is a value comparison against an
+    earlier period, not a second anomaly detector running over the derived
+    file."""
     buckets: dict = {}
     for r in rows:
         value = r.get(metric)
         if value is None:
             continue
         key = (
-            _fine_bucket_start(r["source_ts"], granularity)
+            _fine_bucket_start(r["ts"], granularity)
             if granularity in ("1m", "1h")
-            else f"{_rollup_bucket_key(r['source_ts'], granularity)}T00:00:00.000Z"
+            else f"{_rollup_bucket_key(r['ts'], granularity)}T00:00:00.000Z"
         )
         b = buckets.setdefault(key, {"min": None, "max": None, "sum": 0.0, "count": 0})
         b["min"] = value if b["min"] is None else min(b["min"], value)
@@ -334,3 +373,49 @@ def rollup_metric_windows(rows: list, metric: str, granularity: str) -> list:
             "unhealthy": b["anomaly_count"] > 0,
         })
     return out
+
+
+def stored_history_covers(window_start: datetime, history_start: datetime | None, raw_bucket_starts: list) -> bool:
+    """Whether Cassandra holds history back to `window_start` (FR-E6's source
+    choice, D39/D52): true when the earlier of the backfilled history's start
+    and the oldest raw_events partition is at or before it. The Cassandra
+    driver returns bucket_start as a naive UTC datetime, so naive values are
+    read as UTC before comparing."""
+    candidates = [history_start] if history_start is not None else []
+    for t in raw_bucket_starts:
+        if t is not None:
+            candidates.append(t if t.tzinfo else t.replace(tzinfo=timezone.utc))
+    return bool(candidates) and min(candidates) <= window_start
+
+
+def _bucket_end(start: datetime, granularity: str) -> datetime:
+    if granularity == "1m":
+        return start + timedelta(minutes=1)
+    if granularity == "1h":
+        return start + timedelta(hours=1)
+    if granularity == "1d":
+        return start + timedelta(days=1)
+    if granularity == "1w":
+        return start + timedelta(weeks=1)
+    year, month = (start.year + 1, 1) if start.month == 12 else (start.year, start.month + 1)
+    return start.replace(year=year, month=month, day=1)
+
+
+def attach_normal_bands(points: list, metric: str, stats: dict | None, granularity: str) -> list:
+    """Adds normal_min/normal_max to each timeline point: the widest normal
+    band in force during that point's period (start, middle, end sampled).
+    The out-of-range log judges each period against its own seasonal band,
+    not today's - a July week is not "above normal" just because it is
+    compared in winter. Periods are short enough (a month at most) that
+    three samples bound the curve. Leaves points untouched without stats."""
+    if not stats:
+        return points
+    for p in points:
+        start = parse_iso(p.get("window_start"))
+        if start is None:
+            continue
+        end = _bucket_end(start, granularity)
+        bands = [normal_band(metric, stats, t) for t in (start, start + (end - start) / 2, end)]
+        p["normal_min"] = min(b[0] for b in bands)
+        p["normal_max"] = max(b[1] for b in bands)
+    return points

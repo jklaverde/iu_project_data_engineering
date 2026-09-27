@@ -62,7 +62,7 @@ export default function SensorDetailPanel({ sensor }: { sensor: SensorEntry | nu
           <p className={`provenance-label provenance-${sensor.provenance.kind}`}>{sensor.provenance.label}</p>
         )}
 
-        <div className="stat-tiles">
+        <div className="stat-tiles" data-tour="planner-scores">
           <div className="stat-tile">
             <span className="score-label">Air quality score</span>
             <span className="score-value">{sensor.air_quality_score?.toFixed(0) ?? "–"}</span>
@@ -87,7 +87,7 @@ export default function SensorDetailPanel({ sensor }: { sensor: SensorEntry | nu
         {ranges.length > 0 && (
           <>
             <h4 className="section-title">Actual vs. acceptable range</h4>
-            <div className="gauge-list">
+            <div className="gauge-list" data-tour="planner-gauges">
               {ranges.map((metric) => (
                 <MetricGauge key={metric} metric={metric} range={sensor.metric_ranges[metric]} />
               ))}

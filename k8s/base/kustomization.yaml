@@ -12,6 +12,7 @@ resources:
   - job-dataset-init.yaml
   - job-kafka-topic-init.yaml
   - job-cassandra-schema-init.yaml
+  - job-history-backfill.yaml
   - deployment-producer.yaml
   - deployment-spark-master.yaml
   - deployment-spark-worker.yaml
@@ -52,6 +53,7 @@ configMapGenerator:
       - generated/cassandra-schema/005_device_metadata.cql
       - generated/cassandra-schema/006_device_thresholds.cql
       - generated/cassandra-schema/007_raw_events_source_ts.cql
+      - generated/cassandra-schema/008_history_backfill.cql
 
   - name: prometheus-config
     files:

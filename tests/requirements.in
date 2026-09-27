@@ -1,0 +1,4 @@
+# Unit-test runner only - the tests stub Kafka/Cassandra/Spark client libraries
+# when they are not installed (tests/conftest.py). Compile with:
+#   pip-compile --generate-hashes tests/requirements.in
+pytest==8.4.2

@@ -30,10 +30,12 @@ async def sensors(request: Request):
             entry["metric_ranges"] = {}
             entry["provenance"] = None
         else:
-            entry["status"] = environment.device_status(reading, device_thresholds)
+            # D52: judged against the seasonal band at the reading's own time.
+            read_at = environment.parse_iso(reading.get("event_ts"))
+            entry["status"] = environment.device_status(reading, device_thresholds, read_at)
             entry["air_quality_score"] = environment.air_quality_score(reading, device_thresholds)
             entry["comfort_index"] = environment.comfort_index(reading.get("temp"), reading.get("humidity"))
-            entry["metric_ranges"] = environment.metric_ranges(reading, device_thresholds)
+            entry["metric_ranges"] = environment.metric_ranges(reading, device_thresholds, read_at)
             entry["provenance"] = environment.reading_provenance(reading)
         out.append(entry)
 
@@ -82,29 +84,29 @@ _COMPARE_OFFSET_LABEL = {"1m": "1 hour ago", "1h": "1 day ago", "1d": "1 week ag
 _DATASET_ROLLUP_LIMIT = 200
 
 
-async def _build_compare(request: Request, device_id: str, metric: str, granularity: str) -> dict:
+async def _build_compare(
+    request: Request, device_id: str, metric: str, granularity: str, stats: dict | None
+) -> dict:
     """Resolves the compared period against whichever source actually has
-    data for it (D39, §5.7): live/synthetic Cassandra history when it's
-    within the deployment's own running history, the Dataset Explorer's real
-    data otherwise. "Has live history that far back" is answered by the
-    earliest raw_events partition that actually exists (reused from D40's
-    archive-and-trim, cassandra_client.raw_event_buckets_sync) rather than a
-    guessed deployment-start time."""
+    data for it (D39, §5.7): Cassandra when its history reaches back far
+    enough, the Dataset Explorer's derived file otherwise.
+
+    "How far back does Cassandra reach" is the earlier of the start of the
+    backfilled derived history (D52, history_backfill table) and the
+    earliest raw_events partition (live history, reused from D40's
+    archive-and-trim) - rather than a guessed deployment-start time."""
     reader = request.app.state.cassandra_reader
     offset_hours = _COMPARE_OFFSET_HOURS[granularity]
     now = datetime.now(timezone.utc)
     compare_reference = now - timedelta(hours=offset_hours)
 
-    buckets = await asyncio.to_thread(reader.raw_event_buckets_sync)
-    earliest = min((b[1] for b in buckets), default=None)
-    # The Cassandra driver returns bucket_start as a naive datetime (UTC-valued,
-    # same convention as _iso() elsewhere in this codebase) - make it aware
-    # before comparing against the aware datetimes below.
-    if earliest is not None and earliest.tzinfo is None:
-        earliest = earliest.replace(tzinfo=timezone.utc)
+    history_start, buckets = await asyncio.gather(
+        asyncio.to_thread(reader.history_start_sync),
+        asyncio.to_thread(reader.raw_event_buckets_sync),
+    )
     window_start = compare_reference - timedelta(hours=_TIMELINE_LOOKBACK_HOURS[granularity])
 
-    if earliest is not None and earliest <= window_start:
+    if environment.stored_history_covers(window_start, history_start, [b[1] for b in buckets]):
         source_table = "1h" if granularity in _ROLLUP_GRANULARITIES else granularity
         rows = await asyncio.to_thread(
             reader.aggregates_sync,
@@ -115,11 +117,15 @@ async def _build_compare(request: Request, device_id: str, metric: str, granular
             if granularity in _ROLLUP_GRANULARITIES
             else environment.metric_windows(rows, metric)
         )
+        environment.attach_normal_bands(points, metric, stats, granularity)
         return {"source": "live", "offset_label": _COMPARE_OFFSET_LABEL[granularity], "points": points}
 
+    # The derived file (D52) is on the same calendar as live data, so the
+    # fallback reads exactly the compared window, not the whole file.
     dataset_reader = request.app.state.dataset_reader
-    dataset_rows = await asyncio.to_thread(dataset_reader.query, device_id, None, None, 500000)
+    dataset_rows = await asyncio.to_thread(dataset_reader.query, device_id, window_start, compare_reference, 500000)
     points = environment.bucket_dataset_rows(dataset_rows, metric, granularity)[-_DATASET_ROLLUP_LIMIT:]
+    environment.attach_normal_bands(points, metric, stats, granularity)
     return {"source": "dataset", "offset_label": _COMPARE_OFFSET_LABEL[granularity], "points": points}
 
 
@@ -134,16 +140,22 @@ async def sensor_timeline(
     reader = request.app.state.cassandra_reader
 
     source_table = "1h" if granularity in _ROLLUP_GRANULARITIES else granularity
-    rows = await asyncio.to_thread(
-        reader.aggregates_sync, device_id, source_table, _TIMELINE_LOOKBACK_HOURS[granularity], 20000
+    rows, thresholds = await asyncio.gather(
+        asyncio.to_thread(
+            reader.aggregates_sync, device_id, source_table, _TIMELINE_LOOKBACK_HOURS[granularity], 20000
+        ),
+        asyncio.to_thread(reader.device_thresholds_sync),
     )
+    stats = thresholds.get(device_id, {}).get(metric)
 
     if granularity in _ROLLUP_GRANULARITIES:
         points = environment.rollup_metric_windows(rows, metric, granularity)
     else:
         points = environment.metric_windows(rows, metric)
+    # D52: each point carries the normal band of its own period (seasonal).
+    environment.attach_normal_bands(points, metric, stats, granularity)
 
-    compare_result = await _build_compare(request, device_id, metric, granularity) if compare else None
+    compare_result = await _build_compare(request, device_id, metric, granularity, stats) if compare else None
 
     return {
         "device_id": device_id, "metric": metric, "granularity": granularity,

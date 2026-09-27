@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from .device_stats import BaselineStats, NUMERIC_METRICS, generate_pressure
 from .kafka_client import KafkaEventPublisher
 from .rate_limiter import RateLimiter
+from . import seasonal
 from .schema import build_event
 from .state import ProducerState
 
@@ -85,6 +86,10 @@ class SyntheticGenerator:
         hour = now.hour
 
         values = {metric: self._draw_metric(device_id, metric, hour) for metric in NUMERIC_METRICS}
+        # D52: baselines come from the July source data; shift temp/humidity
+        # to today's point on the seasonal curve before any anomaly spike.
+        for metric in seasonal.SEASONAL_METRICS:
+            values[metric] = seasonal.apply(metric, values[metric], now)
         values["pressure"] = self._draw_metric(device_id, "pressure", hour)
 
         spiked_metrics = self._maybe_inject_anomaly(device_id, values)

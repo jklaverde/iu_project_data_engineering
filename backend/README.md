@@ -8,6 +8,15 @@ browser over WebSocket (with an HTTP polling fallback). See the root
 `backend` service in `docker-compose.yml`, built together with `frontend/`
 into one container (see `Dockerfile` — its build context is the repo root).
 
+## History backfill (D52)
+
+The same image also runs the one-shot `history-backfill` Job
+(`python -m app.history_backfill`): it derives ~25 months of readings from the
+8-day source CSV, writes `iot_telemetry_derived.csv` (served by the Dataset
+Explorer, `app/dataset_reader.py`) and backfills `agg_1h`. Normal ranges for
+temperature/humidity are seasonal (`app/seasonal.py`, `app/environment.py`).
+See `REQUIREMENTS.md` §5.9.
+
 ## Auth
 
 A single admin credential (`BACKEND_ADMIN_USERNAME`/`BACKEND_ADMIN_PASSWORD`,

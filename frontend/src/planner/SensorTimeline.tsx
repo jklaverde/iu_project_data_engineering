@@ -80,8 +80,8 @@ function TimelineChart({
 
   // The compare series (D39) has its own, generally different, point count
   // and window_start values (it's a different period, possibly from the
-  // Dataset Explorer's real 2020 timeline, not calendar-aligned to the
-  // current series) - plotted against the same category axis by position
+  // Dataset Explorer's derived file rather than Cassandra) - plotted against
+  // the same category axis by position
   // (older to now-relative position), not by matching timestamp, since the
   // whole point is "how did this metric look over an equivalent period,"
   // not a literal date overlay.
@@ -111,7 +111,7 @@ function TimelineChart({
   if (compare && compare.points.length > 0) {
     series.push({
       type: "line",
-      name: `compare (${compare.offset_label}, ${compare.source})`,
+      name: `compare (${compare.offset_label}, ${compare.source === "live" ? "stored history" : "derived data"})`,
       data: compare.points.map((p) => p.avg),
       smooth: true,
       symbol: "none",
@@ -124,7 +124,7 @@ function TimelineChart({
       <h4>{title}</h4>
       {compare && (
         <p className="waiting compare-source-label">
-          Compare series: {compare.offset_label} · source: {compare.source === "live" ? "live history" : "Dataset Explorer (2020)"}
+          Compare series: {compare.offset_label} · source: {compare.source === "live" ? "stored history" : "Dataset Explorer (derived data)"}
         </p>
       )}
       <EChartWrapper
@@ -185,13 +185,15 @@ export default function SensorTimeline({ sensor }: { sensor: SensorEntry }) {
         </div>
       </div>
       <p className="waiting timeline-caption">
-        Shaded regions mark windows where readings fell outside the acceptable range.
+        Shaded regions mark windows where readings fell outside the acceptable range. History from before
+        this deployment went live is derived from the 2020 source dataset (its 8 days repeated, temperature
+        and humidity adjusted for the season) — it is illustrative, not measured.
       </p>
-      <label className="compare-toggle">
+      <label className="compare-toggle" data-tour="planner-compare">
         <input type="checkbox" checked={showCompare} onChange={(e) => setShowCompare(e.target.checked)} />
         Compare to an earlier period
       </label>
-      <div className="timeline-grid">
+      <div className="timeline-grid" data-tour="planner-timeline">
         {GRANULARITIES.map((g) => (
           <TimelineChart key={g.key} title={g.label} formatLabel={g.formatLabel} response={data[g.key]} />
         ))}

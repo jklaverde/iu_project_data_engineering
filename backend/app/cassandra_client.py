@@ -224,6 +224,21 @@ class CassandraReader:
         result = self._session.execute("SELECT DISTINCT device_id, bucket_start FROM raw_events")
         return [(r.device_id, r.bucket_start) for r in result]
 
+    def history_start_sync(self) -> datetime | None:
+        """Start of the backfilled derived history (D52, history-backfill
+        Job), or None if no backfill has completed. Single-row point read.
+        Tolerates the table not existing yet (schema init still running)."""
+        try:
+            row = self._session.execute(
+                "SELECT history_start, completed_at FROM history_backfill WHERE id='default'"
+            ).one()
+        except Exception:
+            return None
+        if row is None or row.completed_at is None or row.history_start is None:
+            return None
+        start = row.history_start
+        return start if start.tzinfo else start.replace(tzinfo=timezone.utc)
+
     def export_and_delete_partition_sync(self, device_id: str, bucket_start: datetime) -> list:
         """Single-partition read (full partition key supplied) followed by a
         single-partition delete - the archive-and-trim action's unit of work

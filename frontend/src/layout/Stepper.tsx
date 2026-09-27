@@ -8,7 +8,7 @@ interface Props {
 
 export default function Stepper({ steps, current, onSelect }: Props) {
   return (
-    <nav className="stepper">
+    <nav className="stepper" data-tour="admin-stepper">
       {steps.map((step) => (
         <button
           key={step.name}

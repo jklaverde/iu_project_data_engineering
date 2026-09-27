@@ -212,6 +212,10 @@ export interface TimelinePoint {
   anomaly_count: number;
   event_count: number;
   unhealthy: boolean;
+  // The normal band in force during this point's own period - seasonal for
+  // temperature/humidity. Absent when the sensor has no baseline yet.
+  normal_min?: number;
+  normal_max?: number;
 }
 
 export type CompareSource = "live" | "dataset";
@@ -230,20 +234,24 @@ export interface TimelineResponse {
   compare: CompareTimeline | null;
 }
 
-// Mirrors backend/app/routers/dataset.py (D38 - Dataset Explorer, FR-P2).
+// Mirrors backend/app/routers/dataset.py (D38 - Dataset Explorer, FR-P2;
+// D52 - serves the derived multi-month file: `ts` is a reading's place on
+// the derived timeline, `source_ts` the original reading it was derived from).
 
 export interface DatasetDeviceSummary {
   device_id: string;
   row_count: number;
-  min_source_ts: string;
-  max_source_ts: string;
+  min_ts: string;
+  max_ts: string;
 }
 
 export interface DatasetSummaryResponse {
+  available: boolean;
   devices: DatasetDeviceSummary[];
 }
 
 export interface DatasetReading {
+  ts: string;
   source_ts: string;
   device_id: string;
   co: number;

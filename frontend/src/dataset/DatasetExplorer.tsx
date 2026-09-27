@@ -13,14 +13,13 @@ const METRICS: { key: MetricKey; label: string }[] = [
   { key: "humidity", label: "Humidity" },
 ];
 
-// Half-window fetched around the scrub cursor. A device produces roughly one
-// reading every ~4.5s (405k rows / 3 devices / 7 days), so a 30-minute span
-// is a few hundred points - enough for a smooth line, well under the fetch
-// limit below.
-const HALF_WINDOW_MS = 15 * 60 * 1000;
+// Half-window fetched around the scrub cursor. The derived file (D52) holds one
+// reading per device every 10 minutes, so a 24-hour span is ~144 points - a
+// full day/night cycle, well under the fetch limit below.
+const HALF_WINDOW_MS = 12 * 60 * 60 * 1000;
 const REFETCH_THRESHOLD_MS = HALF_WINDOW_MS / 2;
-const SLIDER_STEP_MS = 60 * 1000;
-const PLAY_STEP_MS = 5 * 60 * 1000;
+const SLIDER_STEP_MS = 10 * 60 * 1000;
+const PLAY_STEP_MS = 60 * 60 * 1000;
 const PLAY_TICK_MS = 200;
 
 function fmt(ms: number): string {
@@ -39,15 +38,17 @@ function LoadingBlock({ label, height }: { label: string; height?: number }) {
   );
 }
 
-// D38 - reachable by both roles (FR-W8, FR-P2): browses the original Kaggle
-// CSV directly, independent of Kafka/Spark/Cassandra, on its own real 2020
-// timeline. A scrub control (not a raw grid) drives the chart, so moving
-// through time is the interaction, not scrolling a table - the direct
-// answer to "how does live data relate to the dataset" is watching values
-// change as you move a cursor through the dataset's own real collection
-// window.
+// D38 - reachable by both roles (FR-W8, FR-P2): browses the dataset file
+// directly, independent of Kafka/Spark/Cassandra. Since D52 that file is the
+// derived multi-month one (the 8-day 2020 source looped and seasonally
+// adjusted), on the same calendar as the stored history; each reading still
+// names the original 2020 reading it came from. A scrub control (not a raw
+// grid) drives the chart, so moving through time is the interaction, not
+// scrolling a table - watching values change as you move a cursor through
+// the dataset's timeline.
 export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
   const [summary, setSummary] = useState<DatasetDeviceSummary[]>([]);
+  const [available, setAvailable] = useState(true);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [metric, setMetric] = useState<MetricKey>("co");
@@ -69,6 +70,7 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
     fetchDatasetSummary()
       .then((res) => {
         setSummary(res.devices);
+        setAvailable(res.available);
         if (res.devices.length > 0) setSelectedDevice((cur) => cur ?? res.devices[0].device_id);
       })
       .catch(() => setSummary([]))
@@ -77,16 +79,16 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
 
   const range = useMemo(() => {
     const d = summary.find((s) => s.device_id === selectedDevice);
-    return d ? { min: Date.parse(d.min_source_ts), max: Date.parse(d.max_source_ts) } : null;
+    return d ? { min: Date.parse(d.min_ts), max: Date.parse(d.max_ts) } : null;
   }, [summary, selectedDevice]);
 
-  // Jump to the start of the selected device's real timeline on device
-  // change - a fresh scrub, not carried over from the last device.
+  // Jump to the start of the selected device's timeline on device change -
+  // a fresh scrub, not carried over from the last device.
   useEffect(() => {
     const d = summary.find((s) => s.device_id === selectedDevice);
     if (!d) return;
     loadedCenterRef.current = null;
-    setCursorMs(Date.parse(d.min_source_ts));
+    setCursorMs(Date.parse(d.min_ts));
   }, [selectedDevice, summary]);
 
   // Only refetch once the cursor drifts past the inner half of the loaded
@@ -120,7 +122,7 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
     };
   }, [selectedDevice, cursorMs]);
 
-  // Auto-advance the cursor through this device's real timeline, so "move
+  // Auto-advance the cursor through this device's timeline, so "move
   // through time" works as playback, not just manual dragging.
   useEffect(() => {
     if (!playing || !range) return;
@@ -142,14 +144,14 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
   // on the category axis below (a numeric time-type axis renders its own
   // tick labels in the browser's local timezone, which would silently
   // disagree with the UTC label above it - exactly the provenance confusion
-  // D38 exists to remove, so this chart uses source_ts's own UTC text
+  // D38 exists to remove, so this chart uses ts's own UTC text
   // instead, same convention as SensorTimeline's formatLabel functions).
   const nearestIndex = useMemo(() => {
     if (cursorMs === null || windowReadings.length === 0) return null;
     let bestIdx = 0;
     let bestDelta = Infinity;
     windowReadings.forEach((r, i) => {
-      const delta = Math.abs(Date.parse(r.source_ts) - cursorMs);
+      const delta = Math.abs(Date.parse(r.ts) - cursorMs);
       if (delta < bestDelta) {
         bestDelta = delta;
         bestIdx = i;
@@ -174,16 +176,20 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
         </button>
         <h2 id="dataset-explorer-title">Dataset Explorer</h2>
         <p className="waiting">
-          Scrub through the original Kaggle source file's own real collection timeline — not the
-          live/synthetic pipeline. Every value here is genuine, dated to when it was actually collected.
+          Scrub through the historical dataset behind the stored history — not the live pipeline. It is
+          derived from a public 8-day sensor dataset recorded in July 2020: those 8 days are repeated across
+          the whole period, with temperature and humidity adjusted for the season and a little random
+          variation added. The values are illustrative, not measurements; each reading shows the original
+          2020 reading it came from.
         </p>
 
         {summaryLoading && <LoadingBlock label="Loading dataset summary…" />}
 
         {!summaryLoading && summary.length === 0 && (
           <p className="waiting dataset-loading-block">
-            Couldn't load the dataset summary — the backend may still be starting up. Try reopening
-            this in a moment.
+            {available
+              ? "Couldn't load the dataset summary — the backend may still be starting up. Try reopening this in a moment."
+              : "The historical dataset hasn't been generated yet — it is created during deployment and takes a few minutes. Try reopening this shortly."}
           </p>
         )}
 
@@ -197,7 +203,7 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
               >
                 <span className="dataset-device-id">{d.device_id}</span>
                 <span className="dataset-device-meta">
-                  {d.row_count.toLocaleString()} rows · {d.min_source_ts.slice(0, 10)} → {d.max_source_ts.slice(0, 10)}
+                  {d.row_count.toLocaleString()} rows · {d.min_ts.slice(0, 10)} → {d.max_ts.slice(0, 10)}
                 </span>
               </button>
             ))}
@@ -245,7 +251,8 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
               <p className="dataset-nearest-reading">
                 Nearest reading — CO {nearest.co.toFixed(4)} · LPG {nearest.lpg.toFixed(4)} · Smoke{" "}
                 {nearest.smoke.toFixed(4)} · Temp {nearest.temp.toFixed(1)}°C · Humidity{" "}
-                {nearest.humidity.toFixed(0)}%
+                {nearest.humidity.toFixed(0)}% · derived from the reading collected{" "}
+                {nearest.source_ts.replace("T", " ").slice(0, 19)} UTC
               </p>
             )}
 
@@ -258,7 +265,7 @@ export default function DatasetExplorer({ onClose }: { onClose: () => void }) {
                   grid: { left: 48, right: 16, top: 16, bottom: 40 },
                   xAxis: {
                     type: "category",
-                    data: windowReadings.map((r) => r.source_ts.slice(11, 19)),
+                    data: windowReadings.map((r) => `${r.ts.slice(5, 10)} ${r.ts.slice(11, 16)}`),
                     axisLabel: { fontSize: 10 },
                   },
                   yAxis: { type: "value" },

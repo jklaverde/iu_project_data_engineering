@@ -30,17 +30,18 @@ trust a snapshot, including section 3 below — verify.
    up and down" and `docs/deployment.html` first; both explain *why* local and production
    differ.
 
-## 3. State snapshot — dated 2026-09-23 (update this at the end of every session)
+## 3. State snapshot — dated 2026-09-27 (update this at the end of every session)
 
 | Item | State |
 |---|---|
-| Latest decision | **D51** (D48 = unified deploy script, D49/D50 = post-go-live hardening and memory resize, D51 = Cassandra node-deploy notice reworded; not yet deployed). Next free number: **D52**. |
-| Phases | P1–P5, P8–P11 done and live-verified. Interim VPS done (now single-node k3s). **Full P6 (3-VPS, HA, TLS) and P7 (48 h endurance) not started.** |
+| Latest decision | **D54** (in-app guided tour per role, EN/DE; D53 = unit tests for D52; D52 = multi-month derived history + backfill + seasonal normal ranges; D51 = Cassandra node-deploy notice reworded, **not yet deployed**). Next free number: **D55**. |
+| Phases | P1–P5, P8–P11 done and live-verified. **P12 (D52) live-verified on local k3d (one OOM bug found/fixed, operations.html p12-1); not yet in production.** Interim VPS done (now single-node k3s). **Full P6 (3-VPS, HA, TLS) and P7 (48 h endurance) not started.** |
 | Production | Single-node k3s on this host; `iot-pipeline` namespace deployed 2026-09-21 ~18:14 CEST, all pods `Running`, 0 restarts, ~3.7 GiB memory available. `kafka-ui` intentionally scaled to 0. |
 | `deploy.sh` verification | `check`, argument handling and validation paths: run. **`up`/`update`/prod `down` were not run by the session that wrote them.** The timestamps (images built → `generated/` staged → Secret created within 1 s) match `deploy.sh prod up` having been run at ~18:14 CEST, but nobody has confirmed it. **Confirm with the user, then record the result in D48.** |
+| D52 rollout | Production still runs the pre-D52 code. Adopting D52 needs `deploy.sh prod down` + `up` (wipes Cassandra — the user agreed on 2026-09-27, confirm again at the time). Verify on local k3d first. |
 | Not built | TLS/ingress · image registry · multi-node · automated backups · a rehearsed restore · `k8s/overlays/prod` |
 | Unverified claim | Whether `ufw` alone can close ports that k3s servicelb publishes (`docs/deployment.html` §6 says to test from another machine). |
-| No test suite | There are **no automated tests** in this repo. "Verified" means a live run, recorded in a D-entry. Do not imply otherwise. |
+| Tests | Two unit suites, both narrow: pytest for the D52 multi-month-history workflow (`tests/`, D53; `python -m pytest tests -q`, 60 tests) and Node's built-in runner for the guided tour (`frontend/tests/`, D54; `cd frontend && npm test`, 23 tests). Neither needs services. Everything else — API routes, Spark streaming, the UI — is verified only by live runs recorded in D-entries. Do not imply broader coverage. |
 
 ## 4. Where things are
 
@@ -55,6 +56,7 @@ trust a snapshot, including section 3 below — verify.
 | `producer/` `spark_job/` `kaggle_repository/` | Ingestion, streaming job (also the `spark-worker` image), dataset fetch job. |
 | `infra/` | Cassandra image + schema, Prometheus, Loki, Promtail, Grafana provisioning. |
 | `docker-compose.yml` | Legacy fallback. Reads *all* settings from `.env`. |
+| `tests/` | pytest unit suite for the D52 workflow (D53). Stubs missing Kafka/Cassandra/Spark libraries; never needs a cluster. |
 | `development_notes/`, `docs/internal/`, `.claude/` | Gitignored, local-only. Don't rely on them existing. |
 
 ## 5. Run, verify, deploy
@@ -64,6 +66,7 @@ k8s/deploy.sh local check|up|update <svc>|status|down     # k3d (needs Docker + 
 sudo k8s/deploy.sh prod check|up|update <svc>|status|down  # this host; root needed
 kubectl kustomize k8s/base >/dev/null                      # manifests still render?
 bash -n k8s/deploy.sh                                      # script still parses?
+python -m pytest tests -q                                  # unit tests (install: tests/requirements.txt)
 ```
 
 - **Which command for which change** (README "Changing things on a running stack"): code →
@@ -124,7 +127,7 @@ D49/D50 were written this way.
 **Playbook — end of session (do all, in this order)**
 1. D-rows and `operations.html` updated. 2. Affected user docs updated (README,
 `deployment.html`, `reference.html`). 3. **§3 of this file refreshed and re-dated.**
-4. `kubectl kustomize k8s/base` and `bash -n k8s/deploy.sh` pass. 5. Commit only when the
+4. `kubectl kustomize k8s/base`, `bash -n k8s/deploy.sh` and `python -m pytest tests -q` pass. 5. Commit only when the
 user asks. **Pushing needs the user:** this environment has no GitHub credentials — ask them
 to run `! git push`.
 
@@ -146,26 +149,32 @@ to run `! git push`.
 | `up` doesn't ship code | Images are `:local`; same tag ⇒ no pod-spec change ⇒ old container keeps running. Use `update <svc>`. (D48) |
 | `kubectl` is `k3s kubectl` | On this host it ignores `~/.kube/config`; scripts set `KUBECONFIG` explicitly. (D46) |
 | Images exist only in k3s containerd | No registry. `crictl rmi --prune` or kubelet GC (disk > ~85%) removes them ⇒ `ErrImagePull` on pod recreation. Re-run `up`. (`deployment.html` §8) |
-| **Memory budget** | Container limits sum ≈ 9.6 GiB on an 11 GiB host (D50). Adding a pod, raising a limit, or scaling Cassandra needs a `kubectl top nodes` check; a 2nd/3rd Cassandra node OOM-killed pods before (D44/D45). |
+| **Memory budget** | Container limits sum ≈ 9.6 GiB on an 11 GiB host (D50). Adding a pod, raising a limit, or scaling Cassandra needs a `kubectl top nodes` check; a 2nd/3rd Cassandra node OOM-killed pods before (D44/D45). The `history-backfill` Job adds a transient 512Mi during `up` (D52). |
 | Compose bypasses `ufw` | Docker's iptables rules run before ufw; every compose-published port is internet-reachable. (`deployment.html` appendix; D48) |
 | Removing a Cassandra node | Deleting its pod/PVC without `nodetool removenode` leaves the ring thinking it exists. FR-N2 is scale-up only. (D44) |
 | Admin Cassandra-deploy / Kubernetes tabs | Need the Kubernetes API ⇒ `503` under compose. |
 | `kustomize` can't read outside `k8s/base` | Hence the gitignored `k8s/base/generated/` staged by `deploy.sh`. A bare `kubectl apply -k` on a fresh clone fails. |
 | A poisoned Kafka message | Used to crash all three streaming queries in a loop; malformed events are now dropped in `spark_job/schema.py` (D49). |
+| `seasonal.py` exists 3× | `backend/app/`, `producer/producer/`, `spark_job/spark_job/` — separate images, hand-synced, must stay identical (D52). |
+| A retried Job can hide a crash | `history-backfill`'s first live run was OOM-killed and its idempotent retry reported Complete (p12-1). Check `restartCount`, not only the status. |
+| `history-backfill` only fills an empty keyspace | It records its anchor in `iot.history_backfill`; once complete, re-runs write nothing. Changing `HISTORY_*` span/sampling/seed needs an empty keyspace. (D52) |
+| Local image builds crawl while the stack runs | The k3d node uses ~6.8 of Docker Desktop's 7.7 GiB, leaving the backend image's frontend build <1 GiB (6 min 39 s vs 15 s). Scale `spark-job`/`spark-worker` to 0 for the build, then back to 1. No `.dockerignore` either: the whole repo (incl. `.venv`, `node_modules`) is sent as context. (D54) |
+| Guided tour targets | Tour steps find elements by `data-tour="…"`; renaming/removing one breaks a step — `npm test` in `frontend/` catches it. Tour text must stay free of internal codes (also tested). (D54) |
 | Init Jobs are immutable | `apply` failing with "field is immutable" ⇒ delete that Job, re-run `up`. |
 
 ## 9. Open threads (highest value first — canonical list: `docs/operations.html#next`)
 
-1. **Close the D48 loop:** ask the user whether `deploy.sh prod up` was what produced the
+1. **Roll out D52 to production**: check the planner UI in a browser first (only its API was verified), then prod `down` + `up` with the user's go-ahead; confirm `history-backfill` has 0 restarts. Record the outcome in D52.
+2. **Close the D48 loop:** ask the user whether `deploy.sh prod up` was what produced the
    current deployment; record the real outcome; then exercise `update` and prod `down`'s
    prompt (the latter destroys data — only with the user's go-ahead).
-2. **Verify the firewall from outside** (`nc -vz <ip> 8000 3000 6443 10250`); fix the docs
+3. **Verify the firewall from outside** (`nc -vz <ip> 8000 3000 6443 10250`); fix the docs
    whichever way it comes out.
-3. **TLS** (Caddy interim, §6b of `deployment.html`), then flip `BACKEND_COOKIE_SECURE` in
+4. **TLS** (Caddy interim, §6b of `deployment.html`), then flip `BACKEND_COOKIE_SECURE` in
    `config.env` — not `.env`.
-4. **Rehearse a backup restore.** Never done.
-5. **Production overlay** (`k8s/overlays/prod`: registry images, ingress + TLS, replicas) —
+5. **Rehearse a backup restore.** Never done.
+6. **Production overlay** (`k8s/overlays/prod`: registry images, ingress + TLS, replicas) —
    the intended path to full P6; lift `deploy.sh`'s multi-node refusal only after it exists.
-6. P7 endurance run (needs 100 GB disk headroom and the memory budget in §8 re-checked).
-7. UC-7 control panel (deferred since Phase 1); the tombstone/`READ_TOO_MANY_TOMBSTONES`
+7. P7 endurance run (needs 100 GB disk headroom and the memory budget in §8 re-checked).
+8. UC-7 control panel (deferred since Phase 1); the tombstone/`READ_TOO_MANY_TOMBSTONES`
    debt (`operations.html` P5 §3).

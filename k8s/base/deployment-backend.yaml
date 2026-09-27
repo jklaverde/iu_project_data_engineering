@@ -86,8 +86,10 @@ spec:
               value: http://producer:8000
             - name: SPARK_JOB_STATE_URL
               value: http://spark-job:8000
+            # D52: the Dataset Explorer serves the derived multi-month file
+            # the history-backfill Job writes, not the original 8-day CSV.
             - name: BACKEND_DATASET_CSV_PATH
-              value: /data/iot_telemetry_data.csv
+              value: /data/iot_telemetry_derived.csv
             - name: BACKEND_ARCHIVE_DIR
               value: /archive
           ports:

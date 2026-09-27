@@ -192,7 +192,7 @@ kubectl create secret generic app-secrets -n iot-pipeline \
 # 6. Everything else
 kubectl apply -k k8s/base
 
-# 7. Watch it come up (cassandra, kafka, the 3 init Jobs, backend, grafana)
+# 7. Watch it come up (cassandra, kafka, the 4 init Jobs incl. history-backfill, backend, grafana)
 kubectl -n iot-pipeline get pods -w
 ```
 
@@ -209,6 +209,26 @@ reason "I changed it and nothing happened":
 
 Never repeat the full down/up cycle for a code change: it wipes Kafka/Cassandra/Grafana/
 Prometheus state that has nothing to do with the change.
+
+**One exception — adopting the multi-month history (D52) on an existing deployment.** The
+`history-backfill` Job writes ~25 months of derived history into an *empty* keyspace, and
+the changed `cassandra-schema-init` Job cannot be re-applied over the old one. So this
+change is rolled out with `deploy.sh <env> down` followed by `up`, which deletes the stored
+sensor history (agreed for this change). On a fresh namespace `up` waits for the backfill
+(a few minutes); follow it with `kubectl -n iot-pipeline logs job/history-backfill`.
+
+### Where the history comes from
+
+The source dataset covers only 8 days of July 2020. So that the day/week/month charts, their
+"compare to" overlay and the Dataset Explorer have something to show, the `history-backfill`
+Job derives ~25 months from it: the 8 days are repeated (time of day preserved), temperature
+and humidity follow a seasonal curve (July unchanged, January the extreme), and a little
+seeded noise is added. That history is written to `agg_1h` and to
+`/data/iot_telemetry_derived.csv` (what the Dataset Explorer shows); the original CSV is
+untouched. It is **illustrative, not measured**, and the UI says so. Normal ranges for
+temperature and humidity follow the same curve, so winter readings are judged against a
+winter range. Tune it in `k8s/base/config.env` (`HISTORY_*`); changes to the span, sampling
+or seed only take effect on an empty keyspace.
 
 ### Legacy: docker compose
 
@@ -255,6 +275,14 @@ Once the stack is healthy, open **http://localhost:8000** (local) or **http://\<
 (production) and log in with one of the two
 role accounts (usernames from `k8s/base/config.env`, passwords from `.env`) — the same login form serves both roles, which one you land on
 depends on which account you use.
+
+**Guided tour.** The first time a role's screen opens in a browser, a guided tour starts by
+itself: it highlights each part of the screen and explains what it is and what it is good
+for (for planners, including what each sensor type tells a municipality), in English or
+German. Finishing or skipping it turns the automatic start off; **Guided tour** in the header
+reopens it, and **Show at login** switches the automatic start back on. Both settings are kept
+in the browser, not on the server — the role accounts are shared, so each person decides for
+themselves.
 
 ### Environmental/planner role (`BACKEND_PLANNER_USERNAME`/`BACKEND_PLANNER_PASSWORD`)
 
@@ -318,6 +346,29 @@ Picking this project up (as a person or a new Claude Code session)? Start with
 keep the decision log honest, playbooks for a new requirement / milestone / incident, and the
 gotchas that have already cost time. The prioritized backlog is `docs/operations.html` →
 "Where to pick this up next"; the decision log is `REQUIREMENTS.md` §11.
+
+### Unit tests
+
+`tests/` holds a pytest suite for the multi-month history workflow (D52/D53): the seasonal
+curve, the `history-backfill` derivation and its idempotent Cassandra workflow, the Dataset
+Explorer reader, seasonal normal ranges and the compare-source decision, the producer's
+seasonal shift and the Spark anomaly seed. It needs no running services and no
+Kafka/Cassandra/Spark libraries (they are stubbed when missing, see `tests/conftest.py`):
+
+```
+python -m pip install --require-hashes -r tests/requirements.txt
+python -m pytest tests -q
+```
+
+The guided tour's logic and content rules have their own tests, run with Node's built-in
+runner (Node ≥ 23.6, no extra dependency):
+
+```
+cd frontend && npm test
+```
+
+The rest of the codebase (API routes, Spark streaming queries, the rest of the UI) is still
+verified by live runs recorded in the decision log, not by tests.
 
 ## Endurance-run procedure
 

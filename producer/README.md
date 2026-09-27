@@ -23,6 +23,12 @@ repo root for the full list and defaults (`PRODUCER_RATE_MSGS_PER_SEC`,
 `PRODUCER_DATASET_CSV_PATH`, `PRODUCER_REPLAY_ROW_LIMIT`, `PRODUCER_STATE_PORT`,
 `PRODUCER_LOG_LEVEL`).
 
+Temperature and humidity of every event (replayed and synthetic) are shifted
+along a seasonal curve keyed on `event_ts` (`producer/seasonal.py`, D52), so
+live data continues the backfilled multi-month history without a step. The
+curve's `HISTORY_SEASONAL_*` settings live in `k8s/base/config.env`; the
+defaults in `seasonal.py` match them when they are unset.
+
 `PRODUCER_REPLAY_ROW_LIMIT` is a development aid: set it to a small number
 (e.g. `2000`) to replay only the last N rows of the dataset instead of all
 ~405K, reaching the synthetic hand-over in seconds instead of ~67 minutes.

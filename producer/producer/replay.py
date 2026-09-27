@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from .device_stats import BaselineStats, generate_pressure
 from .kafka_client import KafkaEventPublisher
 from .rate_limiter import RateLimiter
+from . import seasonal
 from .schema import build_event
 from .state import ProducerState
 
@@ -51,10 +52,12 @@ def run_replay(
                 event_ts=event_ts,
                 ingest_ts=ingest_ts,
                 co=float(row["co"]),
-                humidity=float(row["humidity"]),
+                # D52: the same seasonal curve the backfilled history uses,
+                # keyed on event_ts, so live data continues it without a step.
+                humidity=seasonal.apply("humidity", float(row["humidity"]), event_ts),
                 lpg=float(row["lpg"]),
                 smoke=float(row["smoke"]),
-                temp=float(row["temp"]),
+                temp=seasonal.apply("temp", float(row["temp"]), event_ts),
                 light=row["light"].strip().lower() == "true",
                 motion=row["motion"].strip().lower() == "true",
                 pressure=generate_pressure(),

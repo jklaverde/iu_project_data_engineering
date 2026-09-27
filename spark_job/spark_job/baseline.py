@@ -1,4 +1,8 @@
+from datetime import datetime, timezone
+
 from pyspark.sql import functions as F
+
+from . import seasonal
 
 from .schema import NUMERIC_METRICS
 
@@ -42,3 +46,21 @@ def compute_seed_baseline(spark, csv_path: str, ceiling_safety_multiplier: float
         }
 
     return baseline, ceilings
+
+
+def seasonally_shifted(baseline: dict, at=None) -> dict:
+    """The EWMA seed shifted to `at`'s point on the D52 seasonal curve.
+
+    compute_seed_baseline's means come from July source data, but the
+    producer shifts live temp/humidity by the same curve (seasonal.py), so an
+    unshifted seed would flag every early live reading outside July as a
+    sigma anomaly until the EWMA caught up. Only the seed is shifted: the
+    unshifted baseline is what device_thresholds persists, and the backend
+    applies the curve itself when it evaluates a reading at a given time."""
+    at = at or datetime.now(timezone.utc)
+    shifted = {}
+    for device_id, metrics in baseline.items():
+        shifted[device_id] = {
+            m: (mean + seasonal.offset(m, at), std) for m, (mean, std) in metrics.items()
+        }
+    return shifted

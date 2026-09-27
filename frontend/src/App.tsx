@@ -15,6 +15,9 @@ import IngestionStep from "./steps/IngestionStep";
 import KafkaStep from "./steps/KafkaStep";
 import SparkStep from "./steps/SparkStep";
 import SummaryStep from "./steps/SummaryStep";
+import GuidedTour from "./tutorial/GuidedTour";
+import TourControls from "./tutorial/TourControls";
+import { useGuidedTour } from "./tutorial/useGuidedTour";
 import MapView from "./planner/MapView";
 import { usePipelineState } from "./state/usePipelineState";
 import type { Role, StepName } from "./types";
@@ -36,6 +39,7 @@ function Shell({ onLogout }: { onLogout: () => void }) {
   const [showAbout, setShowAbout] = useState(false);
   const [showDataset, setShowDataset] = useState(false);
   const [adminTab, setAdminTab] = useState<AdminTab>("pipeline");
+  const tour = useGuidedTour("admin");
 
   return (
     <div className="shell">
@@ -45,10 +49,11 @@ function Shell({ onLogout }: { onLogout: () => void }) {
           <h1>Pipeline Console</h1>
         </div>
         <div className="header-right">
-          <span className={`connection-badge connection-${connectionMode}`}>
+          <TourControls onStart={tour.start} autoStart={tour.autoStart} onAutoStartChange={tour.setAutoStart} />
+          <span className={`connection-badge connection-${connectionMode}`} data-tour="admin-connection">
             {connectionMode === "ws" ? "live (websocket)" : connectionMode === "polling" ? "live (polling)" : "connecting..."}
           </span>
-          <button className="btn btn-ghost" onClick={() => setShowDataset(true)}>
+          <button className="btn btn-ghost" data-tour="dataset-explorer" onClick={() => setShowDataset(true)}>
             Dataset Explorer
           </button>
           <button className="btn btn-accent" onClick={() => setShowAbout(true)}>
@@ -62,6 +67,16 @@ function Shell({ onLogout }: { onLogout: () => void }) {
 
       {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
       {showDataset && <DatasetExplorer onClose={() => setShowDataset(false)} />}
+      {tour.open && (
+        <GuidedTour
+          steps={tour.steps}
+          lang={tour.lang}
+          onLangChange={tour.setLang}
+          onClose={tour.close}
+          // The flow diagram and the six steps only exist on the Pipeline tab.
+          onStepEnter={() => setAdminTab("pipeline")}
+        />
+      )}
 
       <nav className="admin-tabs">
         <button
@@ -72,18 +87,21 @@ function Shell({ onLogout }: { onLogout: () => void }) {
         </button>
         <button
           className={`admin-tab ${adminTab === "alerts" ? "admin-tab-active" : ""}`}
+          data-tour="admin-tab-alerts"
           onClick={() => setAdminTab("alerts")}
         >
           Alerts
         </button>
         <button
           className={`admin-tab ${adminTab === "kubernetes" ? "admin-tab-active" : ""}`}
+          data-tour="admin-tab-kubernetes"
           onClick={() => setAdminTab("kubernetes")}
         >
           Kubernetes
         </button>
         <button
           className={`admin-tab ${adminTab === "docs" ? "admin-tab-active" : ""}`}
+          data-tour="admin-tab-docs"
           onClick={() => setAdminTab("docs")}
         >
           Docs

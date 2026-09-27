@@ -29,3 +29,4 @@ frontend/tsconfig.tsbuildinfo
 # k8s/deploy.sh copies them from infra/ before every apply, so infra/ stays
 # the one committed source of truth and this directory is never committed.
 k8s/base/generated/
+.pytest_cache/

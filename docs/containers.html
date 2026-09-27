@@ -573,7 +573,7 @@
           <div class="unit-head">
             <div class="unit-tags"><span class="pill pill--oneshot">one-shot</span></div>
             <h3>cassandra-schema-init</h3>
-            <p class="unit-role">Applies the six versioned CQL scripts that create the keyspace and every table, in order, exactly once.</p>
+            <p class="unit-role">Applies the versioned CQL scripts (<code>001</code>–<code>008</code>) that create the keyspace and every table, in order, exactly once.</p>
           </div>
           <div class="unit-body">
             <dl class="unit-meta">
@@ -586,9 +586,50 @@
             <p class="unit-note">
               Retries <code>001_keyspace.cql</code> up to 30 times, 5 seconds apart, before giving up —
               the healthcheck saying "healthy" and CQL truly being ready to accept schema changes
-              aren't always the same instant. Then runs <code>002</code>–<code>006</code>
+              aren't always the same instant. Then runs <code>002</code>–<code>008</code>
               (<code>raw_events</code>, <code>agg_1m</code>, <code>agg_1h</code>,
-              <code>device_metadata</code>, <code>device_thresholds</code>) in strict order.
+              <code>device_metadata</code>, <code>device_thresholds</code>, the
+              <code>source_ts</code> column, <code>history_backfill</code>) in strict order.
+            </p>
+          </div>
+        </article>
+
+        <article class="unit" id="history-backfill">
+          <div class="unit-head">
+            <div class="unit-tags"><span class="pill pill--oneshot">one-shot</span><span class="pill pill--custom">custom build</span></div>
+            <h3>history-backfill</h3>
+            <p class="unit-role">Turns the 8-day source dataset into about 25 months of history and writes it into <code>agg_1h</code>, so the day/week/month views and comparisons have data as soon as it finishes.</p>
+          </div>
+          <div class="unit-body">
+            <dl class="unit-meta">
+              <div><dt>Build</dt><dd>same image as <code>backend</code> (<code>backend/Dockerfile</code>), entrypoint <code>python -m app.history_backfill</code></dd></div>
+              <div><dt>Depends on</dt><dd><code>cassandra-schema-init</code> completed · <code>dataset-init</code> completed</dd></div>
+              <div><dt>Volumes</dt><dd><code>kaggle_dataset</code> → <code>/data</code> (read-write)</dd></div>
+              <div><dt>Ports</dt><dd>none</dd></div>
+              <div><dt>Health check</dt><dd>none — one-shot</dd></div>
+              <div><dt>Limits</dt><dd>512m · restart: no</dd></div>
+            </dl>
+            <div class="env-block env-wrap">
+              <span class="label">Environment</span>
+              <table class="env-table">
+                <tr><td class="k">HISTORY_SOURCE_CSV_PATH</td><td class="v">/data/iot_telemetry_data.csv</td></tr>
+                <tr><td class="k">HISTORY_DERIVED_CSV_PATH</td><td class="v">/data/iot_telemetry_derived.csv</td></tr>
+                <tr><td class="k">HISTORY_SPAN_DAYS</td><td class="v">770</td></tr>
+                <tr><td class="k">HISTORY_SAMPLE_MINUTES</td><td class="v">10</td></tr>
+                <tr><td class="k">HISTORY_SEED</td><td class="v">51</td></tr>
+              </table>
+            </div>
+            <p class="unit-note">
+              Loops the source file's 8-day cycle across the whole span (time of day preserved), samples
+              one reading per device every 10 minutes, and shifts temperature and humidity along a
+              seasonal curve (July unchanged, January the extreme). The result is written to
+              <code>iot_telemetry_derived.csv</code> — the file the Dataset Explorer serves — and
+              aggregated into hourly rows written straight to Cassandra, bypassing Kafka and Spark, so the
+              pipeline's throughput and latency figures never include it. The original CSV is never
+              modified. <strong>Idempotent:</strong> the <code>history_backfill</code> table records the
+              time anchor, so a re-run reuses it and, once complete, does nothing. Runs as
+              <strong>root</strong> for the same reason as <code>dataset-init</code>: it writes into the
+              root-owned dataset volume.
             </p>
           </div>
         </article>

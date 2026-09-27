@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: history-backfill
+  namespace: iot-pipeline
+spec:
+  # D52 (REQUIREMENTS.md §5.9): derives the multi-month dataset from the
+  # original Kaggle CSV and backfills it into agg_1h. Starts alongside
+  # dataset-init and cassandra-schema-init and waits for both itself
+  # (backend/app/history_backfill.py wait_for). Idempotent: once the
+  # history_backfill row says "complete" a re-run only restores a missing
+  # derived file. Takes ~1-3 minutes of CPU on a fresh keyspace.
+  backoffLimit: 3
+  template:
+    spec:
+      # See deployment-spark-master.yaml for why this is set cluster-wide.
+      enableServiceLinks: false
+      restartPolicy: OnFailure
+      # Root, like dataset-init: it writes the derived file into the
+      # kaggle-dataset PVC, whose directory dataset-init created as root.
+      # The backend image's own USER 1000 is for the long-running web
+      # server; this is a bounded one-shot task.
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: history-backfill
+          # Same image as the backend: it already has the Cassandra driver
+          # and the seasonal curve (app/seasonal.py) the backend evaluates
+          # normal ranges with, so both use one definition.
+          image: iu-sensor-pipeline/backend:local
+          command: ["python", "-m", "app.history_backfill"]
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: CASSANDRA_HOST
+              value: cassandra
+            - name: CASSANDRA_PORT
+              value: "9042"
+            - name: CASSANDRA_KEYSPACE
+              value: iot
+            - name: HISTORY_SOURCE_CSV_PATH
+              value: /data/iot_telemetry_data.csv
+            - name: HISTORY_DERIVED_CSV_PATH
+              value: /data/iot_telemetry_derived.csv
+          volumeMounts:
+            - name: kaggle-dataset
+              mountPath: /data
+          # Holds the source rows (~405K) and ~55K hourly aggregates in
+          # memory. Transient - only runs during `deploy.sh up`.
+          resources:
+            requests:
+              memory: 512Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: kaggle-dataset
+          persistentVolumeClaim:
+            claimName: kaggle-dataset

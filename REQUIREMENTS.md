@@ -10,7 +10,7 @@ external review feedback on the v2.0 build (D38-D41); v2.2 adds a Cassandra stor
 the admin role (D42); v3.0 replaces Docker Compose with Kubernetes (k3d locally) as the deployment
 mechanism for the whole stack, closing the Docker-socket privilege D42 introduced and turning the
 previously-aspirational P6 k3s architecture into something that actually runs (D43).
-**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1, v2.2, v3.0)
+**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1, v2.2, v3.0), 2026-09-27 (v3.1, v3.2)
 **v0.2 changes:** frontend (React.js) and backend (Python) confirmed; added NFR-10 npm supply-chain security policy and Risk R-5, based on the 2025–2026 npm attack landscape (Shai-Hulud worm and successors, axios and keyv compromises).
 **v0.3 changes:** deployment target defined — two Contabo VPS orchestrated with Docker Swarm, true-cluster topology (Kafka broker + Cassandra node on both machines, replication factor 2), public exposure via IP address; added §4.1 deployment topology, NFR-11/NFR-12, Risk R-6, OQ-6/OQ-7.
 **v0.4 changes:** orchestrator switched from Docker Swarm to **k3s** on **three** Contabo VPS (2 data nodes + 1 small control node; HA control plane with 3-member etcd; 3 KRaft controllers), Kafka/Cassandra as plain StatefulSets; OQ-7 resolved; OQ-4 resolved as KRaft; D16 superseded by D18/D19; NFR-11/NFR-12 and phases updated.
@@ -43,6 +43,16 @@ already surfaces container health. Docker Compose stays in the repo as historica
 Quick Start now describes the k3d path); nothing about the pipeline's own logic (producer, Spark job,
 backend business logic) changes — this is a deployment-mechanism swap, not a rewrite. §2, §3, §4, §5,
 §6, §7, §8, §13, and §14 updated accordingly.
+**v3.2 changes (D54):** both roles get an in-app, per-role guided tour that highlights each real
+feature and states its value in plain language (including what each sensor type is good for), in
+English and German, switchable on/off per browser and started automatically on first login. New
+UC-14, FR-T1–T6, P13.
+**v3.1 changes (D52):** the 8-day source dataset and the deployment-length live history left the
+day/week/month views, their comparisons and the Dataset Explorer mostly empty. A `history-backfill`
+Job derives ~25 months of history from the unchanged original (its 8-day cycle looped, a seasonal
+curve on temp/humidity, seeded noise) and writes it into `agg_1h`; the producer and the Spark seed
+follow the same curve, normal ranges become seasonal, and the Explorer serves the derived file.
+Rollout starts from an empty keyspace. New §5.9, FR-H1–H5, P12; FR-P2 amended.
 **D43 is live-verified**, not just statically checked: a full `k8s/local-up.sh` run on a real k3d
 cluster surfaced and fixed five real bugs a live control plane is needed to catch — a `.env`-parsing
 crash in the Secret-generation step, Kubernetes' automatic per-Service env-var injection colliding with
@@ -120,10 +130,14 @@ broke and why.
   Promtail, D30) and Grafana-fired alerts pushed into the UI with log drill-down (D31).
 - **Data provenance (D38):** a `source_ts` field carried alongside every replayed event, and a
   standalone **Dataset Explorer** view — reachable by both roles — that browses the original Kaggle
-  CSV on its own real 2020 timeline, independent of the live Cassandra store.
+  CSV on its own real 2020 timeline, independent of the live Cassandra store. *Amended by D52: it
+  now browses a derived multi-month file built from that CSV (§5.9), each reading naming the 2020
+  reading it came from.*
 - **Historical comparison (D39):** a compare-to-earlier-period overlay on the planner's existing
   behavior-over-time charts (§FR-E3), spanning both the live/synthetic history and, once a compared
-  period predates that history, the Dataset Explorer's real data.
+  period predates that history, the Dataset Explorer's real data. *Amended by D52: Cassandra now
+  holds ~25 months of derived history from the first deploy, so every offset is normally answered
+  from Cassandra; the Explorer's derived file is the fallback (§5.9).*
 - **Disk-pressure remediation (D40):** a disk-usage-critical Grafana alert (extends FR-G4), and one
   narrow, explicit, admin-triggered **archive-and-trim** action — export the oldest raw-event
   partitions to a local archive file, then drop them from Cassandra. This is the one Phase-1 exception
@@ -375,7 +389,7 @@ is a problem" to "here are the exact log lines that explain it."
 ### 5.1 Source dataset (replay phase)
 - **Dataset:** Kaggle — `garystafford/environmental-sensor-data-132k`
   ("Environmental Sensor Telemetry Data").
-- ~405,000 readings collected over 7 days from 3 IoT devices.
+- ~405,000 readings collected over 8 days (2020-07-12 → 2020-07-20, measured for D52) from 3 IoT devices.
 - Fields: timestamp (`ts`), `device` (identifier), `co` (carbon monoxide), `humidity`,
   `lpg`, `smoke`, `temp` (temperature), `light` (boolean), `motion` (boolean).
 - The replay preserves the original inter-event ordering per device (the source file is
@@ -387,6 +401,9 @@ is a problem" to "here are the exact log lines that explain it."
   nothing throughout the entire replay phase, since the source dataset predates any live
   run by years.
 - Default replay rate: 100 messages/second (confirmed).
+- Since D52 the producer shifts replayed temp/humidity along the seasonal curve by `event_ts`
+  (§5.9), and a derived multi-month copy of this dataset backs the Dataset Explorer and the
+  backfilled history. The original file itself is never modified.
 
 ### 5.2 Canonical event schema
 Every message on the topic — replayed or synthetic — follows one JSON schema containing at
@@ -476,6 +493,13 @@ time other than now*:
   The overlay is explicitly labeled with which source answered it, so a planner is never shown two
   numbers without knowing they come from different eras.
 
+*Amended by D52 (§5.9):* the Explorer now serves a derived multi-month file built from the 8-day
+original (looped, seasonally adjusted), on the same calendar as the stored history; each reading shows
+its derived time and the original 2020 reading it came from, and the view states the values are
+illustrative. Cassandra holds that derived history too, so the comparison overlay is normally answered
+from Cassandra at every offset, including a year ago; the parenthetical above about "the 2020 dataset
+window" no longer holds.
+
 ### 5.8 Cassandra storage-usage control (D42)
 
 Per Cassandra node, `org.apache.cassandra.metrics:type=Storage,name=Load` (bytes of data that node
@@ -487,6 +511,84 @@ default): explicitly a monitored threshold the admin compares Cassandra's own re
 per-container/per-volume storage quotas (`--storage-opt size=` needs devicemapper or
 overlay2-on-XFS-with-pquota; neither is the local dev default), so a real hard cap would need a
 loopback-mounted fixed-size volume, out of scope for what this control needs to illustrate.
+
+### 5.9 Multi-month derived history and backfill (D52) — live-verified locally, not yet in production
+
+**Problem.** The source dataset spans 8 days (2020-07-12 → 2020-07-20, measured), and live history
+in Cassandra only spans the deployment's own running time (D28 stamps every event with `now()`). The
+day/week/month views (FR-E3), their "compare to" overlay (FR-E6), the out-of-range log at week/month
+resolution (FR-E5), and the Dataset Explorer (FR-P2) therefore had little or nothing to show.
+
+**1. Derived dataset.** The `history-backfill` Job (`backend/app/history_backfill.py`, run from the
+backend image) generates `iot_telemetry_derived.csv` next to the original CSV, which stays unchanged.
+The derived file:
+- covers `[T0 − HISTORY_SPAN_DAYS, T0)`, where `T0` (the *anchor*) is the hour the first backfill
+  ran. Default span **770 days (~25 months)**: the monthly "compare to a year ago" view looks at the
+  13 months ending a year ago, so it needs about 25 months of history;
+- **loops the 8-day source cycle** instead of stretching it: a derived timestamp `t` takes the
+  source reading of the same device nearest to `2020-07-12T00:00Z + (t mod 8 days)`, so every reading
+  keeps its real time of day and day/night patterns keep their 24-hour period;
+- holds one reading per device every `HISTORY_SAMPLE_MINUTES` (default 10) — 332,640 rows by
+  default, fewer than the original's 405,184. The backend keeps the whole file in memory under a
+  512 MiB limit, so a full-density copy (~18 million rows) is not an option;
+- adds seeded Gaussian noise to every numeric metric (5 % of that device/metric's standard
+  deviation), so successive loops are not exact copies;
+- stores two timestamps per row: `ts` (its place on the derived timeline) and `source_ts` (the
+  original 2020 reading it came from).
+
+Deterministic: the same anchor, span, sampling interval and seed (`HISTORY_SEED`) reproduce the same
+file byte for byte.
+
+**2. Seasonal curve.** A function of day-of-year only (`seasonal.py`, three hand-synced copies in
+backend, producer and spark_job), applied to `temp` and `humidity`:
+`temp += A_t · (cos(2π · (doy − doy_ref) / 365.25) − 1)`; `humidity −= A_h · (…same term…)`,
+clamped to 0–100 %. `doy_ref` = 196 (mid-July, when the source was collected), so July values are
+unchanged and mid-January is the extreme (`−2·A_t` °C, `+2·A_h` points). Defaults `A_t = 8`,
+`A_h = 7.5`, all three in `k8s/base/config.env`. `co`, `lpg`, `smoke`, `light`, `motion` are not
+shifted (light is not adjusted for day length); `pressure` stays synthetic (D23). The **producer
+applies the same curve** to live events (replay and synthetic) by `event_ts`, so there is no step at
+`T0`, and the **Spark job seeds** its EWMA anomaly baseline at today's point on the curve (the EWMA
+then follows the seasons by itself).
+
+**3. Seasonal normal ranges.** `device_thresholds` keeps the unshifted July baseline. The backend
+moves the mean along the curve to the moment being judged before computing a status or normal band
+(`environment.py`): the map, gauges and badges use the reading's own time; every timeline point
+carries `normal_min`/`normal_max` for its own period (the widest band over the period's start,
+middle and end), and the out-of-range log (FR-E5) judges each period against that. Without this, a
+January reading ~16 °C below the July mean would read as out of range all winter.
+
+**4. Backfill.** The same Job aggregates the derived rows into `agg_1h` rows (same columns and
+meaning as the Spark job's) and writes them directly to Cassandra — not through Kafka/Spark, whose
+watermarks would drop year-old events, and so that Grafana's throughput/latency KPIs keep measuring
+only the real pipeline. `anomaly_count` applies the §5.4 rule against the **seasonal** baseline
+(ceiling crossing for co/lpg/smoke, or |z| > `SPARK_JOB_ANOMALY_SIGMA_N` from the shifted mean) —
+not a replayed EWMA, which at ~6 readings per device-hour would lag the seasonal drift. `raw_events`
+and `agg_1m` are not backfilled (their views look back at most 2 hours, which live data covers).
+About 55,000 rows by default. The Grafana business-aggregate panels read `agg_1h` too, so they show
+the backfilled history over long time ranges.
+
+**5. Idempotency and the anchor.** The `history_backfill` table (schema `008`) records the anchor
+and settings before any row is written and a `completed_at` afterwards. A re-run of an incomplete
+backfill reuses the recorded anchor (upserts of the same primary keys); a re-run of a complete one
+only regenerates a missing or mismatched derived file and writes nothing to Cassandra. Hours that
+already have an `agg_1h` row anywhere in the span (real pipeline output) are never overwritten.
+
+**6. Existing data.** Not migrated. Rolling this out on an existing deployment means starting from an
+empty keyspace — accepted by the user on 2026-09-27 ("Cassandra information can be deleted and
+persisted again"). The supported way is `deploy.sh <env> down` followed by `up`: it also resets the
+Spark checkpoints, whose EWMA state predates the seasonal curve, and it avoids the "field is
+immutable" error that `apply` would give for the changed `cassandra-schema-init` Job.
+
+**7. What it changes elsewhere.**
+- FR-E6's "is this period in Cassandra" check uses the earlier of the backfill's `history_start` and
+  the earliest `raw_events` partition. The Dataset Explorer fallback now reads only the compared
+  window of the derived file (it is on the same calendar), not the whole file.
+- The Dataset Explorer serves only the derived file (user decision); each reading shows its derived
+  timestamp and the original 2020 reading it came from, and the view says the values are
+  illustrative, not measured.
+- Replayed live readings are labeled "temperature and humidity seasonally adjusted" (FR-P1).
+- §5.7's statement that comparing across a year "necessarily means the 2020 dataset window, not a
+  fabricated year of live history" (D39) is reversed by this decision. D28 is unchanged.
 
 ---
 
@@ -544,7 +646,8 @@ containers.
 **UC-10 — Either role: compare a reading against an earlier period.** From a device's
 behavior-over-time chart, the user picks a "compare to" offset (a day/week/month/year ago). The chart
 overlays the earlier period, sourced from live history or the Dataset Explorer as needed (§5.7), and
-labels which source it used.
+labels which source it used. (Since D52 the stored history reaches ~25 months back, derived from the
+source dataset before the deployment went live — §5.9.)
 *Success:* a user can tell, for any metric, whether current conditions are typical for that
 time-of-day/week/year or a departure from it — without manually cross-referencing two separate views.
 
@@ -569,6 +672,16 @@ ready replica counts — the same "is the deployment actually healthy" question 
 already answers for individual services, now answerable at the orchestration layer too.
 *Success:* a pod stuck `Pending` (e.g. an unschedulable second Cassandra replica, insufficient cluster
 memory) is visibly distinguishable from one that's `CrashLoopBackOff`, without a terminal.
+
+**UC-14 — Either role: learn what the tool is for (D54).** A first-time planner or admin logs in and
+a guided tour starts by itself. Step by step it dims the screen, highlights one real feature (the map,
+a sensor's detail panel, the charts, the Alerts tab, …) and explains in two or three sentences what it
+is and why it matters to that role — for the planner including what each sensor type (CO, LPG, smoke,
+temperature, humidity, light/motion, simulated pressure) tells a municipality. The user can go back
+and forth, switch between English and German, skip at any time, re-open the tour from the header, and
+turn the automatic start on or off.
+*Success:* without reading any documentation, a new user can say what each part of their screen is
+for and which decision it supports.
 
 ---
 
@@ -639,7 +752,8 @@ memory) is visibly distinguishable from one that's `CrashLoopBackOff`, without a
   checkout needed. `REQUIREMENTS.md` and root `README.md` stay repository-only, cross-linked from
   the docs site rather than duplicated into it.
 - FR-W8. A "Dataset Explorer" is reachable from both role UIs (D38, §5.7), browsing the source
-  CSV on its own real timeline independent of the live pipeline.
+  CSV on its own real timeline independent of the live pipeline. *Amended by D52: browses the
+  derived multi-month file instead (FR-H1).*
 
 **Admin capacity-remediation action (FR-A, D40)**
 - FR-A1. `POST /api/admin/archive` triggers the archive-and-trim action: the oldest raw-event
@@ -709,15 +823,56 @@ memory) is visibly distinguishable from one that's `CrashLoopBackOff`, without a
   day/week/month/year, matching the chart's resolution) onto the current one, resolving the data
   from live/synthetic history or the Dataset Explorer as needed, and labeling which source
   answered — so a planner can tell whether "now" is typical for that time-of-day/week/year.
+  *Amended by D52: "stored history" includes the backfilled derived history (FR-H5), and each
+  compared point carries its own seasonal normal band (FR-H4).*
 
 **Data provenance and historical browsing (FR-P, D38)**
 - FR-P1. Every reading shown in the planner or admin UI that originates from a replayed row is
   labeled with its provenance: "replayed, originally collected `source_ts`" vs. "live/synthetic,
   generated `event_ts`" — answering directly whether a displayed number is real-historical or
-  invented-live.
+  invented-live. *Amended by D52: replayed readings also say their temperature and humidity are
+  seasonally adjusted, and derived history is labeled illustrative, not measured.*
 - FR-P2. `GET /api/dataset/*` serves the Dataset Explorer: browse/query the original Kaggle CSV
   by device and real timestamp range, independent of Kafka/Spark/Cassandra, reading the same file
-  `dataset-init` already fetched (no duplicate ingestion or storage).
+  `dataset-init` already fetched (no duplicate ingestion or storage). *Amended by D52: serves only the
+  derived multi-month file (FR-H1), showing each reading's original 2020 reading alongside.*
+
+**In-app guided tour (FR-T, D54)**
+- FR-T1. Each role UI has a guided "spotlight" tour: a sequence of steps, each highlighting one real UI
+  element and showing a card with what it is and the value it brings to that role. Steps whose element
+  is not on screen show the card centered instead of failing. Back / next / skip / finish, Esc to skip,
+  arrow keys to move.
+- FR-T2. Content is role-specific: the planner tour covers the map and status summary, a sensor's
+  detail panel (status, air-quality score, comfort index, gauges), what each sensor type is good for,
+  the behavior-over-time charts, the compare control, the out-of-range log and the Dataset Explorer;
+  the admin tour covers the live-connection badge, the pipeline flow diagram, the six pipeline steps,
+  the Alerts, Kubernetes and Docs tabs, and the Dataset Explorer. It states honestly that history
+  before go-live is derived from the 2020 dataset and that pressure is simulated.
+- FR-T3. The tour starts automatically the first time a role's screen loads in a browser; finishing
+  or skipping it turns the automatic start off. A header control re-opens the tour at any time and
+  switches the automatic start on or off. Both are remembered per browser and per role (browser
+  storage, not the server — the two role accounts are shared, so a server-side setting would change it
+  for every person using that account). If browser storage is unavailable, the tour still works and
+  simply is not remembered.
+- FR-T4. The tour text is available in English and German, switchable inside the tour and remembered
+  per browser; the default follows the browser's language. The rest of the UI stays English.
+- FR-T5. Tour text follows the user-facing rule: no internal codes (decision/requirement ids).
+- FR-T6. No new npm dependency (NFR-10): the tour is a small in-app component.
+
+**Multi-month history (FR-H, D52) — live-verified locally, not yet in production**
+- FR-H1. The `history-backfill` Job derives a deterministic multi-month CSV (default 770 days) from
+  the original by looping its 8-day cycle, applying the seasonal curve and a small seeded noise
+  term, keeping the original file unchanged (§5.9 points 1–2).
+- FR-H2. The same Job writes that history into `agg_1h` directly, idempotently and without passing
+  through Kafka/Spark, never overwriting an hour that already has real pipeline output (§5.9 points
+  4–5).
+- FR-H3. The producer applies the same seasonal curve to live replay and synthetic events by
+  `event_ts`, and the Spark job seeds its anomaly baseline at the current point on the curve, so live
+  data continues the backfilled history without a step (§5.9 point 2).
+- FR-H4. Normal ranges and statuses for temp/humidity are seasonal: evaluated against the baseline
+  shifted to the moment being judged, per reading and per timeline period (§5.9 point 3).
+- FR-H5. FR-E6's source resolution treats backfilled `agg_1h` history as stored history, and every
+  derived value is labeled as derived from the 2020 dataset, not measured (§5.9 point 7).
 
 **Dashboards (FR-G)**
 - FR-G1. Grafana ships pre-provisioned (dashboards, data sources, and alert rules as code
@@ -954,6 +1109,9 @@ The 48-hour run at the NFR-2 rate passes when:
 | D49 | Harden `spark_job` and `backend` against real outage/load conditions (commit `6e0f87b`; recorded retroactively) | Two production failures, each fixed at the root. **(1) A poisoned Kafka message crash-looped the whole pipeline:** one message that failed JSON parsing, or parsed but lacked `event_id`/`device_id`/`event_ts`/`ingest_ts`, reached `applyInPandasWithState` and crashed all three streaming queries with an Arrow null-timestamp error - and because the checkpoint always resumed at the same offset, it never self-healed. `spark_job/spark_job/schema.py` now drops such messages before they reach the stateful stage. **(2) The backend was OOM-killed by the historical-comparison toggle:** it fires up to three Dataset Explorer queries concurrently (day/week/month) and each re-scanned the whole Kaggle CSV from disk; three simultaneous full scans exceeded the pod's memory under real pressure. `backend/app/dataset_reader.py` now parses the CSV once and caches it; the backend memory limit was raised 384Mi -> 512Mi (`k8s/base/deployment-backend.yaml`) for headroom around the cache. *Recorded retroactively: this row is written from the commit message; the author reported live verification, which was not re-checked when it was recorded. Note dropped messages are discarded silently - there is no dead-letter topic, so a producer emitting bad events would lose them without an alert.* |
 | D50 | Resize `k8s/base` memory limits to fit the 11 GB production node (commit `908c1dd`; recorded retroactively) | The sum of container memory limits was ~12.4 GiB across the 14 steady-state workloads - already over the 11 GB VPS before OS/k3s/containerd overhead, consistent with D44/D45's finding that the full stack left only ~200 MiB-1.6 GiB free. Limits for the peripheral services (grafana, prometheus, loki, kafka-exporter, producer, node-exporter, promtail) were trimmed to observed `kubectl top` usage plus margin, and spark-job (driver) and spark-master moderately; the four components tied to real OOM/stall incidents (cassandra, kafka, spark-worker, backend) were deliberately left alone. **`kafka-ui` is now scaled to 0 replicas by default** (a pure debugging convenience: not host-exposed, not referenced by any FR/UC or the backend health grid) - run `kubectl -n iot-pipeline scale deployment kafka-ui --replicas=1` to browse topics, and note that re-running `deploy.sh up` puts it back to 0. spark-master's smaller limit also required setting `SPARK_DAEMON_MEMORY` explicitly, because Spark daemons default to a 1g heap regardless of the container limit and would otherwise self-OOM on start. New totals per the commit: ~9.6 GiB limits (was ~12.4), ~4.8 GiB requests (was ~6.2), real usage ~5.5 GiB. *Recorded retroactively from the commit message; not re-verified. Consequence to keep in mind: ~1.4 GiB of headroom between limits and the host, so anything that adds a pod, raises a limit or scales Cassandra must re-check `kubectl top nodes` first.* |
 | D51 | Cassandra node-deploy notice reworded from "demo/illustration only" to a plain real-action warning (wording only; recorded before commit, author of the working-tree edit not identified) | The notice above FR-N2's "Deploy new Cassandra node" button still carried D42-era wording calling the action a demo that is "not a safe production practice." Since D43/NFR-16 it drives a real, narrowly-scoped Kubernetes scale-up, verified end-to-end in D44/D45: a real pod, a real 5 GiB PVC (`statefulset-cassandra.yaml` volumeClaimTemplate), a real ring join, and no matching remove-node action (§4.3 point 4, scale-up only). Calling that a demo undersold a standing resource commitment on an 11 GiB node where D50 leaves ~1.4 GiB of headroom. The notice now says it is a real action, names the 5 GiB volume, says removal is a manual operator step outside the UI, and asks the admin to check available memory first. CSS class `.demo-only-notice` renamed to `.cassandra-deploy-warning` (no other users). No backend, RBAC or manifest change. **Verified:** the 5 GiB and scale-up-only claims were checked against `k8s/base` and §4.3; `kubectl kustomize k8s/base` and `bash -n k8s/deploy.sh` pass. **Not verified:** the frontend was not built (`npm run build`/type-check not run) and the change is not deployed; production shows the old text until `deploy.sh prod update backend`. |
+| D52 | Multi-month derived history + `agg_1h` backfill + seasonal normal ranges, so the day/week/month views, comparisons and Dataset Explorer have data (§5.9, FR-H1–H5); **live-verified on local k3d, not yet in production** | The user reported the week/month views, their "compare to" overlay and the Dataset Explorer as largely empty. Root cause, confirmed in code: the source dataset spans 8 days (2020-07-12 → 07-20; §5.1 said 7), and live Cassandra history only spans the deployment's running time because D28 stamps events with `now()`; FR-E6's compare needs 37/212/~768 days of history for day/week/month and otherwise fell back to the 8-day CSV. Rewriting the CSV's timestamps alone would have fixed only the Explorer and that fallback, hence the backfill. **User decisions (2026-09-27):** loop the 8-day cycle rather than stretch it linearly (a ~45× stretch turns a day/night cycle into a ~45-day one and breaks the synthetic generator's hour-of-day profiles); add a seasonal curve on temp/humidity; backfill Cassandra; existing Cassandra data may be wiped instead of migrated; make the normal ranges seasonal (rather than shrink the curve or accept a winter flood of out-of-range entries); cover ~25 months so the monthly compare-to-a-year-ago view has data; the Explorer shows only the derived data. **Design choices made while implementing:** (1) the derived file is generated by the backfill Job, not `dataset-init` as first drafted, so the file and the Cassandra rows always share one time anchor, recorded in a new `history_backfill` table — which also makes re-runs idempotent and gives the compare check its `history_start`; the Job runs from the backend image (Cassandra driver already there, no new dependency). (2) One reading per device every 10 min keeps the file at 332,640 rows (below the original 405,184); the Explorer's reader now stores tuples, not dicts (~100 MB measured offline for the whole file) under the backend's 512 MiB limit. (3) Backfilled `anomaly_count` uses the §5.4 rule against the seasonal baseline, not a replayed EWMA (too few readings per hour to follow the drift). Offline, the share of hours with an anomaly stayed flat across seasons (~3–5 % per device and month), which is the evidence the seasonal baseline works; with an unshifted baseline every winter hour would be flagged. (4) `device_thresholds` keeps the July baseline; the backend shifts it per moment, and Spark only shifts its EWMA seed. (5) The backfill never overwrites an hour that already has an `agg_1h` row. **Verified offline first:** derivation against the real CSV (332,640 rows, 55,440 hourly aggregates, monthly temp means follow the curve), `DatasetReader`, seasonal bands/statuses, `tsc -b`, `py_compile`, `kubectl kustomize`, `bash -n`, `docker compose config`. **Then live-verified on local k3d** (2026-09-27, Windows + Docker Desktop 8 GiB, `deploy.sh local down` + `up` on a fresh cluster, all four init Jobs Complete). **One real bug found and fixed:** the first backfill attempt was OOM-killed at its 512Mi limit during the Cassandra writes (kernel log: anon-rss ~510 MiB in this pod's cgroup) and `restartPolicy: OnFailure` retried it; the retry reused the recorded anchor and skipped the 41,513 hours already written, so the Job reported Complete with complete data — hidden except by an implausible "skipped live" count and `restartCount=1` (operations.html p12-1). Fix: free the source rows before writing, stream inserts in 2,000-row chunks with `results_generator=True`; re-run after `deploy.sh local update backend` + truncating `agg_1h`/`history_backfill`: 0 restarts, 55,440 rows, 3 live hours correctly skipped, sampled peak ~227 Mi. Also observed: no step at the anchor (derived 16.5 °C → live 16.1 °C); January anomalous hours 22/744 for one device; planner API — all sensors "ok" against September bands (16.1 °C in 15.6–17.5 °C, critical under the July band), day/week/month timelines 31/27/14 points with per-point bands, compare answered from Cassandra at every resolution incl. 1 year ago, Explorer 2024-08-18 → 2026-09-27; backend ~208 Mi with the derived file cached, first Explorer load 14 s; producer/spark-job 0 restarts, no log errors; the new `update backend` branch in `deploy.sh` printed its hint. **Not verified:** the UI rendered in a browser (API only), the production `down` + `up` rollout, the compose path beyond `docker compose config`. Reverses D39's wording that a year-long comparison could only mean the 2020 window; amends FR-P2. |
+| D53 | Unit test suite (pytest) for the D52 multi-month-history workflow; compare-source decision extracted to `environment.stored_history_covers()` | Requested by the user after D52 ("if there aren't unit tests covering the workflows implement them"); the repo had none. Scope is deliberately D52's workflows, not the whole codebase: the seasonal curve (incl. that its three hand-synced copies are byte-identical), the `history-backfill` derivation (span, sampling, time of day, 8-day loop, seasonal shift, determinism, atomic write), the §5.4 rule against the seasonal baseline, the `agg_1h` write path (chunked, skips existing hours, all 28 columns), and the Job's idempotency workflow through `main()` against a fake Cassandra session (fresh run, re-run after completion, regenerate-only, resume with the recorded anchor, retry after a partial write — the p12-1 case — and recorded settings winning over changed config); the Dataset Explorer reader (missing file, ranges, filters, reload on replace); seasonal normal ranges per reading and per timeline period, rollups, dataset bucketing on the derived time, the compare-source decision and provenance labels; the producer's seasonal shift in replay and synthetic mode; the Spark seed shift. Services are imported the way their containers do (service dir on `sys.path`); Kafka/Cassandra/Spark client libraries are replaced by inert stubs only when not installed, so the suite needs only `pytest` (hash-pinned `tests/requirements.txt`, NFR-10). To make the compare decision testable without FastAPI it moved from `routers/sensors.py` into a pure function; behavior unchanged. **Verified:** 60 passed locally (Windows, Python 3.11, ~13 s); a mutation check — removing the replay's seasonal shift and the backfill's skip of existing hours — made 3 targeted tests fail, and restoring the code made all 60 pass. **Not covered by tests:** FastAPI routes, the Spark streaming queries, the frontend, the Kubernetes manifests and `deploy.sh` — still verified by live runs only. The suite is not wired into any CI (there is none). |
+| D54 | In-app guided tour per role (UC-14, FR-T1–T6) | New requirement from the user (2026-09-27): an interactive in-app explanation of each role's features and their value, switchable on/off. **User decisions:** remembered per browser (the two role accounts are shared, so a server-side setting would switch it for everyone on that account); starts automatically once, then only on request; a spotlight tour over the real UI rather than a help panel; English and German. **Overlaps handled:** the admin "Pipeline" view is already a numbered six-step walkthrough — the tour explains the workspace and points into it instead of repeating each step; "About the project" stays the project-level explanation; the role walkthroughs in the docs are only reachable by admins, so the tour carries a short version for planners. Built in-app with no new npm dependency (NFR-10); tour text obeys the no-internal-codes rule and states that pre-go-live history is derived and pressure simulated. **Tests:** 23 unit tests with Node's built-in runner (`cd frontend && npm test`, no new dependency): content complete in both languages, no internal codes, every highlighted element exists in the UI source (a removed marker made it fail), honesty statements, preferences incl. blocked storage, card placement. **Two bugs found in the browser and fixed:** element lookup used `requestAnimationFrame`, which never fires in a hidden tab (a user switching tabs mid-tour would come back to centered cards) — now `setTimeout` polling; and a long card was pinned over the panel it describes — cards now go beside the element first. **Verified in the browser** (local k3d, planner account): auto-start on first load, every step framed, sensor auto-selected for detail steps, EN/DE switch remembered, skip turns auto-start off and survives a reload, the header controls turn it back on and reopen it. **Not verified in a browser:** the admin tour (admin password not available to the assistant; unit tests only). |
 
 ---
 
@@ -1079,5 +1237,13 @@ The 48-hour run at the NFR-2 rate passes when:
     P6's remaining scope after P11 is narrower — provisioning and hardening the actual three Contabo
     VPS and applying these same manifests there via a production Kustomize overlay (3-node topology,
     Traefik ingress, TLS, NFR-11's firewall rules) — real infrastructure work, not manifest-writing.
+12. **P12 — Multi-month history (v3.1, D52):** R17 derived-dataset generation + `agg_1h` backfill
+    in a `history-backfill` Job (FR-H1, FR-H2); R18 seasonal curve in producer and Spark seed (FR-H3);
+    R19 seasonal normal ranges per reading and per timeline period (FR-H4); R20 compare-source
+    resolution, Explorer on the derived file, provenance labels (FR-H5, FR-E6, FR-P1/P2). Rollout
+    starts from an empty keyspace (`down` + `up`). Live-verified on local k3d; production rollout pending.
+13. **P13 — In-app guided tour (v3.2, D54):** R21 tour component + per-browser preferences (FR-T1,
+    FR-T3); R22 planner and admin tour content in English and German, incl. sensor-type value
+    descriptions (FR-T2, FR-T4, FR-T5); R23 unit tests for the tour logic and content rules.
 
 Each phase should end in a runnable, demonstrable state.

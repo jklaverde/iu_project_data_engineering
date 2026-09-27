@@ -4,7 +4,7 @@ import logging
 from pyspark.sql import SparkSession
 
 from .agg_query import build_agg_query
-from .baseline import compute_seed_baseline
+from .baseline import compute_seed_baseline, seasonally_shifted
 from .config import load_config
 from .device_thresholds_sink import write_device_thresholds
 from .latency_tracker import LatencyTracker
@@ -44,6 +44,9 @@ def main() -> None:
         "ceilings": ceilings,
     }))
     write_device_thresholds(spark, baseline, ceilings, config.cassandra_keyspace)
+    # device_thresholds keeps the July baseline (above); the streaming
+    # queries seed their EWMA state from today's point on the seasonal curve.
+    baseline = seasonally_shifted(baseline)
 
     tracker = QueryProgressTracker()
     latency_tracker = LatencyTracker()

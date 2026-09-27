@@ -31,6 +31,7 @@ const SERVICES = [
 
   { id: "cassandra", category: "storage", mem: 2048, lifecycle: "running", build: "custom", hasCard: true },
   { id: "cassandra-schema-init", category: "storage", mem: 256, lifecycle: "oneshot", build: "official", hasCard: true },
+  { id: "history-backfill", category: "storage", mem: 512, lifecycle: "oneshot", build: "custom", hasCard: true },
 
   { id: "backend", category: "web", mem: 384, lifecycle: "running", build: "custom", hasCard: true },
 
@@ -61,6 +62,8 @@ const DEP_EDGES = [
   { source: "cassandra", target: "cassandra-schema-init", cond: "healthy" },
   { source: "cassandra-schema-init", target: "spark-job", cond: "completed" },
   { source: "cassandra-schema-init", target: "backend", cond: "completed" },
+  { source: "cassandra-schema-init", target: "history-backfill", cond: "completed" },
+  { source: "dataset-init", target: "history-backfill", cond: "completed" },
   { source: "spark-master", target: "spark-worker", cond: "healthy" },
   { source: "spark-master", target: "spark-job", cond: "healthy" },
   { source: "spark-job-volume-init", target: "spark-worker", cond: "completed" },

@@ -297,6 +297,11 @@ wait_ready() {
   say "Waiting for one-shot init Jobs"
   kctl -n "$NAMESPACE" wait --for=condition=complete --timeout=300s \
     job/kafka-topic-init job/cassandra-schema-init job/dataset-init || true
+  # D52: derives the multi-month dataset and backfills agg_1h. It waits for
+  # the two Jobs above itself, then needs a few minutes of CPU on a fresh
+  # keyspace (seconds once its history_backfill row says complete).
+  say "Waiting for history-backfill (a few minutes on a fresh keyspace)"
+  kctl -n "$NAMESPACE" wait --for=condition=complete --timeout=900s job/history-backfill || true
 
   say "Waiting for backend and grafana"
   kctl -n "$NAMESPACE" rollout status deployment/backend --timeout=300s || true
@@ -443,6 +448,12 @@ cmd_update() {
         # A Job's pod template is immutable; it is a one-shot that skips the
         # download once the file exists, so there is nothing running to restart.
         say "dataset-init is a one-shot Job: image reloaded, nothing to restart. To re-run it: kubectl -n $NAMESPACE delete job dataset-init && k8s/deploy.sh $ENV_NAME up" ;;
+      backend)
+        kctl -n "$NAMESPACE" rollout restart deployment/backend
+        kctl -n "$NAMESPACE" rollout status deployment/backend --timeout=300s
+        # The history-backfill Job (D52) runs from the backend image too, but
+        # it is a completed one-shot: nothing to restart.
+        say "history-backfill uses the backend image but is a one-shot Job. To re-run it: kubectl -n $NAMESPACE delete job history-backfill && k8s/deploy.sh $ENV_NAME up" ;;
       *)
         kctl -n "$NAMESPACE" rollout restart "deployment/$s"
         kctl -n "$NAMESPACE" rollout status "deployment/$s" --timeout=300s ;;
