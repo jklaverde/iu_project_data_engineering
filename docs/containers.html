@@ -218,7 +218,7 @@
           </div>
           <div class="unit-body">
             <dl class="unit-meta">
-              <div><dt>Build</dt><dd><code>./kaggle_repository</code> → <code>python:3.11.9-slim-bookworm</code></dd></div>
+              <div><dt>Build</dt><dd><code>./kaggle_repository</code> → <code>python:3.11.17-slim-bookworm</code></dd></div>
               <div><dt>Depends on</dt><dd>— (starts immediately)</dd></div>
               <div><dt>Volumes</dt><dd><code>kaggle_dataset</code> → <code>/data</code> (read-write)</dd></div>
               <div><dt>Ports</dt><dd>none</dd></div>
@@ -252,7 +252,7 @@
           </div>
           <div class="unit-body">
             <dl class="unit-meta">
-              <div><dt>Build</dt><dd><code>./producer</code> → <code>python:3.11.9-slim-bookworm</code></dd></div>
+              <div><dt>Build</dt><dd><code>./producer</code> → <code>python:3.11.17-slim-bookworm</code></dd></div>
               <div><dt>Depends on</dt><dd><code>kafka-topic-init</code> completed · <code>dataset-init</code> completed</dd></div>
               <div><dt>Ports</dt><dd><code>8001</code> host → <code>8000</code> (state + metrics)</dd></div>
               <div><dt>Volumes</dt><dd><code>kaggle_dataset</code> → <code>/data</code> (read-only)</dd></div>
@@ -653,7 +653,7 @@
           </div>
           <div class="unit-body">
             <dl class="unit-meta">
-              <div><dt>Build</dt><dd>context: <strong>repo root</strong> → <code>backend/Dockerfile</code> (multi-stage: <code>node:24-slim</code> builds React, final stage is <code>python:3.11.9-slim-bookworm</code>)</dd></div>
+              <div><dt>Build</dt><dd>context: <strong>repo root</strong> → <code>backend/Dockerfile</code> (multi-stage: <code>node:24.21.0-slim</code> with a pinned, checksum-verified npm builds React, final stage is <code>python:3.11.17-slim-bookworm</code> with pip upgraded to a hash-pinned release)</dd></div>
               <div><dt>Depends on</dt><dd><code>kafka</code> healthy · <code>cassandra-schema-init</code> completed · <code>producer</code> healthy</dd></div>
               <div><dt>Ports</dt><dd><code>8000</code> host → <code>8000</code></dd></div>
               <div><dt>Health check</dt><dd><code>GET /healthz</code> · every 10s</dd></div>

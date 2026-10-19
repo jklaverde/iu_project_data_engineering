@@ -37,14 +37,20 @@ need to be rediscovered.
 
 `requirements.in` lists direct dependencies; `requirements.txt` is generated
 via `pip-compile --generate-hashes` run inside a container matching this
-service's own runtime base image (`python:3.11.9-slim-bookworm`) — not on a
+service's own runtime base image (`python:3.11.17-slim-bookworm`) — not on a
 dev machine directly, since hash-locked wheels are platform-specific. To
 regenerate after changing `requirements.in`:
 
 ```
-docker run --rm -v "$(pwd):/work" -w /work python:3.11.9-slim-bookworm \
-  sh -c "pip install pip-tools && pip-compile --allow-unsafe --generate-hashes --output-file=requirements.txt requirements.in"
+docker run --rm -v "$(pwd):/work" -w /work python:3.11.17-slim-bookworm \
+  sh -c "pip install pip==26.2.1 pip-tools==7.6.1 && pip-compile --allow-unsafe --generate-hashes --output-file=requirements.txt requirements.in"
 ```
+
+The image's own pip (24.0) has known CVEs, so the command upgrades it first; both
+versions are pinned and older than the 14-day cooldown (NFR-10.3). Bump them only
+together with the pip pinned in the Dockerfiles (D56). A patch bump of the Python
+base image (3.11.x) does not change the lock: the wheels are `cp311` either way —
+recompiling under 3.11.17 reproduced every pin and hash (D56).
 
 `producer/` and `spark_job/` follow the same pattern (each against their own
 base image) — see their `requirements.in` files.

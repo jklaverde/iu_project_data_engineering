@@ -185,7 +185,7 @@
       <p class="category-desc" style="text-align:left; margin-bottom:1rem;">P2 ingestion service.</p>
       <div class="table-wrap">
         <table class="data-table"><tbody data-filter-group>
-          <tr data-name="Dockerfile"><td>Dockerfile</td><td><code>python:3.11.9-slim-bookworm</code>, hash-pinned install.</td></tr>
+          <tr data-name="Dockerfile"><td>Dockerfile</td><td><code>python:3.11.17-slim-bookworm</code>; pip upgraded to a hash-pinned release first, then the hash-pinned install.</td></tr>
           <tr data-name="README.md"><td>README.md</td><td>Standalone-run instructions, the <code>PRODUCER_REPLAY_ROW_LIMIT</code> dev fast-forward knob, the <code>/state</code> endpoint contract.</td></tr>
           <tr data-name="requirements.in requirements.txt"><td>requirements.in / requirements.txt</td><td><code>confluent-kafka</code> direct dep / hash-locked lockfile.</td></tr>
           <tr data-name="producer/__init__.py"><td>producer/__init__.py</td><td>Empty package marker.</td></tr>

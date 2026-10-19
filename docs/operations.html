@@ -972,6 +972,30 @@
             the admin tour (needs the admin password; covered by the unit tests only).</li>
         </ul>
 
+        <h4 class="doc-h4" id="d56">Build tools pinned and verified: pip and npm in every image (D56)</h4>
+        <ul>
+          <li><strong>Why:</strong> the user asked that builds download pip/npm versions without known security
+            problems. Measured, not assumed: the Python images ship <strong>pip 24.0</strong> (also on the newest 3.11
+            patch) and the Spark image Ubuntu's <strong>pip 22.0.2</strong>; OSV lists 12 and 14 known
+            vulnerabilities for them, none for pip 26.2.1. npm had no known vulnerabilities, but the floating
+            <code>node:24-slim</code> tag had already moved to a Node release only 5 days old — a breach of the 14-day
+            cooldown (NFR-10.3) on the next build.</li>
+          <li><strong>What changed:</strong> every Python Dockerfile installs <code>pip==26.2.1</code> first
+            (<code>--require-hashes</code>, wheel only) via two <code>ARG</code>s, before the existing hash-pinned
+            install; the Spark images purge the apt <code>python3-pip</code> so no old pip stays on disk;
+            <code>python:3.11.9</code> → <code>3.11.17</code> (patch release, same <code>cp311</code> wheels — the locks
+            recompile identically); the frontend stage is pinned to <code>node:24.21.0-slim</code> and installs
+            <code>npm@12.2.0</code> fetched with <code>npm pack</code>, sha512-checked against the registry, with
+            lifecycle scripts off. Every pinned version is at least 14 days old.</li>
+          <li><strong>To bump later:</strong> change version and hash together (<code>PIP_VERSION</code>/<code>PIP_WHEEL_SHA256</code>
+            from PyPI, <code>NPM_VERSION</code>/<code>NPM_SHA512</code> = hex of the registry's <code>dist.integrity</code>),
+            only to a release ≥ 14 days old, and keep the five Python Dockerfiles on the same pip.</li>
+          <li><strong>Verified</strong> (local k3d, 2026-10-19): all five images rebuilt and rolled out; pip 26.2.1 in each;
+            the npm checksum line passed in the build; pods Running; fresh <code>agg_1m</code> windows with anomaly counts
+            after the restart (the worker's pandas code ran); report endpoints unchanged; dataset-init imports
+            <code>kagglehub</code>. <strong>Not verified:</strong> a full dataset-init download, production, a Trivy scan.</li>
+        </ul>
+
         <h4 class="doc-h4" id="d55">The environmental officer and their reports (D55)</h4>
         <ul>
           <li><strong>What:</strong> the planner role is designed around one concrete user — the city's
@@ -1091,7 +1115,8 @@
           the catch-up checklist, conventions and a dated state snapshot; this list is the canonical
           backlog it points to.</p>
         <ol>
-          <li><strong>Roll D55 out with D52 (highest value).</strong> D55 needs no schema change and on its
+          <li><strong>Roll D55 + D56 out with D52 (highest value).</strong> D56 changes every image build
+            (pinned pip/npm), so rebuild all services. D55 needs no schema change and on its
             own would only need <code>sudo k8s/deploy.sh prod update backend</code>; it is most useful with
             D52's history, so ship both together. Afterwards: print one report to a real PDF and open both
             Excel files in Excel — neither was done (<a href="#d55">D55</a>).</li>

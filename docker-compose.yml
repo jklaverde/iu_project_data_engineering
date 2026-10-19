@@ -399,7 +399,7 @@ services:
     restart: unless-stopped
 
   archive-volume-init:
-    image: python:3.11.9-slim-bookworm
+    image: python:3.11.17-slim-bookworm
     user: root
     entrypoint: ["/bin/sh", "-c"]
     # Same idempotent-chown pattern as kafka-volume-init/spark-job-volume-init
