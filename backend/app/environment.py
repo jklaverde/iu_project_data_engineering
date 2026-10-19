@@ -43,7 +43,11 @@ def parse_iso(value) -> datetime | None:
         return None
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    # CassandraReader's strings carry no offset (the driver returns naive UTC
+    # datetimes) - read them as UTC, like the datetime branch above. Seen in
+    # D55: the reports compare these with aware month boundaries.
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def seasonal_mean(metric: str, stats: dict, at: datetime) -> float:

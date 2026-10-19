@@ -334,3 +334,111 @@ export interface KubernetesStatusResponse {
   workloads: KubernetesWorkloadStatus[];
 }
 
+
+// ---------------------------------------------------------------------------
+// Environmental officer reports (D55, UC-15-UC-18) - backend/app/reports.py.
+// Times ending in "Z" are UTC; times without a zone are local (Europe/Berlin).
+
+export type ReportMetric = "co" | "lpg" | "smoke" | "temp" | "humidity";
+
+export interface ReportLocation {
+  device_id: string;
+  name: string;
+  area: string;
+}
+
+export interface MetricSummary {
+  hours_with_data: number;
+  out_of_range_hours: number;
+  over_limit_hours: number;
+  out_of_range_share: number | null;
+  average: number | null;
+  peak: number | null;
+  peak_at: string | null;
+}
+
+export interface Episode {
+  device_id: string;
+  name?: string;
+  metric: ReportMetric;
+  start: string;
+  end: string;
+  hours: number;
+  peak: number | null;
+  peak_at: string;
+  over_limit: boolean;
+}
+
+export interface Heatmap {
+  metric: ReportMetric;
+  months: string[];
+  values: (number | null)[][];
+  min: number | null;
+  max: number | null;
+  peak_hour: number | null;
+}
+
+interface ReportCommon {
+  units: Record<ReportMetric, string>;
+  labels: Record<ReportMetric, string>;
+  caveats: string[];
+}
+
+export interface RankingEntry extends ReportLocation {
+  hours_with_data: number;
+  out_of_range_hours: number;
+  over_limit_hours: number;
+  change_vs_previous: number | null;
+  change_vs_year_ago: number | null;
+}
+
+export interface MonthlyReport extends ReportCommon {
+  month: string;
+  previous_month: string;
+  year_ago_month: string;
+  period: { start: string; end: string };
+  available_from: string | null;
+  locations: (ReportLocation & {
+    metrics: Record<ReportMetric, { current: MetricSummary; previous: MetricSummary; year_ago: MetricSummary }>;
+  })[];
+  ranking: RankingEntry[];
+  episodes: Episode[];
+}
+
+export interface InquiryReport extends ReportCommon {
+  location: ReportLocation;
+  period: { start: string; end: string; start_local: string; end_local: string };
+  hour_from: number;
+  hour_to: number;
+  hours_with_data: number;
+  metrics: Record<ReportMetric, { inside: MetricSummary; outside: MetricSummary; profile: (number | null)[] }>;
+  episodes: Episode[];
+  heatmaps: Record<ReportMetric, Heatmap>;
+}
+
+export interface Character {
+  label: "steady" | "variable" | "spiky" | null;
+  variation: number | null;
+  low: number | null;
+  high: number | null;
+}
+
+export interface FactSheet extends ReportCommon {
+  location: ReportLocation & { lat: number | null; lon: number | null };
+  period: { start: string; end: string; days: number };
+  hours_with_data: number;
+  metrics: Record<
+    ReportMetric,
+    MetricSummary & {
+      character: Character;
+      peak_hour: number | null;
+      daily: { day: string; average: number | null; min: number | null; max: number | null; out_of_range_hours: number }[];
+    }
+  >;
+  heatmaps: Record<ReportMetric, Heatmap>;
+}
+
+export interface DailyPattern extends Heatmap {
+  unit: string;
+  label: string;
+}

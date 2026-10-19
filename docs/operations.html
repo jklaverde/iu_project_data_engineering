@@ -47,6 +47,7 @@
           <a href="#p10" data-name="p10 oom spark">P10 — Executor OOM</a>
           <a href="#p11" data-name="p11 volume init race">P11 — Volume-init race</a>
           <a href="#p12" data-name="p12 history backfill oom d51">P12 — Backfill OOM</a>
+          <a href="#p14" data-name="p14 reports naive timestamp openpyxl quadratic excel d55">P14 — Reports</a>
         </div>
       </div>
     </nav>
@@ -106,6 +107,11 @@
         started. <a href="#d52">D52</a> (multi-month derived history, seasonal normal ranges) is
         live-verified on a fresh local k3d cluster (one real bug found and fixed,
         <a href="#p12-1">P12 §1</a>); <strong>not yet rolled out to production</strong>.
+        <a href="#d55">D55</a> gives the planner role a concrete user — the city's environmental officer —
+        and four reports (monthly committee report, resident inquiry response, location fact sheet, data
+        extract) with print-to-PDF and Excel, plus a month × hour daily-rhythm heatmap. Live-verified on
+        local k3d (API and browser; two real bugs found and fixed, <a href="#p14">P14</a>);
+        <strong>not yet in production</strong>.
       </p>
       <div class="table-wrap">
         <table class="data-table">
@@ -120,6 +126,7 @@
           <tr><td>P6 — Cassandra scale-out verified on real k3s (D44/D45)</td><td>FR-N2 (admin node-deploy) run end-to-end on a real Contabo VPS to 2 nodes (D44, found/fixed 2 RBAC gaps + a silent ring-join bug) then 3 nodes (D45, found/fixed a client-sharing concurrency bug); D45 also simulated the full UC-12 approaching-budget scenario</td><td><span class="pill pill--done">Done</span> — de-risks P6's core scaling story; not P6 itself (no TLS/ingress/WireGuard, NFR-11 unaddressed)</td></tr>
           <tr><td>P7 — Endurance</td><td>48-hour run against §10 acceptance criteria</td><td><span class="pill pill--todo">Not started</span></td></tr>
           <tr><td>P12 — Multi-month history (D52)</td><td><code>history-backfill</code> Job: ~25 months derived from the 8-day source (looped, seasonal curve), backfilled into <code>agg_1h</code>; seasonal normal ranges; Explorer on the derived file</td><td><span class="pill pill--done">Done locally</span> — live-verified on k3d; production rollout (<code>down</code> + <code>up</code>) pending (see <a href="#d52">D52</a>)</td></tr>
+          <tr><td>P14 — Environmental officer and reports (D55)</td><td>Persona for the planner role; Reports tab with monthly report, inquiry response, fact sheet (print to PDF) and data extract (Excel); daily-rhythm heatmap</td><td><span class="pill pill--done">Done locally</span> — live-verified on k3d (API + browser); not yet in production (see <a href="#d55">D55</a>)</td></tr>
           <tr><td>P8 — Role-based redirect</td><td>Two roles, <code>device_metadata</code>/<code>device_thresholds</code>, Leaflet map, Loki+Promtail, Grafana alerting + webhook + Alerts tab, D34/D35 timeline+log</td><td><span class="pill pill--done">Done — live-verified</span> against a real <code>docker compose up</code></td></tr>
         </table>
       </div>
@@ -205,6 +212,32 @@
           now have an answer to both halves of the brief's question: this reading is elevated but not
           new, and the underlying device has always run a bit hot on CO relative to the other two —
           exactly what its placement rationale (§5.6) predicted.
+        </p>
+
+        <h3 id="scenario-officer-inquiry">Environmental officer: a resident complains about the air at night (D55)</h3>
+        <p>
+          The planner account is designed for one person: the city's environmental officer (Umweltamt), who
+          watches the sensor sites, answers residents, reports to the environment committee every month and
+          recommends measures (<code>REQUIREMENTS.md</code> §1.1 has the full profile and a working week).
+          On a Tuesday an e-mail arrives from a resident near the Ems bridge: the air is bad at night.
+        </p>
+        <p>
+          The officer opens <strong>Reports → Response to a resident's inquiry</strong>, picks
+          <em>Emsbruecke</em>, the last 30 days and the hours 22:00–06:00, and creates the response. The
+          headline compares those hours with the rest of the day in plain words; the table does the same for
+          every measurement; the hour-of-day chart shades the hours in question and shows CO climbing to its
+          daily maximum around 01:00; and the month × hour heatmap below shows the same night-time columns
+          standing out in every one of the last twelve months — a recurring pattern, not a bad week. They
+          click <strong>Print / save as PDF</strong> and attach the page to the answer: what was measured,
+          how often it was outside the normal range, and that it recurs. The page carries its own caveats
+          (statistical baselines, not legal limits; history before go-live derived from the 2020 dataset).
+        </p>
+        <p>
+          On the first working day of the month the same person opens the <strong>Monthly environment
+          report</strong>. It ranks locations by how often each left <em>its own</em> normal range — on the
+          first live run the quiet residential site Baccum topped the list on humidity while the main-road
+          site had the fewest hours, which is why the report never calls the top location "most polluted"
+          (<a href="#d55">D55</a>). PDF for the committee papers, Excel for the archive.
         </p>
 
         <h3 id="scenario-admin-disk">Admin: the disk-usage-critical alert fires</h3>
@@ -938,6 +971,72 @@
             and "Guided tour" switched it back on and reopened it. <strong>Not verified in a browser:</strong>
             the admin tour (needs the admin password; covered by the unit tests only).</li>
         </ul>
+
+        <h4 class="doc-h4" id="d55">The environmental officer and their reports (D55)</h4>
+        <ul>
+          <li><strong>What:</strong> the planner role is designed around one concrete user — the city's
+            environmental officer (<code>REQUIREMENTS.md</code> §1.1: responsibilities, a working week, the
+            seven questions the tool answers, and what it does not do). The header names that user, and the
+            planner screen has two tabs, <em>Map</em> and <em>Reports</em>. Four reports, each phrased as the
+            officer's question: monthly environment report (PDF + Excel), response to a resident's inquiry
+            (PDF), location fact sheet (PDF; also from the sensor detail panel), data extract (Excel). A
+            month × hour-of-day <em>daily rhythm</em> heatmap sits below the timeline charts and in two
+            reports.</li>
+          <li><strong>Decisions (user, 2026-10-16):</strong> persona = environmental officer; the four
+            reports; print-to-PDF through the browser (no PDF library); Excel built by the backend. A
+            scheduled daily-summary CronJob was proposed and dropped by the user (infrastructure without user
+            value); reports are computed on request from <code>agg_1h</code> — no new table, Job or pod.</li>
+          <li><strong>Month × hour, not weekday × hour:</strong> measured on the source CSV before building —
+            CO/smoke peak at 01:00–02:00 on all three sensors (spread 7–83 % over the day), but the history
+            loops an 8-day source, so weekday rows would all look the same.</li>
+          <li><strong>One definition of "out of range":</strong> an hour in which Spark flagged an anomaly and
+            the hour's min/max is outside the normal range in force then (or above the ceiling) — the test the
+            out-of-range log already applies at hourly resolution, including its widest-band rule (a unit test
+            pins that the two bands are equal).</li>
+          <li><strong>How it's built:</strong> <code>backend/app/reports.py</code> (pure computations; the EU
+            daylight-saving rule is computed in code because tz data is missing on some runtimes),
+            <code>report_xlsx.py</code> (openpyxl, hash-pinned; the extract is a write-only workbook),
+            <code>routers/reports.py</code> (<code>/api/reports/*</code>, either role);
+            <code>frontend/src/reports/</code> (Reports tab; a print-aware chart that switches to SVG, a light
+            palette and A4 width on <code>beforeprint</code>), <code>planner/DailyPattern.tsx</code>, print
+            rules in <code>styles.css</code>. No new npm dependency. Printed pages say "Illustrative
+            scenario" in the letterhead so they are never mistaken for an official document.</li>
+          <li><strong>Lock file note:</strong> regenerating <code>backend/requirements.txt</code> in the
+            image's Python (as <code>backend/README.md</code> prescribes) added <code>openpyxl</code> and
+            <code>et-xmlfile</code> and dropped <code>colorama</code> — the previous lock had evidently been
+            compiled on Windows, where <code>click</code> pulls it in.</li>
+          <li><strong>Found live and fixed:</strong> (1) every report crashed with a naive/aware datetime
+            comparison — the reader's timestamps carry no offset and the unit-test fixtures had used "Z"
+            strings (<a href="#p14-1">P14 §1</a>); (2) the one-year Excel extract never finished — openpyxl's
+            <code>max_row</code> made it quadratic (<a href="#p14-2">P14 §2</a>); (3) the first monthly
+            headline said the top location "needed the most attention", but each location is judged against
+            its own baseline and the quiet residential site out-ranked the main road on humidity — reworded to
+            "outside its own normal range most often" and added to the caveats; (4) the heatmap caption said
+            "dark" columns, but on screen high values are light — reworded; (5) the fact sheet's daily chart
+            squeezed days without data out of its axis, hiding gaps — missing days are now empty points.</li>
+          <li><strong>Tests:</strong> pytest 87 (27 new in <code>tests/test_reports.py</code>: local time and
+            DST, the out-of-range rule and its equality with the timeline band, summaries, episodes, monthly
+            comparison and ranking order, hour windows across midnight, heatmap, inquiry, fact sheet incl.
+            gaps, caveats free of internal codes, both workbooks read back with openpyxl). Frontend 32 (9 new
+            in <code>frontend/tests/reports.test.ts</code>: report text, formatting, plain-language headlines;
+            the tour tests cover the three new steps).</li>
+          <li><strong>Live-verified</strong> (local k3d, 2026-10-19, planner account): every endpoint
+            returned 200 on real backfilled data (monthly 2.2 s, inquiry 2.8 s, fact sheet 4–5 s, one-year
+            extract for all locations 36 s / 5.5 MB with the node at ~900 % CPU — a CPU baseline loop ran ~7×
+            slower than idle); invalid input gets plain-language 400/404s; backend memory stayed ~230 MiB of
+            512 Mi during the extract. Character labels came out as the source analysis predicts (Emsbruecke
+            spiky, CO variation 41 %; Baccum and Kaiserstrasse steady, 7–10 %). In the browser: persona
+            header, tabs, fact-sheet button, daily rhythm, monthly report, inquiry response and fact sheet
+            rendered; a <strong>simulated</strong> print (the page's print rules applied as a normal stylesheet
+            plus a <code>beforeprint</code> event) showed the white A4 layout and the light chart palette.
+            <strong>Not verified:</strong> a real print dialog / saved PDF (a modal dialog would block the
+            browser automation), opening the downloaded <code>.xlsx</code> files in Excel itself (only read
+            back with openpyxl), the new tour steps and their German text in the browser (unit tests only),
+            and production.</li>
+          <li><strong>Seen, not changed:</strong> in local time the derived history's night peak moves by an
+            hour with daylight saving (the source rhythm is tied to UTC); a real sensor would follow local
+            life. Visible in the heatmap between the winter and summer rows.</li>
+        </ul>
       </div>
     </section>
 
@@ -992,7 +1091,11 @@
           the catch-up checklist, conventions and a dated state snapshot; this list is the canonical
           backlog it points to.</p>
         <ol>
-          <li><strong>Roll D52 out to production (highest value).</strong> Live-verified locally; still
+          <li><strong>Roll D55 out with D52 (highest value).</strong> D55 needs no schema change and on its
+            own would only need <code>sudo k8s/deploy.sh prod update backend</code>; it is most useful with
+            D52's history, so ship both together. Afterwards: print one report to a real PDF and open both
+            Excel files in Excel — neither was done (<a href="#d55">D55</a>).</li>
+          <li><strong>Roll D52 out to production.</strong> Live-verified locally; still
             to do: look at the planner charts, out-of-range log and Dataset Explorer in a browser, then
             <code>sudo k8s/deploy.sh prod down</code> and <code>up</code> (destroys the current
             Cassandra data — agreed, but confirm at the time). Check
@@ -1752,10 +1855,59 @@
           </div>
         </details>
       </div>
+
+      <div class="phase-group" id="p14">
+        <div class="phase-head"><h3>P14 — Environmental officer reports (D55): two bugs only real data could show</h3><span class="phase-tag">2 incidents</span></div>
+
+        <details class="incident" id="p14-1" data-name="reports naive aware datetime parse_iso cassandra timestamp z fixtures d55">
+          <summary><span class="incident-num">Incident</span> Every report returned 500: naive timestamps from the reader vs aware month boundaries</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p>All new unit tests passed, but the first live call of <code>/api/reports/monthly</code>
+              returned 500; the backend log showed <code>TypeError: can't compare offset-naive and
+              offset-aware datetimes</code> in <code>reports._in_period</code>.</p>
+            <h5>Cause</h5>
+            <p>The Cassandra driver returns naive UTC datetimes, so <code>CassandraReader</code>'s
+              <code>window_start</code> strings carry no offset, and <code>environment.parse_iso</code> kept
+              them naive (it treated naive <em>datetime objects</em> as UTC, but not naive strings). The
+              reports compare them with aware month boundaries. The test fixtures had written
+              <code>window_start</code> with a "Z", so they never exercised the real format.</p>
+            <h5>Fix</h5>
+            <p><code>parse_iso</code> reads a naive string as UTC, like its datetime branch (safe for the
+              existing callers: <code>seasonal</code> ignores the zone). The fixtures now build
+              <code>window_start</code> exactly as the reader does. <strong>Verified:</strong> without the fix
+              10 tests fail, with it all pass; the live endpoints return 200.</p>
+            <h5>General lesson</h5>
+            <p>Test fixtures must use the data format the real reader produces, not a tidier one.</p>
+          </div>
+        </details>
+
+        <details class="incident" id="p14-2" data-name="excel extract openpyxl max_row quadratic timeout write only d55">
+          <summary><span class="incident-num">Incident</span> The one-year Excel extract never finished: <code>ws.max_row</code> made it quadratic</summary>
+          <div class="incident-body">
+            <h5>Symptom</h5>
+            <p><code>/api/reports/extract.xlsx</code> for all locations and a year ran for minutes and the
+              connection was closed without a response; a local profile of the same workbook was still running
+              after 10 minutes. Backend memory stayed ~230 MiB, so not an OOM.</p>
+            <h5>Cause</h5>
+            <p>Each row's number formats were set via <code>ws.cell(row=ws.max_row, …)</code>. openpyxl
+              computes <code>max_row</code> by scanning every cell of the sheet, so 26,000 rows × 20 columns
+              became quadratic.</p>
+            <h5>Fix</h5>
+            <p>Formats are set on the cells before appending, and the extract uses a write-only workbook
+              (rows streamed, widths set up front). One location-year: 11.9 s on this host under load; all
+              three: 41 s locally, 36 s live — linear. The host was ~7× slower than idle at the time (the k3d
+              node at ~900 % CPU), so expect a few seconds on a quiet machine; the UI says a year of all
+              locations can take up to a minute.</p>
+            <h5>General lesson</h5>
+            <p>Size-test with realistic volumes: a unit test with five rows could never show this.</p>
+          </div>
+        </details>
+      </div>
     </section>
 
     <footer class="page-foot">
-      <span>Status, decisions, and 24 logged incidents across 10 phases.</span>
+      <span>Status, decisions, and 26 logged incidents across 11 phases.</span>
       <span><a href="index.html">&larr; Back to documentation hub</a></span>
     </footer>
   </main>

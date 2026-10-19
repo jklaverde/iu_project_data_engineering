@@ -3,8 +3,10 @@ Project: Data Engineering for IU Akademie
 
 A role-based environmental sensor platform for the municipality of Lingen (Ems) — Kafka →
 Spark Structured Streaming → Cassandra underneath, with two web app roles on top: an
-**environmental/planner** role (a live sensor map, air quality scoring, behavior-over-time
-charts, and an out-of-range log) and an **infrastructure/admin** role (the pipeline health
+**environmental/planner** role, designed for the city's environmental officer (a live sensor
+map, air quality scoring, behavior-over-time charts, a daily-rhythm heatmap, an out-of-range log,
+and printable reports: a monthly committee report, a response to a resident's inquiry, a location
+fact sheet and an Excel data extract) and an **infrastructure/admin** role (the pipeline health
 tour, centralized logs, Grafana-fired alerts with log drill-down) — plus a Grafana KPI
 dashboard, all deployed with one script, `./k8s/deploy.sh <local|prod> up` — a local
 Kubernetes/k3d cluster for development, or a native k3s host for production, from the
@@ -293,7 +295,18 @@ history: five behavior-over-time charts (minute/hour/day/week/month) with shaded
 over any span that fell outside the acceptable range, and below them an out-of-range log
 listing the specific breaching readings in plain language — newest first, independently
 scoped at the same five resolutions. This is the surface that actually answers "is it
-safe here, and is it a persistent problem or a one-off" (`REQUIREMENTS.md` UC-8).
+safe here, and is it a persistent problem or a one-off" (`REQUIREMENTS.md` UC-8). Between the
+charts and the log, a **daily rhythm** heatmap (month × hour of day) shows when in the day a
+metric is highest and whether that holds all year.
+
+The role is designed for one concrete user, the city's environmental officer (`REQUIREMENTS.md`
+§1.1). The **Reports** tab holds that person's output, each report phrased as the question it
+answers: a **monthly environment report** for the council committee (PDF and Excel), a
+**response to a resident's inquiry** for one place, period and time of day (PDF), a **location
+fact sheet** (PDF; also from the sensor panel's "Fact sheet" button) and a **data extract** of
+hourly values (Excel). PDF means the browser's own *Print → Save as PDF*: each report has a print
+layout. Every report prints its own caveats — normal ranges are each sensor's statistical
+baseline, not legal limits, and history before go-live is derived from the 2020 dataset.
 
 ### Infrastructure/admin role (`BACKEND_ADMIN_USERNAME`/`BACKEND_ADMIN_PASSWORD`)
 

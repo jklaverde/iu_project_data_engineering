@@ -3,6 +3,7 @@ import EChartWrapper from "../charts/EChartWrapper";
 import { fetchSensorTimeline } from "../api";
 import type { SensorEntry, TimelineGranularity, TimelinePoint, TimelineResponse } from "../types";
 import BoundaryLog from "./BoundaryLog";
+import DailyPattern from "./DailyPattern";
 
 export const METRICS: { key: string; label: string }[] = [
   { key: "co", label: "CO" },
@@ -198,6 +199,8 @@ export default function SensorTimeline({ sensor }: { sensor: SensorEntry }) {
           <TimelineChart key={g.key} title={g.label} formatLabel={g.formatLabel} response={data[g.key]} />
         ))}
       </div>
+
+      <DailyPattern sensor={sensor} metric={metric} metricLabel={METRICS.find((m) => m.key === metric)?.label ?? metric} />
 
       <BoundaryLog
         sensor={sensor}

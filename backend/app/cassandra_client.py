@@ -252,6 +252,20 @@ class CassandraReader:
         )
         return rows
 
+    def hourly_between_sync(self, device_id: str, start: datetime, end: datetime) -> list:
+        """agg_1h rows with start <= window_start < end, oldest first (D55
+        reports). One single-partition read per month the range touches; a
+        year is 13 reads of ~720 rows."""
+        stmt = (
+            f"SELECT {AGG_COLUMNS} FROM agg_1h "
+            f"WHERE device_id=%s AND month=%s AND window_start >= %s AND window_start < %s"
+        )
+        rows = []
+        for month in _months_between(start, end - timedelta(microseconds=1)):
+            rows.extend(_agg_row_to_dict(r) for r in self._session.execute(stmt, (device_id, month, start, end)))
+        rows.sort(key=lambda r: r["window_start"] or "")
+        return rows
+
     def aggregates_sync(
         self, device_id: str, granularity: str, since_hours: float, limit: int, reference_time: datetime | None = None
     ) -> list:

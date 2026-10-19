@@ -2,3 +2,4 @@
 # when they are not installed (tests/conftest.py). Compile with:
 #   pip-compile --generate-hashes tests/requirements.in
 pytest==8.4.2
+openpyxl==3.1.5

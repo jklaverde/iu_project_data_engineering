@@ -41,8 +41,8 @@ const PLANNER: TourStep[] = [
       de: "Willkommen bei der Sensorübersicht Lingen (Ems)",
     },
     body: {
-      en: "This screen answers two questions for planning decisions: is the air safe right now where people live and work, and is a problem a one-off or a persistent pattern? This short tour shows where each answer comes from.",
-      de: "Diese Ansicht beantwortet zwei Fragen für Planungsentscheidungen: Ist die Luft dort, wo Menschen leben und arbeiten, gerade unbedenklich – und ist ein Problem ein Einzelfall oder ein dauerhaftes Muster? Diese kurze Tour zeigt, woher die Antworten kommen.",
+      en: "This workspace is built for the city's environmental officer: the person who watches air quality at the sensor sites, answers residents' questions, reports to the environment committee every month and recommends measures. It answers whether the air is safe right now, whether a problem is a one-off or persistent, and turns that into reports you can print or hand on. This short tour shows where each answer comes from.",
+      de: "Dieser Arbeitsplatz ist für die Umweltsachbearbeitung der Stadt gebaut: für die Person, die die Luftqualität an den Messstellen beobachtet, Anfragen von Anwohnern beantwortet, dem Umweltausschuss monatlich berichtet und Maßnahmen empfiehlt. Er beantwortet, ob die Luft gerade unbedenklich ist und ob ein Problem einmalig oder dauerhaft ist – und macht daraus Berichte zum Drucken oder Weitergeben. Diese kurze Tour zeigt, woher die Antworten kommen.",
     },
   },
   {
@@ -153,6 +153,49 @@ const PLANNER: TourStep[] = [
     body: {
       en: "The out-of-range log lists each period that fell outside its normal range, newest first, with the actual reading and how far it was off. Charts show how often; this log gives the exact numbers for a report or a conversation with residents.",
       de: "Das Protokoll der Grenzwertüberschreitungen listet jeden Zeitraum außerhalb seines Normalbereichs, neueste zuerst, mit dem tatsächlichen Messwert und der Abweichung. Die Diagramme zeigen, wie oft; dieses Protokoll liefert die genauen Zahlen für einen Bericht oder ein Gespräch mit Anwohnern.",
+    },
+  },
+  {
+    id: "planner-pattern",
+    target: "planner-pattern",
+    needsSensor: true,
+    title: { en: "When in the day, and all year?", de: "Zu welcher Tageszeit – und das ganze Jahr?" },
+    body: {
+      en: "The daily rhythm shows the average for every hour of the day, month by month. A column that stands out in every row is a pattern that recurs all year – exactly what you need when a resident complains about the air at night. A row that stands out is a seasonal effect.",
+      de: "Der Tagesrhythmus zeigt den Mittelwert jeder Tagesstunde, Monat für Monat. Eine Spalte, die in jeder Zeile hervorsticht, ist ein Muster, das das ganze Jahr wiederkehrt – genau das, was Sie brauchen, wenn sich jemand über die Luft in der Nacht beschwert. Eine auffällige Zeile ist ein jahreszeitlicher Effekt.",
+    },
+  },
+  {
+    id: "planner-factsheet",
+    target: "planner-factsheet",
+    needsSensor: true,
+    title: { en: "One page per location", de: "Eine Seite pro Standort" },
+    body: {
+      en: "Opens a printable fact sheet for this location: its current status, the character of each measurement over the last 30 days, its typical worst hour and its daily rhythm – for briefing a colleague or a meeting.",
+      de: "Öffnet ein druckbares Standortblatt: aktueller Status, Charakter jeder Messgröße in den letzten 30 Tagen, typische ungünstigste Stunde und Tagesrhythmus – für die Abstimmung mit Kolleginnen und Kollegen oder eine Sitzung.",
+    },
+  },
+  {
+    id: "planner-reports",
+    target: "planner-tab-reports",
+    title: { en: "Reports you can hand on", de: "Berichte zum Weitergeben" },
+    body: {
+      en: "The Reports tab turns the data into what your work produces. Each report can be printed or saved as PDF, and the tables can be downloaded as Excel:",
+      de: "Der Reiter Berichte macht aus den Daten, was Ihre Arbeit hervorbringt. Jeder Bericht lässt sich drucken oder als PDF speichern, die Tabellen auch als Excel herunterladen:",
+    },
+    bullets: {
+      en: [
+        "Monthly environment report: every location for one month, compared with the previous month and a year earlier – for the environment committee.",
+        "Response to a resident's inquiry: one place, a period and the hours the resident means, compared with the rest of the day.",
+        "Location fact sheet: a one-page profile of a location.",
+        "Data extract: hourly values in Excel for colleagues and external experts.",
+      ],
+      de: [
+        "Monatlicher Umweltbericht: alle Standorte eines Monats im Vergleich zum Vormonat und zum Vorjahr – für den Umweltausschuss.",
+        "Antwort auf eine Anfrage: ein Ort, ein Zeitraum und die Stunden, die gemeint sind, im Vergleich zum Rest des Tages.",
+        "Standortblatt: ein einseitiges Profil eines Standorts.",
+        "Datenauszug: Stundenwerte als Excel-Datei für Kolleginnen, Kollegen und externe Fachleute.",
+      ],
     },
   },
   {

@@ -23,25 +23,28 @@ trust a snapshot, including section 3 below — verify.
    change** — read its diff and record it (see §6, "Catch-up").
 2. Read `docs/operations.html` → `#status` (what is done/verified) and `#next` (the
    prioritized backlog). That page is the canonical state; this file is only a pointer.
-3. **This host is production** (`vmd204054`, 11 GiB RAM, single-node k3s). Look before you
-   touch: `sudo k8s/deploy.sh prod check` and `sudo kubectl -n iot-pipeline get pods`
-   (kubeconfig `/etc/rancher/k3s/k3s.yaml`, root-only). Memory is tight — see §8.
+3. **Check which machine you are on (`hostname`).** Production is `vmd204054` (11 GiB RAM,
+   single-node k3s): look before you touch — `sudo k8s/deploy.sh prod check` and
+   `sudo kubectl -n iot-pipeline get pods` (kubeconfig `/etc/rancher/k3s/k3s.yaml`, root-only);
+   memory is tight — see §8. Sessions also run on the user's Windows development machine
+   (`MSI`: Git Bash, Docker Desktop, a local k3d cluster `iot-pipeline`; D55 was built there) —
+   there, production cannot be inspected at all, so ask the user instead of assuming its state.
 4. If the user's request touches deployment, read `README.md` → "Bringing the infrastructure
    up and down" and `docs/deployment.html` first; both explain *why* local and production
    differ.
 
-## 3. State snapshot — dated 2026-09-27 (update this at the end of every session)
+## 3. State snapshot — dated 2026-10-19 (update this at the end of every session)
 
 | Item | State |
 |---|---|
-| Latest decision | **D54** (in-app guided tour per role, EN/DE; D53 = unit tests for D52; D52 = multi-month derived history + backfill + seasonal normal ranges; D51 = Cassandra node-deploy notice reworded, **not yet deployed**). Next free number: **D55**. |
-| Phases | P1–P5, P8–P11 done and live-verified. **P12 (D52) live-verified on local k3d (one OOM bug found/fixed, operations.html p12-1); not yet in production.** Interim VPS done (now single-node k3s). **Full P6 (3-VPS, HA, TLS) and P7 (48 h endurance) not started.** |
-| Production | Single-node k3s on this host; `iot-pipeline` namespace deployed 2026-09-21 ~18:14 CEST, all pods `Running`, 0 restarts, ~3.7 GiB memory available. `kafka-ui` intentionally scaled to 0. |
+| Latest decision | **D55** (planner role designed for the city's environmental officer, `REQUIREMENTS.md` §1.1; Reports tab with monthly report, inquiry response, fact sheet — print to PDF — and an Excel data extract; month × hour daily-rhythm heatmap). D54 = guided tour; D53 = unit tests for D52; D52 = multi-month derived history; D51 = node-deploy notice reworded, **not yet deployed**. Next free number: **D56**. |
+| Phases | P1–P5, P8–P11 done and live-verified. **P12 (D52) live-verified on local k3d (one OOM bug found/fixed, operations.html p12-1); not yet in production.** **P14 (D55) live-verified on local k3d, API + browser (two bugs found/fixed, p14-1/p14-2); not in production; a real saved PDF and the `.xlsx` opened in Excel were not checked.** Interim VPS done (now single-node k3s). **Full P6 (3-VPS, HA, TLS) and P7 (48 h endurance) not started.** |
+| Production | The user said on 2026-10-16 that production "is working fine"; not re-checked since (that session ran on the Windows machine), and whether D52 is deployed there is **not confirmed**. Last state seen from the host itself: single-node k3s; `iot-pipeline` namespace deployed 2026-09-21 ~18:14 CEST, all pods `Running`, 0 restarts, ~3.7 GiB memory available. `kafka-ui` intentionally scaled to 0. |
 | `deploy.sh` verification | `check`, argument handling and validation paths: run. **`up`/`update`/prod `down` were not run by the session that wrote them.** The timestamps (images built → `generated/` staged → Secret created within 1 s) match `deploy.sh prod up` having been run at ~18:14 CEST, but nobody has confirmed it. **Confirm with the user, then record the result in D48.** |
-| D52 rollout | Production still runs the pre-D52 code. Adopting D52 needs `deploy.sh prod down` + `up` (wipes Cassandra — the user agreed on 2026-09-27, confirm again at the time). Verify on local k3d first. |
+| D52 + D55 rollout | As last confirmed, production runs pre-D52 code (ask the user). Adopting D52 needs `deploy.sh prod down` + `up` (wipes Cassandra — the user agreed on 2026-09-27, confirm again at the time). D55 alone needs only `prod update backend` (no schema change) but is most useful with D52's history; ship together. |
 | Not built | TLS/ingress · image registry · multi-node · automated backups · a rehearsed restore · `k8s/overlays/prod` |
 | Unverified claim | Whether `ufw` alone can close ports that k3s servicelb publishes (`docs/deployment.html` §6 says to test from another machine). |
-| Tests | Two unit suites, both narrow: pytest for the D52 multi-month-history workflow (`tests/`, D53; `python -m pytest tests -q`, 60 tests) and Node's built-in runner for the guided tour (`frontend/tests/`, D54; `cd frontend && npm test`, 23 tests). Neither needs services. Everything else — API routes, Spark streaming, the UI — is verified only by live runs recorded in D-entries. Do not imply broader coverage. |
+| Tests | Two unit suites, both narrow: pytest for the D52 multi-month-history workflow and the D55 report computations/workbooks (`tests/`; `python -m pytest tests -q`, 87 tests) and Node's built-in runner for the guided tour and the report text/headlines (`frontend/tests/`; `cd frontend && npm test`, 32 tests). Neither needs services. Everything else — API routes, Spark streaming, the UI — is verified only by live runs recorded in D-entries. Do not imply broader coverage. |
 
 ## 4. Where things are
 
@@ -56,7 +59,7 @@ trust a snapshot, including section 3 below — verify.
 | `producer/` `spark_job/` `kaggle_repository/` | Ingestion, streaming job (also the `spark-worker` image), dataset fetch job. |
 | `infra/` | Cassandra image + schema, Prometheus, Loki, Promtail, Grafana provisioning. |
 | `docker-compose.yml` | Legacy fallback. Reads *all* settings from `.env`. |
-| `tests/` | pytest unit suite for the D52 workflow (D53). Stubs missing Kafka/Cassandra/Spark libraries; never needs a cluster. |
+| `tests/` | pytest unit suite for the D52 workflow (D53) and the D55 reports. Stubs missing Kafka/Cassandra/Spark libraries; never needs a cluster. |
 | `development_notes/`, `docs/internal/`, `.claude/` | Gitignored, local-only. Don't rely on them existing. |
 
 ## 5. Run, verify, deploy
@@ -160,11 +163,14 @@ to run `! git push`.
 | `history-backfill` only fills an empty keyspace | It records its anchor in `iot.history_backfill`; once complete, re-runs write nothing. Changing `HISTORY_*` span/sampling/seed needs an empty keyspace. (D52) |
 | Local image builds crawl while the stack runs | The k3d node uses ~6.8 of Docker Desktop's 7.7 GiB, leaving the backend image's frontend build <1 GiB (6 min 39 s vs 15 s). Scale `spark-job`/`spark-worker` to 0 for the build, then back to 1. No `.dockerignore` either: the whole repo (incl. `.venv`, `node_modules`) is sent as context. (D54) |
 | Guided tour targets | Tour steps find elements by `data-tour="…"`; renaming/removing one breaks a step — `npm test` in `frontend/` catches it. Tour text must stay free of internal codes (also tested). (D54) |
+| Reader timestamps are naive | `CassandraReader` returns `window_start`/`event_ts` strings without an offset (the driver gives naive UTC). `environment.parse_iso` reads them as UTC since D55; test fixtures must use that exact format, not "Z" strings — that hid a crash once (p14-1). |
+| openpyxl `ws.max_row` is O(cells) | Calling it per row made the one-year extract quadratic (p14-2). Format cells before appending; large sheets use a write-only workbook. |
+| "Out of range" is relative | Every location is judged against **its own** baseline, so a ranking shows who departed from their own normal, not who is most polluted (the residential site out-ranked the B70 site). Report wording must never say "most polluted" / "needs most attention". (D55) |
 | Init Jobs are immutable | `apply` failing with "field is immutable" ⇒ delete that Job, re-run `up`. |
 
 ## 9. Open threads (highest value first — canonical list: `docs/operations.html#next`)
 
-1. **Roll out D52 to production**: check the planner UI in a browser first (only its API was verified), then prod `down` + `up` with the user's go-ahead; confirm `history-backfill` has 0 restarts. Record the outcome in D52.
+1. **Roll out D52 + D55 to production**: first ask the user what production currently runs; then prod `down` + `up` with the user's go-ahead; confirm `history-backfill` has 0 restarts; print one report to a real PDF and open both Excel files in Excel (never done). Record the outcome in D52/D55.
 2. **Close the D48 loop:** ask the user whether `deploy.sh prod up` was what produced the
    current deployment; record the real outcome; then exercise `update` and prod `down`'s
    prompt (the latter destroys data — only with the user's go-ahead).

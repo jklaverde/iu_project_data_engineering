@@ -10,7 +10,7 @@ external review feedback on the v2.0 build (D38-D41); v2.2 adds a Cassandra stor
 the admin role (D42); v3.0 replaces Docker Compose with Kubernetes (k3d locally) as the deployment
 mechanism for the whole stack, closing the Docker-socket privilege D42 introduced and turning the
 previously-aspirational P6 k3s architecture into something that actually runs (D43).
-**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1, v2.2, v3.0), 2026-09-27 (v3.1, v3.2)
+**Date:** 2026-08-14 (v1.0), 2026-08-21 (v2.0), 2026-09-16 (v2.1, v2.2, v3.0), 2026-09-27 (v3.1, v3.2), 2026-10-16 (v3.3)
 **v0.2 changes:** frontend (React.js) and backend (Python) confirmed; added NFR-10 npm supply-chain security policy and Risk R-5, based on the 2025–2026 npm attack landscape (Shai-Hulud worm and successors, axios and keyv compromises).
 **v0.3 changes:** deployment target defined — two Contabo VPS orchestrated with Docker Swarm, true-cluster topology (Kafka broker + Cassandra node on both machines, replication factor 2), public exposure via IP address; added §4.1 deployment topology, NFR-11/NFR-12, Risk R-6, OQ-6/OQ-7.
 **v0.4 changes:** orchestrator switched from Docker Swarm to **k3s** on **three** Contabo VPS (2 data nodes + 1 small control node; HA control plane with 3-member etcd; 3 KRaft controllers), Kafka/Cassandra as plain StatefulSets; OQ-7 resolved; OQ-4 resolved as KRaft; D16 superseded by D18/D19; NFR-11/NFR-12 and phases updated.
@@ -47,6 +47,13 @@ backend business logic) changes — this is a deployment-mechanism swap, not a r
 feature and states its value in plain language (including what each sensor type is good for), in
 English and German, switchable on/off per browser and started automatically on first login. New
 UC-14, FR-T1–T6, P13.
+**v3.3 changes (D55):** the planner role gets a concrete primary user — the city's environmental
+officer (§1.1: responsibilities, a working week, the questions the tool answers, and what it does not
+do) — and four reports that are that person's actual output: a monthly environment report for the
+council committee, a response to a resident's inquiry, a location fact sheet and a data extract.
+Shown in a new Reports tab, printable to PDF through the browser and, where tabular, downloadable as
+Excel. A month × hour-of-day pattern heatmap is added to the charts and the reports. New §1.1,
+UC-15–UC-18, FR-O1–O10, FR-T7, P14.
 **v3.1 changes (D52):** the 8-day source dataset and the deployment-length live history left the
 day/week/month views, their comparisons and the Dataset Explorer mostly empty. A `history-backfill`
 Job derives ~25 months of history from the unchanged original (its 8-day cycle looped, a seasonal
@@ -102,6 +109,54 @@ The primary goal is now twofold: a planner or citizen using the map should be ab
 this location's air currently safe, and is it a persistent problem or a one-off," and an admin
 using the infrastructure role should be able to tell, within one click from a live alert, what
 broke and why.
+
+### 1.1 Primary user of the planner role: the environmental officer (D55)
+
+The planner account is designed around one concrete person. The role and the city are real places
+in the scenario; the person and the office's internal organisation are illustrative.
+
+**Who.** An environmental officer in the City of Lingen (Ems) environment office (*Umweltamt*). Trained
+in environmental science or engineering, comfortable with spreadsheets, not a data engineer: never
+writes a query, never opens Grafana. Reports to the head of the office, who presents to the council's
+environment committee (*Umweltausschuss*).
+
+**Responsible for.** Watching air quality and local climate at the city's sensor sites; a monthly
+report to the committee; answering residents' inquiries and complaints; recommending measures
+(traffic, green buffers, heating and ventilation advice) to the planning and traffic departments;
+handing data to external experts and the state environment agency on request.
+
+**The questions the tool answers** (every planner screen exists for at least one of them):
+
+| | Question | Where it is answered |
+|---|---|---|
+| Q1 | Is anything unusual right now, and where? | Status bar, map, sensor detail panel |
+| Q2 | Is it a one-off or a persistent problem? | Timeline charts, out-of-range log, chronic exposure |
+| Q3 | Is it normal for the season and the time of day? | Compare overlay, daily-rhythm heatmap |
+| Q4 | How did last month go, and where should attention go? | Monthly environment report (UC-15) |
+| Q5 | What do I tell a resident who complains? | Inquiry response (UC-16) |
+| Q6 | What is this location like? (briefing a colleague) | Location fact sheet (UC-17) |
+| Q7 | Can I hand the data to someone else? | Data extract (UC-18) |
+
+**A working week.**
+- *Monday morning:* opens the map — all green except one amber pin at Kaiserstraße; checks its chart
+  and the compare overlay: the same as last week, nothing new (Q1–Q3).
+- *Tuesday:* an e-mail from a resident near the Ems bridge about bad air at night. Runs an inquiry
+  response for that location, the last 30 days, 22:00–06:00: the night hours are indeed the worst of
+  the day, and the heatmap shows the same pattern in every month. Prints it to PDF and answers with
+  evidence instead of a reassurance (Q5, Q3).
+- *Thursday:* the traffic department asks what the B70 site is like before a road-works meeting.
+  Prints the location fact sheet (Q6).
+- *First working day of the month:* generates the monthly environment report for the previous month,
+  checks the ranking and the worst episodes, saves the PDF for the committee papers and the Excel file
+  for the office archive (Q4).
+- *Ad hoc:* a consultant asks for hourly values of one site for a quarter. Downloads the data extract
+  (Q7).
+
+**What the tool does not do — and says so.** Normal ranges are statistical baselines from each
+sensor's own history, not legal limits (no comparison with the German air-quality limit values,
+D33). Three sensors are point measurements, not area coverage. History from before the system went
+live is derived from the 2020 source dataset, not measured (D52). The tool informs the officer's
+judgement; it does not decide or publish anything to residents by itself.
 
 ---
 
@@ -683,6 +738,38 @@ turn the automatic start on or off.
 *Success:* without reading any documentation, a new user can say what each part of their screen is
 for and which decision it supports.
 
+**UC-15 — Environmental officer: monthly environment report (D55).** On the first working day of a
+month the officer opens Reports → Monthly environment report, picks the previous month and reads: per
+location and metric the hours outside the normal range and over the limit, the monthly average and
+peak, the change against the previous month and the same month a year earlier, a ranking of locations
+by out-of-range hours, and the five longest out-of-range episodes. Prints it to PDF for the committee
+papers and downloads the Excel version for the archive.
+*Success:* the officer can say, in one page, which location needs attention and whether the month was
+better or worse than the last one and than a year ago, without opening a chart per sensor.
+
+**UC-16 — Environmental officer: answer a resident's inquiry (D55).** A resident complains about air
+quality at a place and a time of day. The officer picks the nearest location, a period (up to 92
+days) and an hour window (which may cross midnight, e.g. 22:00–06:00) and gets: per metric the
+average and out-of-range hours inside the window compared with the rest of the day, the peak, the
+out-of-range episodes inside the window, the average hour-of-day profile over the period, and the
+month × hour heatmap for the last 12 months. Prints it to PDF.
+*Success:* the answer to the resident states what was measured at that place and time and whether it
+is a recurring pattern — evidence, not reassurance.
+
+**UC-17 — Environmental officer: location fact sheet (D55).** From a sensor's detail panel or the
+Reports tab the officer opens a one-page fact sheet: name and area, current status, and for the last
+30 days per metric the average, a character label (steady / variable / spiky), the typical peak hour
+and the share of hours outside the normal range, a 30-day daily chart and the month × hour heatmap.
+Prints it to PDF.
+*Success:* a colleague who has never used the tool understands what the location is like from one
+printed page.
+
+**UC-18 — Environmental officer: data extract (D55).** The officer picks a location (or all), a period
+(up to 366 days) and metrics and downloads an Excel workbook with the hourly values, the out-of-range
+hours and a notes sheet explaining units, normal ranges and data provenance.
+*Success:* an external expert can work with the data in a spreadsheet without access to the system and
+without having to ask what the columns mean.
+
 ---
 
 ## 7. Functional Requirements
@@ -858,6 +945,50 @@ for and which decision it supports.
   per browser; the default follows the browser's language. The rest of the UI stays English.
 - FR-T5. Tour text follows the user-facing rule: no internal codes (decision/requirement ids).
 - FR-T6. No new npm dependency (NFR-10): the tour is a small in-app component.
+- FR-T7. (D55) The planner tour speaks to the environmental officer (§1.1) and also covers the
+  daily-rhythm heatmap and the Reports tab.
+
+**Environmental officer reports (FR-O, D55)**
+- FR-O1. The planner header names the user it is designed for ("Environmental officer · Umweltamt
+  Lingen (Ems)"), and the planner screen has two tabs: *Map* (the existing view) and *Reports*.
+- FR-O2. *Out-of-range hour* — the one definition every report uses: an `agg_1h` hour in which Spark
+  flagged at least one anomaly **and** the hour's minimum or maximum of that metric lies outside the
+  normal range in force at that hour (seasonal for temp/humidity, FR-H4), or its maximum is above the
+  ceiling (co/lpg/smoke). This is the test the out-of-range log already applies at hourly resolution,
+  so a report and the log never disagree. *Over-limit hour:* an out-of-range hour whose maximum is above
+  the ceiling. *Episode:* consecutive out-of-range hours of one location and metric.
+- FR-O3. Monthly environment report (UC-15): any month in stored history, default the last complete
+  month; per location × metric the hours with data, out-of-range hours, over-limit hours, average and
+  peak (value and time); the same figures for the previous month and the same month a year earlier;
+  locations ranked by out-of-range hours; the five longest episodes. On screen with charts; PDF and
+  Excel. The ranking is worded as "outside its own normal range most often", never "most polluted": every
+  location is judged against its own baseline (D33), so the quiet residential site can out-rank the
+  main-road site (it did on the first live run, D55).
+- FR-O4. Inquiry response (UC-16): one location, a period of 1–92 days, an hour window that may cross
+  midnight, all five numeric metrics; per metric inside-window vs rest-of-day average and out-of-range
+  hours, the peak, the episodes inside the window; the hour-of-day profile over the period; the heatmap
+  (FR-O7). On screen; PDF.
+- FR-O5. Location fact sheet (UC-17): one location; current status; for the last 30 days per metric
+  the average, a character label for the pollutants from the variability of their hourly values
+  (steady / variable / spiky; temperature and humidity get their range instead), the typical peak hour and the share of out-of-range hours; a 30-day daily chart; the heatmap.
+  Reachable from the sensor detail panel and the Reports tab. On screen; PDF.
+- FR-O6. Data extract (UC-18): one or all locations, a period of 1–366 days, any of the five numeric
+  metrics; Excel only, with sheets *Notes*, *Hourly data* and *Out-of-range hours*.
+- FR-O7. Daily-rhythm heatmap: for one location and metric, the average of the hourly averages per
+  calendar month (rows, last 12 months) and hour of day (columns, local time Europe/Berlin). Month ×
+  hour, not weekday × hour: the derived history loops an 8-day source, so weekday rows would carry no
+  information (D55). Shown below the timeline charts for the selected metric and in FR-O4/FR-O5.
+- FR-O8. PDF is the browser's own print/save-as-PDF over a print layout per report (light background,
+  A4, report only, title, period and generation time on top, marked as an illustrative scenario so a
+  printed page is never mistaken for an official document) — no PDF library. Excel files are
+  generated by the backend (`openpyxl`, hash-pinned like every Python dependency); no new npm
+  dependency (NFR-10).
+- FR-O9. Every report, on screen, printed and in Excel, carries its own caveats: normal ranges are
+  statistical baselines from the sensor's own history, not legal limits; history before go-live is
+  derived from the 2020 dataset, not measured; each location is judged against its own normal range;
+  three sensors are point measurements; pressure is simulated and excluded. No internal codes.
+- FR-O10. Reports are computed on request from `agg_1h` (a monthly report reads ~6,500 hourly rows) —
+  no new table, Job or pod. Reachable by either role (FR-R4).
 
 **Multi-month history (FR-H, D52) — live-verified locally, not yet in production**
 - FR-H1. The `history-backfill` Job derives a deterministic multi-month CSV (default 770 days) from
@@ -1112,6 +1243,7 @@ The 48-hour run at the NFR-2 rate passes when:
 | D52 | Multi-month derived history + `agg_1h` backfill + seasonal normal ranges, so the day/week/month views, comparisons and Dataset Explorer have data (§5.9, FR-H1–H5); **live-verified on local k3d, not yet in production** | The user reported the week/month views, their "compare to" overlay and the Dataset Explorer as largely empty. Root cause, confirmed in code: the source dataset spans 8 days (2020-07-12 → 07-20; §5.1 said 7), and live Cassandra history only spans the deployment's running time because D28 stamps events with `now()`; FR-E6's compare needs 37/212/~768 days of history for day/week/month and otherwise fell back to the 8-day CSV. Rewriting the CSV's timestamps alone would have fixed only the Explorer and that fallback, hence the backfill. **User decisions (2026-09-27):** loop the 8-day cycle rather than stretch it linearly (a ~45× stretch turns a day/night cycle into a ~45-day one and breaks the synthetic generator's hour-of-day profiles); add a seasonal curve on temp/humidity; backfill Cassandra; existing Cassandra data may be wiped instead of migrated; make the normal ranges seasonal (rather than shrink the curve or accept a winter flood of out-of-range entries); cover ~25 months so the monthly compare-to-a-year-ago view has data; the Explorer shows only the derived data. **Design choices made while implementing:** (1) the derived file is generated by the backfill Job, not `dataset-init` as first drafted, so the file and the Cassandra rows always share one time anchor, recorded in a new `history_backfill` table — which also makes re-runs idempotent and gives the compare check its `history_start`; the Job runs from the backend image (Cassandra driver already there, no new dependency). (2) One reading per device every 10 min keeps the file at 332,640 rows (below the original 405,184); the Explorer's reader now stores tuples, not dicts (~100 MB measured offline for the whole file) under the backend's 512 MiB limit. (3) Backfilled `anomaly_count` uses the §5.4 rule against the seasonal baseline, not a replayed EWMA (too few readings per hour to follow the drift). Offline, the share of hours with an anomaly stayed flat across seasons (~3–5 % per device and month), which is the evidence the seasonal baseline works; with an unshifted baseline every winter hour would be flagged. (4) `device_thresholds` keeps the July baseline; the backend shifts it per moment, and Spark only shifts its EWMA seed. (5) The backfill never overwrites an hour that already has an `agg_1h` row. **Verified offline first:** derivation against the real CSV (332,640 rows, 55,440 hourly aggregates, monthly temp means follow the curve), `DatasetReader`, seasonal bands/statuses, `tsc -b`, `py_compile`, `kubectl kustomize`, `bash -n`, `docker compose config`. **Then live-verified on local k3d** (2026-09-27, Windows + Docker Desktop 8 GiB, `deploy.sh local down` + `up` on a fresh cluster, all four init Jobs Complete). **One real bug found and fixed:** the first backfill attempt was OOM-killed at its 512Mi limit during the Cassandra writes (kernel log: anon-rss ~510 MiB in this pod's cgroup) and `restartPolicy: OnFailure` retried it; the retry reused the recorded anchor and skipped the 41,513 hours already written, so the Job reported Complete with complete data — hidden except by an implausible "skipped live" count and `restartCount=1` (operations.html p12-1). Fix: free the source rows before writing, stream inserts in 2,000-row chunks with `results_generator=True`; re-run after `deploy.sh local update backend` + truncating `agg_1h`/`history_backfill`: 0 restarts, 55,440 rows, 3 live hours correctly skipped, sampled peak ~227 Mi. Also observed: no step at the anchor (derived 16.5 °C → live 16.1 °C); January anomalous hours 22/744 for one device; planner API — all sensors "ok" against September bands (16.1 °C in 15.6–17.5 °C, critical under the July band), day/week/month timelines 31/27/14 points with per-point bands, compare answered from Cassandra at every resolution incl. 1 year ago, Explorer 2024-08-18 → 2026-09-27; backend ~208 Mi with the derived file cached, first Explorer load 14 s; producer/spark-job 0 restarts, no log errors; the new `update backend` branch in `deploy.sh` printed its hint. **Not verified:** the UI rendered in a browser (API only), the production `down` + `up` rollout, the compose path beyond `docker compose config`. Reverses D39's wording that a year-long comparison could only mean the 2020 window; amends FR-P2. |
 | D53 | Unit test suite (pytest) for the D52 multi-month-history workflow; compare-source decision extracted to `environment.stored_history_covers()` | Requested by the user after D52 ("if there aren't unit tests covering the workflows implement them"); the repo had none. Scope is deliberately D52's workflows, not the whole codebase: the seasonal curve (incl. that its three hand-synced copies are byte-identical), the `history-backfill` derivation (span, sampling, time of day, 8-day loop, seasonal shift, determinism, atomic write), the §5.4 rule against the seasonal baseline, the `agg_1h` write path (chunked, skips existing hours, all 28 columns), and the Job's idempotency workflow through `main()` against a fake Cassandra session (fresh run, re-run after completion, regenerate-only, resume with the recorded anchor, retry after a partial write — the p12-1 case — and recorded settings winning over changed config); the Dataset Explorer reader (missing file, ranges, filters, reload on replace); seasonal normal ranges per reading and per timeline period, rollups, dataset bucketing on the derived time, the compare-source decision and provenance labels; the producer's seasonal shift in replay and synthetic mode; the Spark seed shift. Services are imported the way their containers do (service dir on `sys.path`); Kafka/Cassandra/Spark client libraries are replaced by inert stubs only when not installed, so the suite needs only `pytest` (hash-pinned `tests/requirements.txt`, NFR-10). To make the compare decision testable without FastAPI it moved from `routers/sensors.py` into a pure function; behavior unchanged. **Verified:** 60 passed locally (Windows, Python 3.11, ~13 s); a mutation check — removing the replay's seasonal shift and the backfill's skip of existing hours — made 3 targeted tests fail, and restoring the code made all 60 pass. **Not covered by tests:** FastAPI routes, the Spark streaming queries, the frontend, the Kubernetes manifests and `deploy.sh` — still verified by live runs only. The suite is not wired into any CI (there is none). |
 | D54 | In-app guided tour per role (UC-14, FR-T1–T6) | New requirement from the user (2026-09-27): an interactive in-app explanation of each role's features and their value, switchable on/off. **User decisions:** remembered per browser (the two role accounts are shared, so a server-side setting would switch it for everyone on that account); starts automatically once, then only on request; a spotlight tour over the real UI rather than a help panel; English and German. **Overlaps handled:** the admin "Pipeline" view is already a numbered six-step walkthrough — the tour explains the workspace and points into it instead of repeating each step; "About the project" stays the project-level explanation; the role walkthroughs in the docs are only reachable by admins, so the tour carries a short version for planners. Built in-app with no new npm dependency (NFR-10); tour text obeys the no-internal-codes rule and states that pre-go-live history is derived and pressure simulated. **Tests:** 23 unit tests with Node's built-in runner (`cd frontend && npm test`, no new dependency): content complete in both languages, no internal codes, every highlighted element exists in the UI source (a removed marker made it fail), honesty statements, preferences incl. blocked storage, card placement. **Two bugs found in the browser and fixed:** element lookup used `requestAnimationFrame`, which never fires in a hidden tab (a user switching tabs mid-tour would come back to centered cards) — now `setTimeout` polling; and a long card was pinned over the panel it describes — cards now go beside the element first. **Verified in the browser** (local k3d, planner account): auto-start on first load, every step framed, sensor auto-selected for detail steps, EN/DE switch remembered, skip turns auto-start off and survives a reload, the header controls turn it back on and reopen it. **Not verified in a browser:** the admin tour (admin password not available to the assistant; unit tests only). |
+| D55 | The planner role gets a concrete user — the city's environmental officer (§1.1) — and four reports that are that person's output (UC-15–UC-18, FR-O1–O10, FR-T7, P14) | Requested by the user (2026-10-16): the project is a portfolio, so the planner role must read as a real user well supported by the pipeline and the app. **User decisions:** persona = environmental officer (Umweltamt); the four reports (monthly committee report, resident inquiry response, location fact sheet, data extract); print-to-PDF through the browser; a scheduled daily-summary CronJob was proposed and **dropped by the user** as infrastructure without user value — reports are computed on request from `agg_1h`, no new table, Job or pod. **Measured before building:** CO/smoke peak at 01:00–02:00 on all three sensors, but the derived history loops an 8-day source, so the heatmap is month × hour, not weekday × hour (FR-O7). **Built:** `backend/app/reports.py`, `report_xlsx.py` (openpyxl, hash-pinned; regenerating the lock in the image's Python also dropped a Windows-only `colorama` pin), `routers/reports.py`; `frontend/src/reports/`, `planner/DailyPattern.tsx`, print rules; no new npm dependency. **Found live and fixed:** every report 500ed on naive reader timestamps (`parse_iso`, P14 §1 — the fixtures had used "Z" strings); the one-year extract was quadratic through openpyxl's `max_row` (P14 §2); the monthly headline said the top location "needed the most attention" although each location is judged against its own baseline (the residential site out-ranked the main road on humidity) — reworded and added to the caveats; a heatmap caption that was wrong on the dark screen; the fact sheet's daily chart hid data gaps. **Tests:** pytest 87 (27 new), frontend 32 (9 new). **Live-verified** on local k3d (2026-10-19, planner account): all endpoints 200 on real data, plain-language 400/404s, backend ~230 MiB during the largest extract; persona header, tabs, all four report screens, fact-sheet button and daily rhythm in the browser; print layout checked by **simulating** print (print rules applied as a stylesheet + `beforeprint`). **Not verified:** a real print dialog/saved PDF, the `.xlsx` files opened in Excel (read back with openpyxl only), the new tour steps in the browser, production. |
 
 ---
 
@@ -1245,5 +1377,9 @@ The 48-hour run at the NFR-2 rate passes when:
 13. **P13 — In-app guided tour (v3.2, D54):** R21 tour component + per-browser preferences (FR-T1,
     FR-T3); R22 planner and admin tour content in English and German, incl. sensor-type value
     descriptions (FR-T2, FR-T4, FR-T5); R23 unit tests for the tour logic and content rules.
+14. **P14 — Environmental officer and reports (v3.3, D55):** R24 persona (§1.1) in the spec, docs,
+    header and tour (FR-O1, FR-T7); R25 report computations and endpoints, incl. the heatmap (FR-O2–O7,
+    FR-O10); R26 Reports tab, print layouts and Excel export (FR-O3–O6, FR-O8, FR-O9); R27 unit tests
+    for the computations, the workbook and the report text.
 
 Each phase should end in a runnable, demonstrable state.

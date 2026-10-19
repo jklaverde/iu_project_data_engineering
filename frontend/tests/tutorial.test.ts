@@ -102,7 +102,10 @@ test("the tours are honest about derived history and simulated pressure", () => 
 
 test("steps about a sensor's details are flagged as needing a selected sensor", () => {
   for (const step of TOURS.planner) {
-    const insideDetail = ["planner-scores", "planner-gauges", "planner-timeline", "planner-compare", "planner-log"];
+    const insideDetail = [
+      "planner-scores", "planner-gauges", "planner-timeline", "planner-compare", "planner-log",
+      "planner-pattern", "planner-factsheet",
+    ];
     if (step.target && insideDetail.includes(step.target)) assert.ok(step.needsSensor, step.id);
   }
 });

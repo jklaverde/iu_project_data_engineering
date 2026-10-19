@@ -5,6 +5,10 @@ import type {
   CassandraStorageSummary,
   DatasetReadingsResponse,
   DatasetSummaryResponse,
+  DailyPattern,
+  FactSheet,
+  InquiryReport,
+  MonthlyReport,
   KubernetesStatusResponse,
   PipelineState,
   Role,
@@ -112,6 +116,51 @@ export function fetchDatasetReadings(params: {
   if (params.limit) search.set("limit", String(params.limit));
   const qs = search.toString();
   return request(`/api/dataset/readings${qs ? `?${qs}` : ""}`);
+}
+
+// Environmental officer reports (D55). The .xlsx endpoints are plain links
+// (the browser downloads them with the session cookie), so only URLs here.
+export function fetchMonthlyReport(month?: string): Promise<MonthlyReport> {
+  return request(`/api/reports/monthly${month ? `?month=${encodeURIComponent(month)}` : ""}`);
+}
+
+export function monthlyReportXlsxUrl(month: string): string {
+  return `/api/reports/monthly.xlsx?month=${encodeURIComponent(month)}`;
+}
+
+export function fetchInquiryReport(params: {
+  deviceId: string;
+  start: string;
+  end: string;
+  hourFrom: number;
+  hourTo: number;
+}): Promise<InquiryReport> {
+  const search = new URLSearchParams({
+    device_id: params.deviceId,
+    start: params.start,
+    end: params.end,
+    hour_from: String(params.hourFrom),
+    hour_to: String(params.hourTo),
+  });
+  return request(`/api/reports/inquiry?${search}`);
+}
+
+export function fetchFactSheet(deviceId: string): Promise<FactSheet> {
+  return request(`/api/reports/factsheet/${encodeURIComponent(deviceId)}`);
+}
+
+export function fetchDailyPattern(deviceId: string, metric: string): Promise<DailyPattern> {
+  return request(`/api/reports/daily-pattern/${encodeURIComponent(deviceId)}?metric=${encodeURIComponent(metric)}`);
+}
+
+export function extractXlsxUrl(params: { deviceId: string; start: string; end: string; metrics: string[] }): string {
+  const search = new URLSearchParams({
+    device_id: params.deviceId,
+    start: params.start,
+    end: params.end,
+    metrics: params.metrics.join(","),
+  });
+  return `/api/reports/extract.xlsx?${search}`;
 }
 
 export function connectPipelineStateSocket(

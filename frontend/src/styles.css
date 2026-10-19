@@ -1757,3 +1757,356 @@ main {
   white-space: nowrap;
   cursor: pointer;
 }
+
+/* ---------------------------------------------------------------------------
+   Environmental officer: Map / Reports tabs, the four reports, print (D55).
+   --------------------------------------------------------------------------- */
+
+.planner-tabs {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+.detail-factsheet {
+  margin: 0.2rem 0 0.6rem;
+}
+
+.daily-pattern {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.reports-tab {
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.report-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.75rem;
+}
+
+.report-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text);
+  background: linear-gradient(165deg, var(--panel-2) 0%, var(--panel) 70%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.report-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  transform: translateY(-1px);
+}
+
+.report-card-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.report-card-question {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.report-card-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.report-card-description {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.report-card-formats {
+  margin-top: auto;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.report-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.report-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.report-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.report-controls label.report-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.report-controls input[type="date"],
+.report-controls input[type="month"],
+.report-controls select {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+a.btn {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.report-sheet {
+  max-width: 1000px;
+  position: relative;
+}
+
+.report-actions {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.4rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.report-letterhead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-right: 18rem;
+}
+
+.report-title {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.report-subtitle {
+  margin: 0 0 0.8rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.report-headline {
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 0.6rem 0.9rem;
+  margin: 0.6rem 0 0.4rem;
+}
+
+.report-headline p {
+  margin: 0.2rem 0;
+  line-height: 1.5;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-bottom: 0.4rem;
+}
+
+.report-table th {
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+}
+
+.report-table td {
+  border-bottom: 1px solid var(--border-soft);
+  padding: 0.35rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-row-focus td {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.report-muted {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.report-caption {
+  margin: 0 0 0.3rem;
+}
+
+.report-badge {
+  margin-left: 0.4rem;
+  font-size: 0.66rem;
+  padding: 0.05rem 0.45rem;
+}
+
+.report-block {
+  break-inside: avoid;
+}
+
+.report-metric-tabs {
+  margin: 0.4rem 0;
+}
+
+.report-tiles {
+  margin: 0.4rem 0 0.6rem;
+}
+
+.report-legend {
+  margin: 0.3rem 0 0.6rem;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.report-caveats {
+  margin-top: 1.2rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.report-caveats ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .report-actions {
+    position: static;
+    margin-bottom: 0.6rem;
+  }
+  .report-letterhead {
+    padding-right: 0;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+}
+
+/* Print / save as PDF: only the report, on white A4. The variables are
+   redefined so every component that uses them turns light by itself;
+   charts switch palette through ReportChart's beforeprint handler. */
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@media print {
+  :root {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #ffffff;
+    --border: #c7ccd6;
+    --border-soft: #e3e6ec;
+    --text: #111827;
+    --muted: #4b5563;
+    --accent: #1d4ed8;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: var(--text);
+    font-size: 11pt;
+  }
+
+  .no-print,
+  .planner-map-tab,
+  .tour-layer {
+    display: none !important;
+  }
+
+  .planner-shell,
+  .reports-tab,
+  .report-body {
+    padding: 0;
+    margin: 0;
+    max-width: none;
+    min-height: 0;
+    display: block;
+  }
+
+  .report-sheet {
+    border: none;
+    padding: 0;
+    max-width: none;
+    background: #ffffff;
+  }
+
+  .report-letterhead {
+    padding-right: 0;
+  }
+
+  .report-table th,
+  .report-table td {
+    padding: 0.2rem 0.35rem;
+  }
+
+  .report-table tr,
+  .report-chart,
+  .report-headline {
+    break-inside: avoid;
+  }
+
+  .section-title {
+    break-after: avoid;
+  }
+
+  .status-badge {
+    border: 1px solid currentColor;
+    background: transparent !important;
+  }
+}

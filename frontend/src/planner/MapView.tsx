@@ -3,6 +3,8 @@ import "leaflet/dist/leaflet.css";
 import { useEffect, useRef, useState } from "react";
 import AboutModal from "../about/AboutModal";
 import DatasetExplorer from "../dataset/DatasetExplorer";
+import ReportsTab from "../reports/ReportsTab";
+import { PERSONA, type ReportKind } from "../reports/reportText";
 import GuidedTour from "../tutorial/GuidedTour";
 import TourControls from "../tutorial/TourControls";
 import type { TourStep } from "../tutorial/tourContent";
@@ -50,12 +52,28 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
   const [showAbout, setShowAbout] = useState(false);
   const [showDataset, setShowDataset] = useState(false);
   const tour = useGuidedTour("planner");
+  // D55: Map (the live view) and Reports (the officer's output). The map
+  // stays mounted while hidden - Leaflet only needs a size refresh on return.
+  const [tab, setTab] = useState<"map" | "reports">("map");
+  const [reportKind, setReportKind] = useState<ReportKind>("monthly");
+  const [factSheetDevice, setFactSheetDevice] = useState<string | null>(null);
+
+  const openFactSheet = (deviceId: string) => {
+    setFactSheetDevice(deviceId);
+    setReportKind("factsheet");
+    setTab("reports");
+  };
 
   // Steps about a sensor's details need one selected; pick the first sensor
-  // if the user has not chosen one yet.
+  // if the user has not chosen one yet. Every tour step lives on the Map tab.
   const onTourStep = (step: TourStep) => {
+    setTab("map");
     if (step.needsSensor && !selectedId && sensors.length > 0) setSelectedId(sensors[0].device_id);
   };
+
+  useEffect(() => {
+    if (tab === "map") mapRef.current?.invalidateSize();
+  }, [tab]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -101,9 +119,11 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="planner-shell">
-      <header>
+      <header className="no-print">
         <div>
-          <p className="eyebrow">Environmental / Planner</p>
+          <p className="eyebrow" data-tour="planner-persona">
+            {PERSONA.role} · {PERSONA.office}
+          </p>
           <h1>Lingen (Ems) — Sensor Overview</h1>
           <div className="status-bar" data-tour="planner-status">
             <span className="status-bar-item">{sensors.length} sensors</span>
@@ -138,14 +158,39 @@ export default function MapView({ onLogout }: { onLogout: () => void }) {
         />
       )}
 
-      <div className="planner-body">
-        <div className="map-container" ref={containerRef} data-tour="planner-map" />
-        <div className="planner-sidebar" data-tour="planner-detail">
-          <SensorDetailPanel sensor={selectedSensor} />
+      <nav className="admin-tabs planner-tabs no-print">
+        <button className={`admin-tab ${tab === "map" ? "admin-tab-active" : ""}`} onClick={() => setTab("map")}>
+          Map
+        </button>
+        <button
+          className={`admin-tab ${tab === "reports" ? "admin-tab-active" : ""}`}
+          data-tour="planner-tab-reports"
+          onClick={() => setTab("reports")}
+        >
+          Reports
+        </button>
+      </nav>
+
+      <div className="planner-map-tab" hidden={tab !== "map"}>
+        <div className="planner-body">
+          <div className="map-container" ref={containerRef} data-tour="planner-map" />
+          <div className="planner-sidebar" data-tour="planner-detail">
+            <SensorDetailPanel sensor={selectedSensor} onOpenFactSheet={openFactSheet} />
+          </div>
         </div>
+
+        {selectedSensor && <SensorTimeline sensor={selectedSensor} />}
       </div>
 
-      {selectedSensor && <SensorTimeline sensor={selectedSensor} />}
+      {tab === "reports" && (
+        <ReportsTab
+          sensors={sensors}
+          kind={reportKind}
+          onKindChange={setReportKind}
+          factSheetDevice={factSheetDevice}
+          onFactSheetDeviceChange={setFactSheetDevice}
+        />
+      )}
     </div>
   );
 }

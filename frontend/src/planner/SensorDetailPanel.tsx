@@ -12,7 +12,13 @@ const STATUS_LABEL: Record<string, string> = {
 
 const METRIC_ORDER = ["co", "lpg", "smoke", "temp", "humidity"];
 
-export default function SensorDetailPanel({ sensor }: { sensor: SensorEntry | null }) {
+export default function SensorDetailPanel({
+  sensor,
+  onOpenFactSheet,
+}: {
+  sensor: SensorEntry | null;
+  onOpenFactSheet?: (deviceId: string) => void;
+}) {
   const [history, setHistory] = useState<SensorHistoryResponse | null>(null);
 
   useEffect(() => {
@@ -57,6 +63,12 @@ export default function SensorDetailPanel({ sensor }: { sensor: SensorEntry | nu
             {sensor.status.reason ? ` — ${sensor.status.reason}` : ""}
           </p>
         </div>
+
+        {onOpenFactSheet && (
+          <button className="btn btn-ghost detail-factsheet" data-tour="planner-factsheet" onClick={() => onOpenFactSheet(sensor.device_id)}>
+            Fact sheet for this location
+          </button>
+        )}
 
         {sensor.provenance && (
           <p className={`provenance-label provenance-${sensor.provenance.kind}`}>{sensor.provenance.label}</p>

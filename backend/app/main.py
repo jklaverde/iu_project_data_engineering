@@ -13,7 +13,7 @@ from .config import load_config
 from .dataset_reader import DatasetReader
 from .kafka_client import KafkaReader
 from .logging_setup import configure_logging
-from .routers import admin, anomalies, auth, cassandra_admin, dataset, docs, sensors, steps, ws
+from .routers import admin, anomalies, auth, cassandra_admin, dataset, docs, reports, sensors, steps, ws
 from .state_poller import StatePoller
 from .ws_manager import ConnectionManager
 
@@ -67,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(anomalies.router, dependencies=[Depends(require_session)])
     app.include_router(sensors.router, dependencies=[Depends(require_session)])
     app.include_router(dataset.router, dependencies=[Depends(require_session)])
+    app.include_router(reports.router, dependencies=[Depends(require_session)])
     app.include_router(admin.webhook_router)
     app.include_router(admin.alerts_router, dependencies=[Depends(require_admin)])
     app.include_router(cassandra_admin.router, dependencies=[Depends(require_admin)])
