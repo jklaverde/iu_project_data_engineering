@@ -1,5 +1,58 @@
-# iu_project_data_engineering
-Project: Data Engineering for IU Akademie
+# Lingen (Ems) Environmental Sensor Platform
+
+**A real-time big data pipeline (Kafka → Spark Structured Streaming → Cassandra) on Kubernetes,
+with a role-based web application and a Grafana KPI deck.**
+
+Course project for *Project: Data Engineering* (DLBDSEDE02), IU International University of
+Applied Sciences (IU Internationale Hochschule) · Juan Carlos Laverde (student ID UPS10797707) ·
+supervised by Prof. Dr. Paul Libbrecht · October 2026.
+
+## Live system
+
+> **The application is running in production: <http://169.58.203.205:8000/>**
+>
+> Single-node k3s on a virtual server (11 GB RAM), deployed from this repository's manifests (`k8s/base`)
+> and the `k8s/deploy.sh` script. Login is required; reviewer credentials for the planner role are
+> available on request. Plain HTTP for now (TLS is on the backlog), so don't reuse a real password.
+
+| | |
+|---|---|
+| ![Planner map with a selected sensor](docs/screenshots/01-planner-map.jpg) | ![Monthly environment report](docs/screenshots/05-monthly-report.jpg) |
+| **Live map of Lingen (Ems).** Each sensor colored by status; the detail panel shows air quality score, comfort index and actual vs. normal range per metric. | **Monthly environment report** for the council's environment committee: locations ranked against their own normal range, compared with the previous month and the same month a year earlier. |
+| ![Behavior over time charts](docs/screenshots/02-planner-charts.jpg) | ![Reports tab](docs/screenshots/04-planner-reports.jpg) |
+| **Behavior over time** per minute, hour, day, week and month, served from Spark's 1-minute/1-hour aggregates in Cassandra. | **Four reports** that answer the environmental officer's questions: monthly report, resident inquiry, location fact sheet (print to PDF), Excel data extract. |
+
+More screenshots, with an explanation of what each one shows and which part of the pipeline
+produces it: **[docs/live-system.md](docs/live-system.md)**.
+
+### What it does, in one paragraph
+
+The project answers the assignment's scenario: a municipality has installed environmental sensors
+and wants to (1) give planners better information and (2) warn citizens when a value exceeds a
+recommended level. A Python producer replays a public sensor dataset (≈405,000 readings, 3 devices)
+into **Apache Kafka**, then continues with statistically matching synthetic data. **Apache Spark
+Structured Streaming** validates every event, flags anomalies against each device's own baseline and
+computes 1-minute and 1-hour windows. **Apache Cassandra** stores raw events and aggregates. A
+**FastAPI + React/TypeScript** web app serves two stakeholders: the city's **environmental officer**
+(map, charts, daily-rhythm heatmap, printable reports, Excel extract) and the **infrastructure
+administrator** (pipeline health, centralized logs via Loki, Grafana alerts with log drill-down,
+Cassandra capacity). **Prometheus + Grafana** provide the KPI dashboard. Everything is infrastructure
+as code: one Kustomize manifest set, one deploy script, k3d locally and k3s in production.
+
+### Quick start
+
+```
+git clone https://github.com/jklaverde/iu_project_data_engineering.git
+cd iu_project_data_engineering
+cp .env.example .env          # set the four passwords/secrets (see below)
+./k8s/deploy.sh local check   # read-only pre-flight
+./k8s/deploy.sh local up      # web app on http://localhost:8000, Grafana on http://localhost:3000
+```
+
+Needs Docker, `kubectl` and k3d; details in [Prerequisites](#prerequisites) and
+[Bringing the infrastructure up and down](#bringing-the-infrastructure-up-and-down).
+
+## About this repository
 
 A role-based environmental sensor platform for the municipality of Lingen (Ems) — Kafka →
 Spark Structured Streaming → Cassandra underneath, with two web app roles on top: an

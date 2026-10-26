@@ -33,15 +33,15 @@ trust a snapshot, including section 3 below — verify.
    up and down" and `docs/deployment.html` first; both explain *why* local and production
    differ.
 
-## 3. State snapshot — dated 2026-10-19 (update this at the end of every session)
+## 3. State snapshot — dated 2026-10-26 (update this at the end of every session)
 
 | Item | State |
 |---|---|
-| Latest decision | **D56** (pip 26.2.1 hash-pinned in all five Python images, old Spark apt pip purged; Python 3.11.17; `node:24.21.0-slim` + checksum-verified npm 12.2.0 — all ≥ 14 days old). Before that **D55** (planner role designed for the city's environmental officer, `REQUIREMENTS.md` §1.1; Reports tab with monthly report, inquiry response, fact sheet — print to PDF — and an Excel data extract; month × hour daily-rhythm heatmap). D54 = guided tour; D53 = unit tests for D52; D52 = multi-month derived history; D51 = node-deploy notice reworded, **not yet deployed**. Next free number: **D57**. |
-| Phases | P1–P5, P8–P11 done and live-verified. **P12 (D52) live-verified on local k3d (one OOM bug found/fixed, operations.html p12-1); not yet in production.** **P14 (D55) live-verified on local k3d, API + browser (two bugs found/fixed, p14-1/p14-2); not in production; a real saved PDF and the `.xlsx` opened in Excel were not checked.** Interim VPS done (now single-node k3s). **Full P6 (3-VPS, HA, TLS) and P7 (48 h endurance) not started.** |
-| Production | The user said on 2026-10-16 that production "is working fine"; not re-checked since (that session ran on the Windows machine), and whether D52 is deployed there is **not confirmed**. Last state seen from the host itself: single-node k3s; `iot-pipeline` namespace deployed 2026-09-21 ~18:14 CEST, all pods `Running`, 0 restarts, ~3.7 GiB memory available. `kafka-ui` intentionally scaled to 0. |
+| Latest decision | **D57** (docs only: README *Live system* section + `docs/live-system.md` with production screenshots in `docs/screenshots/`; production observed running D52 + D55). Before that **D56** (pip 26.2.1 hash-pinned in all five Python images, old Spark apt pip purged; Python 3.11.17; `node:24.21.0-slim` + checksum-verified npm 12.2.0 — all ≥ 14 days old). Before that **D55** (planner role designed for the city's environmental officer, `REQUIREMENTS.md` §1.1; Reports tab with monthly report, inquiry response, fact sheet — print to PDF — and an Excel data extract; month × hour daily-rhythm heatmap). D54 = guided tour; D53 = unit tests for D52; D52 = multi-month derived history; D51 = node-deploy notice reworded, **not yet deployed**. Next free number: **D58**. |
+| Phases | P1–P5, P8–P11 done and live-verified. **P12 (D52) live-verified on local k3d (one OOM bug found/fixed, operations.html p12-1); observed in production 2026-10-26 (D57).** **P14 (D55) live-verified on local k3d, API + browser (two bugs found/fixed, p14-1/p14-2); observed in production 2026-10-26 (D57); a real saved PDF and the `.xlsx` opened in Excel were not checked.** Interim VPS done (now single-node k3s). **Full P6 (3-VPS, HA, TLS) and P7 (48 h endurance) not started.** |
+| Production | http://169.58.203.205:8000/ — on **2026-10-26** a browser check from the Windows machine (planner account, the user signed in) showed **D52's history and D55's reports running**; who rolled them out, and whether D56 is deployed, is not recorded. Grafana :3000 answers from the internet. Last state seen from the host itself: single-node k3s; `iot-pipeline` namespace deployed 2026-09-21 ~18:14 CEST, all pods `Running`, 0 restarts, ~3.7 GiB memory available. `kafka-ui` intentionally scaled to 0. |
 | `deploy.sh` verification | `check`, argument handling and validation paths: run. **`up`/`update`/prod `down` were not run by the session that wrote them.** The timestamps (images built → `generated/` staged → Secret created within 1 s) match `deploy.sh prod up` having been run at ~18:14 CEST, but nobody has confirmed it. **Confirm with the user, then record the result in D48.** |
-| D52 + D55 rollout | As last confirmed, production runs pre-D52 code (ask the user). Adopting D52 needs `deploy.sh prod down` + `up` (wipes Cassandra — the user agreed on 2026-09-27, confirm again at the time). D55 alone needs only `prod update backend` (no schema change) but is most useful with D52's history; ship together. |
+| D52 + D55 rollout | Observed live in production (D57). Still to confirm on the host: `history-backfill` restartCount, D56 builds, a real PDF/Excel. A possible out-of-range shading issue on the planner charts and a stale About-dialog sentence (compose) are in `operations.html#next`. |
 | Not built | TLS/ingress · image registry · multi-node · automated backups · a rehearsed restore · `k8s/overlays/prod` |
 | Unverified claim | Whether `ufw` alone can close ports that k3s servicelb publishes (`docs/deployment.html` §6 says to test from another machine). |
 | Tests | Two unit suites, both narrow: pytest for the D52 multi-month-history workflow and the D55 report computations/workbooks (`tests/`; `python -m pytest tests -q`, 87 tests) and Node's built-in runner for the guided tour and the report text/headlines (`frontend/tests/`; `cd frontend && npm test`, 32 tests). Neither needs services. Everything else — API routes, Spark streaming, the UI — is verified only by live runs recorded in D-entries. Do not imply broader coverage. |
@@ -51,6 +51,7 @@ trust a snapshot, including section 3 below — verify.
 | Path | What it is |
 |---|---|
 | `REQUIREMENTS.md` | The spec: scope, architecture (§4), FR/NFR/UC ids, **decision log (§11, D1…)**, risks (§13), phases (§14). |
+| `docs/live-system.md`, `docs/screenshots/` | The live production system for GitHub visitors (D57), linked from the top of `README.md`. Markdown on purpose: GitHub does not render the HTML site. |
 | `docs/*.html` | The documentation site (open `docs/index.html` directly). `operations.html` = status, decisions, backlog, troubleshooting log. `deployment.html` = production runbook. `reference.html` = file-by-file map. `containers.html` (+`containers-data.js`) = per-container reference. |
 | `README.md` | User-facing: prerequisites, deploy commands, config, walkthrough. |
 | `k8s/deploy.sh` | **The** deploy entrypoint: `<local\|prod> <check\|up\|update\|status\|down>`. `local-up.sh`/`local-down.sh` are thin wrappers. |
@@ -171,7 +172,7 @@ to run `! git push`.
 
 ## 9. Open threads (highest value first — canonical list: `docs/operations.html#next`)
 
-1. **Roll out D52 + D55 to production**: first ask the user what production currently runs; then prod `down` + `up` with the user's go-ahead; confirm `history-backfill` has 0 restarts; print one report to a real PDF and open both Excel files in Excel (never done). Record the outcome in D52/D55.
+1. **Confirm the D52 + D55 production rollout** (observed live 2026-10-26, D57): ask the user how it was done; on the host check `history-backfill` has 0 restarts and whether D56 is deployed; print one report to a real PDF and open both Excel files in Excel (never done). Record the outcome in D52/D55.
 2. **Close the D48 loop:** ask the user whether `deploy.sh prod up` was what produced the
    current deployment; record the real outcome; then exercise `update` and prod `down`'s
    prompt (the latter destroys data — only with the user's go-ahead).

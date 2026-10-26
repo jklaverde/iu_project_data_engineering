@@ -30,3 +30,9 @@ frontend/tsconfig.tsbuildinfo
 # the one committed source of truth and this directory is never committed.
 k8s/base/generated/
 .pytest_cache/
+
+# Course assignment brief excerpt for the final abstract (local reference only)
+requirements_composition.txt
+# Final abstract for the course submission (Word/PDF, contains personal data) - never committed
+Abstract_Laverde_*.docx
+Abstract_Laverde_*.pdf

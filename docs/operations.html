@@ -106,12 +106,14 @@
         (<a href="#d49">D49</a>, <a href="#d50">D50</a>). Full P6 (3-VPS k3s, hardened per NFR-11) and P7 (endurance) not
         started. <a href="#d52">D52</a> (multi-month derived history, seasonal normal ranges) is
         live-verified on a fresh local k3d cluster (one real bug found and fixed,
-        <a href="#p12-1">P12 §1</a>); <strong>not yet rolled out to production</strong>.
+        <a href="#p12-1">P12 §1</a>); <strong>observed running in production on 2026-10-26</strong>
+        (browser check, D57; the rollout itself was not recorded).
         <a href="#d55">D55</a> gives the planner role a concrete user — the city's environmental officer —
         and four reports (monthly committee report, resident inquiry response, location fact sheet, data
         extract) with print-to-PDF and Excel, plus a month × hour daily-rhythm heatmap. Live-verified on
         local k3d (API and browser; two real bugs found and fixed, <a href="#p14">P14</a>);
-        <strong>not yet in production</strong>.
+        <strong>observed running in production on 2026-10-26</strong> (D57). The live system is
+        documented for GitHub visitors in the README and <code>docs/live-system.md</code>.
       </p>
       <div class="table-wrap">
         <table class="data-table">
@@ -125,8 +127,8 @@
           <tr><td>P6 (full) — VPS deployment</td><td>3 Contabo VPS, k3s, hardening, Kafka/Cassandra replicated across nodes</td><td><span class="pill pill--todo">Not started</span></td></tr>
           <tr><td>P6 — Cassandra scale-out verified on real k3s (D44/D45)</td><td>FR-N2 (admin node-deploy) run end-to-end on a real Contabo VPS to 2 nodes (D44, found/fixed 2 RBAC gaps + a silent ring-join bug) then 3 nodes (D45, found/fixed a client-sharing concurrency bug); D45 also simulated the full UC-12 approaching-budget scenario</td><td><span class="pill pill--done">Done</span> — de-risks P6's core scaling story; not P6 itself (no TLS/ingress/WireGuard, NFR-11 unaddressed)</td></tr>
           <tr><td>P7 — Endurance</td><td>48-hour run against §10 acceptance criteria</td><td><span class="pill pill--todo">Not started</span></td></tr>
-          <tr><td>P12 — Multi-month history (D52)</td><td><code>history-backfill</code> Job: ~25 months derived from the 8-day source (looped, seasonal curve), backfilled into <code>agg_1h</code>; seasonal normal ranges; Explorer on the derived file</td><td><span class="pill pill--done">Done locally</span> — live-verified on k3d; production rollout (<code>down</code> + <code>up</code>) pending (see <a href="#d52">D52</a>)</td></tr>
-          <tr><td>P14 — Environmental officer and reports (D55)</td><td>Persona for the planner role; Reports tab with monthly report, inquiry response, fact sheet (print to PDF) and data extract (Excel); daily-rhythm heatmap</td><td><span class="pill pill--done">Done locally</span> — live-verified on k3d (API + browser); not yet in production (see <a href="#d55">D55</a>)</td></tr>
+          <tr><td>P12 — Multi-month history (D52)</td><td><code>history-backfill</code> Job: ~25 months derived from the 8-day source (looped, seasonal curve), backfilled into <code>agg_1h</code>; seasonal normal ranges; Explorer on the derived file</td><td><span class="pill pill--done">Done</span> — live-verified on k3d; observed in production 2026-10-26 (multi-month charts, Explorer to 2024-09); <code>history-backfill</code> restarts there not checked (see <a href="#d52">D52</a>)</td></tr>
+          <tr><td>P14 — Environmental officer and reports (D55)</td><td>Persona for the planner role; Reports tab with monthly report, inquiry response, fact sheet (print to PDF) and data extract (Excel); daily-rhythm heatmap</td><td><span class="pill pill--done">Done</span> — live-verified on k3d (API + browser); observed in production 2026-10-26 (Reports tab, monthly report rendered); real PDF/Excel not checked (see <a href="#d55">D55</a>)</td></tr>
           <tr><td>P8 — Role-based redirect</td><td>Two roles, <code>device_metadata</code>/<code>device_thresholds</code>, Leaflet map, Loki+Promtail, Grafana alerting + webhook + Alerts tab, D34/D35 timeline+log</td><td><span class="pill pill--done">Done — live-verified</span> against a real <code>docker compose up</code></td></tr>
         </table>
       </div>
@@ -996,6 +998,21 @@
             <code>kagglehub</code>. <strong>Not verified:</strong> a full dataset-init download, production, a Trivy scan.</li>
         </ul>
 
+        <h4 class="doc-h4" id="d57">The live system documented for GitHub visitors (D57)</h4>
+        <ul>
+          <li><strong>Why:</strong> the repository is a portfolio; a visitor should see the running production
+            system first, on GitHub itself, which does not render this HTML site.</li>
+          <li><strong>What changed (docs only):</strong> the README opens with title, course/author/supervisor, a
+            <em>Live system</em> section (link, four screenshots, one-paragraph summary, quick start);
+            <code>docs/live-system.md</code> walks through eight screenshots in <code>docs/screenshots/</code>.
+            Reviewer credentials are not published.</li>
+          <li><strong>Observed</strong> (production, 2026-10-26, planner account in a browser, read-only): Reports tab
+            and a rendered monthly report, heatmap, month charts from Sep 2025, Dataset Explorer from 2024-09 — so
+            D52 and D55 run in production. <strong>Not verified:</strong> D56 in production, the backfill Job's
+            restarts, the admin role, Grafana, a real PDF/Excel. A possible chart-shading issue is in
+            <a href="#next">the backlog</a>.</li>
+        </ul>
+
         <h4 class="doc-h4" id="d55">The environmental officer and their reports (D55)</h4>
         <ul>
           <li><strong>What:</strong> the planner role is designed around one concrete user — the city's
@@ -1115,18 +1132,19 @@
           the catch-up checklist, conventions and a dated state snapshot; this list is the canonical
           backlog it points to.</p>
         <ol>
-          <li><strong>Roll D55 + D56 out with D52 (highest value).</strong> D56 changes every image build
-            (pinned pip/npm), so rebuild all services. D55 needs no schema change and on its
-            own would only need <code>sudo k8s/deploy.sh prod update backend</code>; it is most useful with
-            D52's history, so ship both together. Afterwards: print one report to a real PDF and open both
-            Excel files in Excel — neither was done (<a href="#d55">D55</a>).</li>
-          <li><strong>Roll D52 out to production.</strong> Live-verified locally; still
-            to do: look at the planner charts, out-of-range log and Dataset Explorer in a browser, then
-            <code>sudo k8s/deploy.sh prod down</code> and <code>up</code> (destroys the current
-            Cassandra data — agreed, but confirm at the time). Check
-            <code>kubectl -n iot-pipeline get pod -l job-name=history-backfill</code> shows 0 restarts
-            and the log ends with <code>history_backfill_complete</code>. Record the outcome in
-            <a href="#d52">D52</a>.</li>
+          <li><strong>Confirm the production rollout of D52/D55 and ship D56 (highest value).</strong>
+            On 2026-10-26 a browser check (D57) showed D52's history and D55's reports running in
+            production, but nobody recorded the rollout. On the host: check
+            <code>kubectl -n iot-pipeline get pod -l job-name=history-backfill</code> for 0 restarts and a
+            log ending in <code>history_backfill_complete</code>; find out whether D56's builds (pinned
+            pip/npm) are deployed, and if not rebuild all services. Print one report to a real PDF and open
+            both Excel files in Excel — never done (<a href="#d55">D55</a>). Record the outcome in
+            <a href="#d52">D52</a>/<a href="#d55">D55</a>.</li>
+          <li><strong>Check the out-of-range shading on the planner charts.</strong> Seen in production
+            (D57): for Kaiserstrasse the CO and temperature minute/hour/month charts were shaded over their
+            whole span, even where the plotted value sits inside the stated normal range. Reproduce locally
+            and decide whether it is a bug. Also: the About dialog still says the backend runs in the
+            <code>docker-compose.yml</code> stack (stale since D43).</li>
           <li><strong>Close out D48.</strong> <code>deploy.sh prod up</code>'s
             end-to-end result was never recorded by the session that wrote it. The current production
             namespace was created on 2026-09-21 at ~18:14 CEST in an order that matches the script, but
